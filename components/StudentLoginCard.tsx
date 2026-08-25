@@ -24,11 +24,9 @@ export function StudentLoginCard({
   const [name, setName] = useState("");
 
   function handleSelectRoster(e: React.ChangeEvent<HTMLSelectElement>) {
-    const val = e.target.value;
-    if (!val) return;
-    const [sId, ...rest] = val.split(" ");
-    setStudentId(sId);
-    setName(rest.join(" "));
+    const student = ROSTER.find((item) => item.studentId === e.target.value);
+    setStudentId(student?.studentId ?? "");
+    setName(student?.name ?? "");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -65,7 +63,7 @@ export function StudentLoginCard({
           </label>
           <select
             id="roster-select"
-            value={studentId && name ? `${studentId} ${name}` : ""}
+            value={studentId}
             onChange={handleSelectRoster}
             className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
           >
@@ -73,58 +71,15 @@ export function StudentLoginCard({
             {ROSTER.map((student) => (
               <option
                 key={student.studentId}
-                value={`${student.studentId} ${student.name}`}
+                value={student.studentId}
               >
-                {student.studentId} · {student.name}
+                {student.school} · {student.studentId}
               </option>
             ))}
           </select>
         </div>
 
-        <div className="relative mb-5 flex items-center justify-center">
-          <div className="w-full border-t border-slate-200" />
-          <span className="absolute bg-white px-3 text-xs text-slate-400">
-            또는 직접 입력
-          </span>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="studentId-input"
-              className="block text-xs font-semibold text-slate-700"
-            >
-              학번
-            </label>
-            <input
-              id="studentId-input"
-              type="text"
-              required
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 shadow-xs placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-              placeholder="예: 10101"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="name-input"
-              className="block text-xs font-semibold text-slate-700"
-            >
-              이름
-            </label>
-            <input
-              id="name-input"
-              type="text"
-              required
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 shadow-xs placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-              placeholder="예: 학생1"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
           {error && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">
               ⚠️ {error}

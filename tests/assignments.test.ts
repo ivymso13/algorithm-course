@@ -12,6 +12,11 @@ test("assignments: every roster student has an assignment and a masked name", ()
   }
 });
 
+test("roster: students are ordered by school and then student ID", () => {
+  const keys = ROSTER.map((student) => `${student.school}\u0000${student.studentId}`);
+  assert.deepEqual(keys, [...keys].sort((a, b) => a.localeCompare(b, "ko")));
+});
+
 test("assignments: every student's execute pair is exactly the complement of their write pair", () => {
   for (const assignment of ASSIGNMENTS.values()) {
     const combined = new Set([...assignment.write, ...assignment.execute]);

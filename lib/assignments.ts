@@ -10,7 +10,7 @@
 export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake"] as const;
 export type ProblemType = (typeof PROBLEM_TYPES)[number];
 
-export type Roster = { studentId: string; name: string }[];
+export type Roster = { school: string; studentId: string; name: string }[];
 
 export type Assignment = {
   studentId: string;
@@ -35,22 +35,22 @@ const COMBOS: [[ProblemType, ProblemType], [ProblemType, ProblemType]][] = [
 
 /** Class roster. Names are masked for privacy; phone numbers are never stored. */
 export const ROSTER: Roster = [
-  { studentId: "10118", name: "전OO" },
-  { studentId: "10401", name: "강OO" },
-  { studentId: "10403", name: "김OO" },
-  { studentId: "10432", name: "조OO" },
-  { studentId: "10201", name: "BOO" },
-  { studentId: "10208", name: "김OO" },
-  { studentId: "10221", name: "이OO" },
-  { studentId: "10233", name: "헤OO" },
-  { studentId: "10225", name: "이OO" },
-  { studentId: "10301", name: "강OO" },
-  { studentId: "10111", name: "박OO" },
-  { studentId: "10113", name: "박OO" },
-  { studentId: "10308", name: "남OO" },
-  { studentId: "10311", name: "박OO" },
-  { studentId: "10616", name: "양OO" },
-  { studentId: "10702", name: "강OO" },
+  { school: "경기스마트고", studentId: "10118", name: "전OO" },
+  { school: "서해고", studentId: "10401", name: "강OO" },
+  { school: "서해고", studentId: "10403", name: "김OO" },
+  { school: "서해고", studentId: "10432", name: "조OO" },
+  { school: "시흥고", studentId: "10201", name: "바OO" },
+  { school: "정왕고", studentId: "10111", name: "박OO" },
+  { school: "정왕고", studentId: "10113", name: "박OO" },
+  { school: "정왕고", studentId: "10208", name: "김OO" },
+  { school: "정왕고", studentId: "10221", name: "이OO" },
+  { school: "정왕고", studentId: "10225", name: "이OO" },
+  { school: "정왕고", studentId: "10233", name: "헤OO" },
+  { school: "정왕고", studentId: "10301", name: "강OO" },
+  { school: "정왕고", studentId: "10308", name: "남OO" },
+  { school: "정왕고", studentId: "10311", name: "박OO" },
+  { school: "정왕고", studentId: "10616", name: "양OO" },
+  { school: "정왕고", studentId: "10702", name: "강OO" },
 ];
 
 export function studentKeyOf(studentId: string, name: string): string {
