@@ -52,14 +52,7 @@ type ReviewGroup = {
 };
 
 export default function TeacherPage() {
-  const [password, setPassword] = useState(() => {
-    if (typeof window === "undefined") return "";
-    try {
-      return sessionStorage.getItem("algo_teacher_pw") || "";
-    } catch {
-      return "";
-    }
-  });
+  const [password, setPassword] = useState("");
 
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "review" | "practice">("dashboard");
@@ -71,6 +64,17 @@ export default function TeacherPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setPassword(sessionStorage.getItem("algo_teacher_pw") || "");
+      } catch {
+        // ignore storage errors
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const authHeaders = useCallback((customPw?: string): HeadersInit => {
     return { "x-teacher-password": customPw || password };
@@ -240,7 +244,7 @@ export default function TeacherPage() {
                   type="password"
                   required
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
-                  placeholder="비밀번호 입력 (기본: algo2026!)"
+                  placeholder="교사 비밀번호 입력"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
