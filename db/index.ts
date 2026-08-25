@@ -1,0 +1,82 @@
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./schema";
+
+// Mirrors drizzle/0000_*.sql with `IF NOT EXISTS` added. Drizzle migrations
+// are the source of truth (regenerate with `npm run db:generate` after
+// changing db/schema.ts and keep this list in sync); this bootstrap exists so
+// local dev and any environment where the Sites platform hasn't run the
+// migration yet still has a working database on first request. Every
+// statement is idempotent, so re-running it once tables already exist is a
+// no-op.
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS submissions (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    student_key text NOT NULL,
+    student_id text NOT NULL,
+    student_name text NOT NULL,
+    problem_type text NOT NULL,
+    algorithm_text text NOT NULL,
+    example_input text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS submissions_student_type_idx ON submissions (student_key, problem_type)`,
+  `CREATE TABLE IF NOT EXISTS attempts (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    submission_id integer NOT NULL,
+    problem_type text NOT NULL,
+    executor_key text NOT NULL,
+    executor_id text NOT NULL,
+    executor_name text NOT NULL,
+    input text NOT NULL,
+    correct_answer integer NOT NULL,
+    reference_action_count integer NOT NULL,
+    state text NOT NULL,
+    action_log text NOT NULL,
+    action_count integer DEFAULT 0 NOT NULL,
+    unexecutable_flag integer DEFAULT false NOT NULL,
+    unexecutable_reason text,
+    final_answer integer,
+    is_correct integer,
+    evaluation_responses text,
+    status text DEFAULT 'in_progress' NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    submitted_at text,
+    evaluated_at text
+  )`,
+  `CREATE INDEX IF NOT EXISTS attempts_submission_idx ON attempts (submission_id)`,
+  `CREATE INDEX IF NOT EXISTS attempts_executor_idx ON attempts (executor_key)`,
+  `CREATE INDEX IF NOT EXISTS attempts_problem_type_idx ON attempts (problem_type)`,
+  `CREATE TABLE IF NOT EXISTS stage_state (
+    id integer PRIMARY KEY NOT NULL,
+    stage2_active integer DEFAULT false NOT NULL,
+    activated_at text
+  )`,
+];
+
+let schemaReady: Promise<void> | null = null;
+
+function ensureSchema(d1: D1Database): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = d1
+      .batch(SCHEMA_STATEMENTS.map((sql) => d1.prepare(sql)))
+      .then(() => undefined)
+      .catch((error) => {
+        schemaReady = null; // allow a retry on the next call instead of caching a failure
+        throw error;
+      });
+  }
+  return schemaReady;
+}
+
+export async function getDb() {
+  if (!env.DB) {
+    throw new Error(
+      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
+    );
+  }
+
+  await ensureSchema(env.DB);
+  return drizzle(env.DB, { schema });
+}
