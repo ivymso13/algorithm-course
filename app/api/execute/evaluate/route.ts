@@ -1,5 +1,10 @@
 import { getAssignment } from "@/lib/assignments";
 import {
+  EvaluationValidationError,
+  parseOptionalRating,
+  parseOptionalSubjectiveFeedback,
+} from "@/lib/evaluationValidation";
+import {
   getAttempt,
   getAttemptAlgorithmText,
   sanitizeAttempt,
@@ -16,10 +21,30 @@ export async function POST(request: Request) {
     ambiguityNote?: string;
     consideredCorrect?: boolean;
     correctnessReason?: string;
+    clarityRating?: number;
+    accuracyRating?: number;
+    efficiencyRating?: number;
+    subjectiveFeedback?: string;
   };
   const attemptId = Number(body.attemptId);
   if (!Number.isInteger(attemptId)) {
     return Response.json({ error: "attemptId가 필요합니다" }, { status: 400 });
+  }
+
+  let clarityRating: number | undefined;
+  let accuracyRating: number | undefined;
+  let efficiencyRating: number | undefined;
+  let subjectiveFeedback: string | undefined;
+  try {
+    clarityRating = parseOptionalRating(body.clarityRating, "명확성 평점(clarityRating)");
+    accuracyRating = parseOptionalRating(body.accuracyRating, "정확성 평점(accuracyRating)");
+    efficiencyRating = parseOptionalRating(body.efficiencyRating, "효율성 평점(efficiencyRating)");
+    subjectiveFeedback = parseOptionalSubjectiveFeedback(body.subjectiveFeedback);
+  } catch (error) {
+    if (error instanceof EvaluationValidationError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
   }
 
   const evaluation: EvaluationResponses = {
@@ -29,6 +54,10 @@ export async function POST(request: Request) {
     ambiguityNote: body.ambiguityNote?.trim() ?? "",
     consideredCorrect: Boolean(body.consideredCorrect),
     correctnessReason: body.correctnessReason?.trim() ?? "",
+    ...(clarityRating !== undefined ? { clarityRating } : {}),
+    ...(accuracyRating !== undefined ? { accuracyRating } : {}),
+    ...(efficiencyRating !== undefined ? { efficiencyRating } : {}),
+    ...(subjectiveFeedback !== undefined ? { subjectiveFeedback } : {}),
   };
 
   try {

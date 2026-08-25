@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/Navbar";
+import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
 
 type DashboardStudent = {
@@ -32,6 +33,13 @@ type ReviewAttempt = {
     ambiguityNote: string;
     consideredCorrect: boolean;
     correctnessReason: string;
+    // Additive star-rating + short free-text fields. Absent on older
+    // evaluation records and on any submission that didn't include them —
+    // always treat as "별점 없음", never assume presence.
+    clarityRating?: number;
+    accuracyRating?: number;
+    efficiencyRating?: number;
+    subjectiveFeedback?: string;
   } | null;
 };
 
@@ -54,12 +62,12 @@ export default function TeacherPage() {
   });
 
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<"dashboard" | "review">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "review" | "practice">("dashboard");
   const [stage2Active, setStage2Active] = useState(false);
   const [students, setStudents] = useState<DashboardStudent[]>([]);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
-  const [reviewFilter, setReviewFilter] = useState<"all" | "unexecutable" | "incorrect" | "ambiguous">("all");
+  const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -420,6 +428,18 @@ export default function TeacherPage() {
           >
             📽️ 2. 수업 마무리 토론 화면 (프로젝터 모드)
           </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("practice")}
+            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+              tab === "practice"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            🧩 3. 문제별 함께 풀어보기
+          </button>
         </div>
 
         {error && (
@@ -624,17 +644,6 @@ export default function TeacherPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setReviewFilter("unexecutable")}
-                className={`rounded-lg px-3 py-1 font-semibold cursor-pointer ${
-                  reviewFilter === "unexecutable"
-                    ? "bg-amber-600 text-white"
-                    : "bg-white border border-amber-300 text-amber-900 hover:bg-amber-50"
-                }`}
-              >
-                ⚠️ 실행 불가 신고 사례
-              </button>
-              <button
-                type="button"
                 onClick={() => setReviewFilter("incorrect")}
                 className={`rounded-lg px-3 py-1 font-semibold cursor-pointer ${
                   reviewFilter === "incorrect"
@@ -670,9 +679,6 @@ export default function TeacherPage() {
 
               const filteredItems = group.items.filter(({ attempts }) => {
                 if (reviewFilter === "all") return true;
-                if (reviewFilter === "unexecutable") {
-                  return attempts.some((a) => a.unexecutableFlag);
-                }
                 if (reviewFilter === "incorrect") {
                   return attempts.some((a) => a.isCorrect === false);
                 }
@@ -796,6 +802,24 @@ export default function TeacherPage() {
                                         {ev.consideredCorrect ? "예" : "아니오"}
                                         {ev.correctnessReason && ` — ${ev.correctnessReason}`}
                                       </p>
+                                      <div className="mt-1.5 border-t border-slate-100 pt-1.5">
+                                        {ev.clarityRating || ev.accuracyRating || ev.efficiencyRating ? (
+                                          <p>
+                                            • <strong>별점:</strong> 명확성{" "}
+                                            {ev.clarityRating ?? "-"}/5 · 정확성 {ev.accuracyRating ?? "-"}/5 ·
+                                            효율성 {ev.efficiencyRating ?? "-"}/5
+                                          </p>
+                                        ) : (
+                                          <p className="text-slate-400">
+                                            • 별점 없음 (이전 형식의 평가 데이터)
+                                          </p>
+                                        )}
+                                        {ev.subjectiveFeedback && (
+                                          <p className="mt-0.5">
+                                            • <strong>한 줄 피드백:</strong> “{ev.subjectiveFeedback}”
+                                          </p>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -809,6 +833,48 @@ export default function TeacherPage() {
                 </div>
               );
             })()}
+          </section>
+        )}
+
+        {/* TAB 3: Solve-Together Practice Area */}
+        {tab === "practice" && (
+          <section className="space-y-4">
+            <div className="rounded-2xl border border-blue-200 bg-linear-to-r from-blue-50 to-indigo-50 p-5 shadow-xs space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🧩</span>
+                <h3 className="text-base font-bold text-slate-900">
+                  문제별 함께 풀어보기
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600">
+                학생 제출/채점과는 무관한 별도의 연습 공간입니다. 프로젝터로 화면을 띄우고 학생들과
+                함께 저울질하거나, 카드를 뒤집거나, 사람을 제거하거나, 팬케이크를 뒤집어보며 문제
+                해결 규칙을 같이 찾아보세요.
+              </p>
+            </div>
+
+            {/* Problem Type Selector */}
+            <div className="flex flex-wrap gap-2">
+              {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+                (pType) => (
+                  <button
+                    key={pType}
+                    type="button"
+                    onClick={() => setSelectedGroupType(pType)}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer ${
+                      selectedGroupType === pType
+                        ? "bg-blue-600 text-white"
+                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>{PROBLEM_ICONS[pType]}</span>
+                    <span>{PROBLEM_LABELS[pType]}</span>
+                  </button>
+                )
+              )}
+            </div>
+
+            <ProblemSandboxContainer problemType={selectedGroupType} />
           </section>
         )}
       </main>

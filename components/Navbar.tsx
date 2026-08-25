@@ -11,14 +11,18 @@ interface NavbarProps {
 
 export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
   const pathname = usePathname();
-  const [storedStudent, setStoredStudent] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return sessionStorage.getItem("algo_student_key");
-    } catch {
-      return null;
-    }
-  });
+  const [storedStudent, setStoredStudent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setStoredStudent(sessionStorage.getItem("algo_student_key"));
+      } catch {
+        // ignore storage errors
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (currentStudentKey) {

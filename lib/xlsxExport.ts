@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { getDb } from "@/db";
 import { attempts, stageState, submissions } from "@/db/schema";
 import { listAssignments } from "@/lib/assignments";
+import type { EvaluationResponses } from "@/lib/store";
 
 function json(value: unknown): string {
   return value === null || value === undefined ? "" : JSON.stringify(value);
@@ -36,14 +37,7 @@ export async function buildExportWorkbook(): Promise<Uint8Array> {
 
   const attemptRows = allAttempts.map((a) => {
     const author = submissionById.get(a.submissionId);
-    const evalResponses = (a.evaluationResponses ?? null) as null | {
-      couldFollowFully: boolean;
-      unexecutablePoint: string;
-      hadAmbiguity: boolean;
-      ambiguityNote: string;
-      consideredCorrect: boolean;
-      correctnessReason: string;
-    };
+    const evalResponses = (a.evaluationResponses ?? null) as EvaluationResponses | null;
     return {
       id: a.id,
       문제유형: a.problemType,
@@ -66,6 +60,10 @@ export async function buildExportWorkbook(): Promise<Uint8Array> {
       평가_애매함메모: evalResponses?.ambiguityNote ?? "",
       평가_정확하다고판단: evalResponses?.consideredCorrect ?? "",
       평가_판단근거: evalResponses?.correctnessReason ?? "",
+      평가_명확성별점: evalResponses?.clarityRating ?? "",
+      평가_정확성별점: evalResponses?.accuracyRating ?? "",
+      평가_효율성별점: evalResponses?.efficiencyRating ?? "",
+      평가_한줄피드백: evalResponses?.subjectiveFeedback ?? "",
       상태: a.status,
       생성시각: a.createdAt,
       제출시각: a.submittedAt ?? "",

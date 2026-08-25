@@ -72,8 +72,6 @@ export default function Home() {
 
           <p className="mx-auto max-w-2xl text-sm sm:text-base text-slate-600 leading-relaxed">
             &ldquo;올바른 알고리즘이라면, 처음 보는 사람이 그대로 따라 해도 항상 같은 결과가 나와야 한다.&rdquo;
-            <br />
-            정답을 맞히는 게임이 아니라, 내가 쓴 설명이 기계처럼 오차 없이 실행되는지 확인하는 상호 실행 활동입니다.
           </p>
         </section>
 

@@ -305,6 +305,16 @@ export type EvaluationResponses = {
   ambiguityNote: string;
   consideredCorrect: boolean;
   correctnessReason: string;
+  // Additive star-rating + short free-text extension (see
+  // lib/evaluationValidation.ts). Optional so that (a) evaluation JSON saved
+  // before this extension existed keeps deserializing correctly with these
+  // fields simply absent ("별점 없음"), and (b) a submission that omits them
+  // — the current execute-page client does not send them yet — still stores
+  // a valid record instead of failing.
+  clarityRating?: number;
+  accuracyRating?: number;
+  efficiencyRating?: number;
+  subjectiveFeedback?: string;
 };
 
 export async function submitEvaluation(attemptId: number, evaluation: EvaluationResponses) {

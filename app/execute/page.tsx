@@ -9,7 +9,6 @@ import { CoinsViewer } from "@/components/execute/CoinsViewer";
 import { CardsViewer } from "@/components/execute/CardsViewer";
 import { JosephusViewer } from "@/components/execute/JosephusViewer";
 import { PancakeViewer } from "@/components/execute/PancakeViewer";
-import { UnexecutableBox } from "@/components/execute/UnexecutableBox";
 import { ActionLogViewer } from "@/components/execute/ActionLogViewer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
 
@@ -37,14 +36,18 @@ type AssignResponse =
   | { status: "ready"; resumed: boolean; attempt: Attempt };
 
 export default function ExecutePage() {
-  const [studentKey, setStudentKey] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return sessionStorage.getItem("algo_student_key");
-    } catch {
-      return null;
-    }
-  });
+  const [studentKey, setStudentKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setStudentKey(sessionStorage.getItem("algo_student_key"));
+      } catch {
+        // ignore storage errors
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const [phase, setPhase] = useState<
     "login" | "waiting" | "finished" | "noneAvailable" | "running" | "result"
@@ -169,28 +172,6 @@ export default function ExecutePage() {
       const data = (await res.json()) as { attempt?: Attempt; error?: string };
       if (!res.ok || !data.attempt) {
         throw new Error(data.error ?? "행동을 적용할 수 없습니다.");
-      }
-      setAttempt(data.attempt);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleUnexecutable(reason: string) {
-    if (!attempt) return;
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/execute/unexecutable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptId: attempt.id, reason }),
-      });
-      const data = (await res.json()) as { attempt?: Attempt; error?: string };
-      if (!res.ok || !data.attempt) {
-        throw new Error(data.error ?? "기록할 수 없습니다.");
       }
       setAttempt(data.attempt);
     } catch (err) {
@@ -397,16 +378,9 @@ export default function ExecutePage() {
 
         {phase === "running" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Column (5 cols): Algorithm Text & Checklist & Unexecutable Reporter */}
+            {/* Left Column (5 cols): Algorithm Text & Checklist */}
             <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-20">
               <AlgorithmReader algorithmText={attempt.algorithmText} />
-
-              <UnexecutableBox
-                unexecutableFlag={attempt.unexecutableFlag}
-                unexecutableReason={attempt.unexecutableReason}
-                onRecord={handleUnexecutable}
-                loading={loading}
-              />
             </div>
 
             {/* Right Column (7 cols): Interactive Simulation Canvas, Action Log & Submit */}
@@ -573,35 +547,62 @@ function ResultAndEvaluationPanel({
   onNextRound: () => void;
   loading: boolean;
 }) {
-  const [couldFollowFully, setCouldFollowFully] = useState(true);
-  const [unexecutablePoint, setUnexecutablePoint] = useState("");
-  const [hadAmbiguity, setHadAmbiguity] = useState(false);
-  const [ambiguityNote, setAmbiguityNote] = useState("");
-  const [consideredCorrect, setConsideredCorrect] = useState(true);
-  const [correctnessReason, setCorrectnessReason] = useState("");
+  const [clarityRating, setClarityRating] = useState<number | null>(null);
+  const [accuracyRating, setAccuracyRating] = useState<number | null>(null);
+  const [efficiencyRating, setEfficiencyRating] = useState<number | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
 
   const [submitted, setSubmitted] = useState(attempt.status === "evaluated");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isCorrect = attempt.isCorrect;
+  const trimmed = feedbackText.trim();
+  const isValid =
+    clarityRating !== null &&
+    accuracyRating !== null &&
+    efficiencyRating !== null &&
+    trimmed.length >= 2 &&
+    trimmed.length <= 200;
 
   async function handleEvaluationSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!clarityRating || !accuracyRating || !efficiencyRating) {
+      setError("명확성, 정확성, 효율성 평점을 모두 선택해주세요.");
+      return;
+    }
+    if (trimmed.length < 2) {
+      setError("피드백을 최소 2자 이상 적어주세요.");
+      return;
+    }
+    if (trimmed.length > 200) {
+      setError("피드백은 200자 이하로 적어주세요.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
+
+    const couldFollowFully = clarityRating >= 3;
+    const hadAmbiguity = clarityRating <= 2;
+    const consideredCorrect = accuracyRating >= 3;
+
     try {
       const res = await fetch("/api/execute/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           attemptId: attempt.id,
+          clarityRating,
+          accuracyRating,
+          efficiencyRating,
+          subjectiveFeedback: trimmed,
           couldFollowFully,
-          unexecutablePoint,
+          unexecutablePoint: attempt.unexecutableReason ?? "",
           hadAmbiguity,
-          ambiguityNote,
+          ambiguityNote: trimmed,
           consideredCorrect,
-          correctnessReason,
+          correctnessReason: trimmed,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -677,159 +678,72 @@ function ResultAndEvaluationPanel({
         )}
       </section>
 
-      {/* 3-Question Post-Execution Evaluation Form */}
+      {/* 3-Dimension Star Ratings & Subjective Feedback Form */}
       {!submitted ? (
         <form
           onSubmit={handleEvaluationSubmit}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6"
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-5"
         >
           <div className="border-b border-slate-100 pb-3">
             <h3 className="text-base font-bold text-slate-900">
-              📝 실행자 평가 문항 (3문항)
+              ⭐ 알고리즘 다면 평가 (전부 필수)
             </h3>
-            <p className="text-xs text-slate-500">
-              작성자의 알고리즘을 평가해주세요. 이 내용은 작성자 피드백과 교사 대시보드에 기록됩니다.
+            <p className="text-xs text-slate-600 mt-0.5">
+              실행한 알고리즘의 명확성, 정확성, 효율성을 1~5점으로 평가하고 한 줄 소감을 남겨주세요.
             </p>
           </div>
 
-          {/* Q1 */}
-          <div className="space-y-2">
-            <span className="text-xs font-bold text-slate-800 block">
-              1. 알고리즘을 끝까지 그대로 실행할 수 있었습니까?
-            </span>
-            <div className="flex gap-4 text-xs font-medium">
-              <label
-                htmlFor="couldFollow-yes"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="couldFollow-yes"
-                  type="radio"
-                  name="couldFollow"
-                  checked={couldFollowFully}
-                  onChange={() => setCouldFollowFully(true)}
-                  className="text-blue-600"
-                />
-                <span>예 (끝까지 수행 가능)</span>
-              </label>
-              <label
-                htmlFor="couldFollow-no"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="couldFollow-no"
-                  type="radio"
-                  name="couldFollow"
-                  checked={!couldFollowFully}
-                  onChange={() => setCouldFollowFully(false)}
-                  className="text-blue-600"
-                />
-                <span>아니오 (중간에 막힘)</span>
-              </label>
-            </div>
-            {!couldFollowFully && (
-              <input
-                type="text"
-                required
-                aria-label="실행 불가 지점"
-                className="mt-2 w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-                placeholder="실행할 수 없었던 지점이나 단계를 적어주세요 (예: 2단계에서 평형일 때 어디로 가는지 없음)"
-                value={unexecutablePoint}
-                onChange={(e) => setUnexecutablePoint(e.target.value)}
-              />
-            )}
-          </div>
+          {/* 1. Clarity Rating */}
+          <RatingField
+            idPrefix="clarity"
+            label="1. 명확성 (Clarity)"
+            description="지시가 모호하지 않고 한 단계씩 그대로 따라 할 수 있었나요?"
+            value={clarityRating}
+            onChange={setClarityRating}
+          />
 
-          {/* Q2 */}
-          <div className="space-y-2">
-            <span className="text-xs font-bold text-slate-800 block">
-              2. 애매해서 실행자가 임의로 해석해야 했던 부분이 있었습니까?
-            </span>
-            <div className="flex gap-4 text-xs font-medium">
-              <label
-                htmlFor="ambiguity-no"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="ambiguity-no"
-                  type="radio"
-                  name="ambiguity"
-                  checked={!hadAmbiguity}
-                  onChange={() => setHadAmbiguity(false)}
-                  className="text-blue-600"
-                />
-                <span>없음 (모든 지시가 명확함)</span>
-              </label>
-              <label
-                htmlFor="ambiguity-yes"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="ambiguity-yes"
-                  type="radio"
-                  name="ambiguity"
-                  checked={hadAmbiguity}
-                  onChange={() => setHadAmbiguity(true)}
-                  className="text-blue-600"
-                />
-                <span>있음 (추측해서 실행함)</span>
-              </label>
-            </div>
-            {hadAmbiguity && (
-              <input
-                type="text"
-                required
-                aria-label="임의 해석 메모"
-                className="mt-2 w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-                placeholder="어디가 애매해서 어떻게 추측했는지 짧게 적어주세요"
-                value={ambiguityNote}
-                onChange={(e) => setAmbiguityNote(e.target.value)}
-              />
-            )}
-          </div>
+          {/* 2. Accuracy Rating */}
+          <RatingField
+            idPrefix="accuracy"
+            label="2. 정확성 (Accuracy)"
+            description="논리적 결함이나 예외 없이 올바른 결과를 도출했나요?"
+            value={accuracyRating}
+            onChange={setAccuracyRating}
+          />
 
-          {/* Q3 */}
-          <div className="space-y-2">
-            <span className="text-xs font-bold text-slate-800 block">
-              3. 이 알고리즘은 논리적으로 정확하다고 볼 수 있습니까? (우연히 맞았을 가능성 고려)
-            </span>
-            <div className="flex gap-4 text-xs font-medium">
-              <label
-                htmlFor="consideredCorrect-yes"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="consideredCorrect-yes"
-                  type="radio"
-                  name="consideredCorrect"
-                  checked={consideredCorrect}
-                  onChange={() => setConsideredCorrect(true)}
-                  className="text-blue-600"
-                />
-                <span>예 (논리적으로 정확함)</span>
+          {/* 3. Efficiency Rating */}
+          <RatingField
+            idPrefix="efficiency"
+            label="3. 효율성 (Efficiency)"
+            description="불필요한 반복이나 비효율적 조작 없이 문제를 해결했나요?"
+            value={efficiencyRating}
+            onChange={setEfficiencyRating}
+          />
+
+          {/* 4. Subjective Feedback */}
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <label htmlFor="subjective-feedback" className="text-xs font-bold text-slate-800 block">
+                4. 주관식 한 줄 피드백 <span className="text-rose-500">*</span>
               </label>
-              <label
-                htmlFor="consideredCorrect-no"
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input
-                  id="consideredCorrect-no"
-                  type="radio"
-                  name="consideredCorrect"
-                  checked={!consideredCorrect}
-                  onChange={() => setConsideredCorrect(false)}
-                  className="text-blue-600"
-                />
-                <span>아니오 (우연히 맞았거나 논리 결함 있음)</span>
-              </label>
+              <span className="font-mono text-[11px] text-slate-400">
+                {trimmed.length} / 200자 (2~200자 필수)
+              </span>
             </div>
-            <input
-              type="text"
-              aria-label="판단 근거"
-              className="mt-2 w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-              placeholder="판단 근거를 적어주세요 (선택 사항)"
-              value={correctnessReason}
-              onChange={(e) => setCorrectnessReason(e.target.value)}
+            <p className="text-[11px] text-slate-500">
+              실행하면서 어려웠거나 고치면 좋을 점을 구체적으로 한 문장으로 적어주세요.
+            </p>
+
+            <textarea
+              id="subjective-feedback"
+              required
+              rows={3}
+              maxLength={200}
+              aria-label="주관식 피드백 입력"
+              className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+              placeholder="예: 3단계에서 조건 분기가 명확해서 따라 하기 쉬웠어요 / 2단계에서 크기를 비교한 후 어디로 갈지 설명이 부족해서 헷갈렸어요"
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
             />
           </div>
 
@@ -837,13 +751,13 @@ function ResultAndEvaluationPanel({
             <p className="text-xs text-rose-600 font-bold">⚠️ {error}</p>
           )}
 
-          <div className="pt-2">
+          <div className="pt-1">
             <button
               type="submit"
-              disabled={submitting}
-              className="w-full rounded-xl bg-blue-600 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+              disabled={submitting || !isValid}
+              className="w-full rounded-xl bg-slate-900 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center gap-2"
             >
-              {submitting ? "평가 제출 중..." : "평가 제출 완료하기 ➔"}
+              <span>{submitting ? "제출 중..." : "⭐ 평가 및 피드백 제출 완료하기 ➔"}</span>
             </button>
           </div>
         </form>
@@ -852,7 +766,7 @@ function ResultAndEvaluationPanel({
         <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-xs text-center space-y-4">
           <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-sm">
             <span>✓</span>
-            <span>평가가 성공적으로 제출되었습니다!</span>
+            <span>평가와 피드백이 성공적으로 제출되었습니다!</span>
           </div>
 
           <button
@@ -866,5 +780,82 @@ function ResultAndEvaluationPanel({
         </div>
       )}
     </div>
+  );
+}
+
+function RatingField({
+  idPrefix,
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  idPrefix: string;
+  label: string;
+  description: string;
+  value: number | null;
+  onChange: (val: number) => void;
+}) {
+  const ratingLabels: Record<number, string> = {
+    1: "1점 (매우 미흡)",
+    2: "2점 (다소 미흡)",
+    3: "3점 (보통)",
+    4: "4점 (우수)",
+    5: "5점 (매우 우수)",
+  };
+
+  return (
+    <fieldset className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <legend className="text-xs font-bold text-slate-800">
+          {label} <span className="text-rose-500">*</span>
+        </legend>
+        <span className="text-[11px] font-semibold text-blue-700">
+          {value ? ratingLabels[value] : "점수를 선택하세요 (1~5점)"}
+        </span>
+      </div>
+      <p className="text-[11px] text-slate-500">{description}</p>
+
+      <div
+        role="radiogroup"
+        aria-label={`${label} 1점에서 5점 별점 선택`}
+        className="grid grid-cols-5 gap-1.5 pt-1"
+      >
+        {[1, 2, 3, 4, 5].map((score) => {
+          const isSelected = value !== null && value >= score;
+          const isExact = value === score;
+          const radioId = `${idPrefix}-score-${score}`;
+
+          return (
+            <label
+              key={score}
+              htmlFor={radioId}
+              className={`group flex h-11 flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-xl border text-xs font-bold transition cursor-pointer select-none ${
+                isExact
+                  ? "border-blue-600 bg-blue-600 text-white shadow-xs"
+                  : isSelected
+                  ? "border-amber-400 bg-amber-50 text-amber-900"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <input
+                id={radioId}
+                type="radio"
+                name={idPrefix}
+                value={score}
+                checked={value === score}
+                onChange={() => onChange(score)}
+                className="sr-only"
+                aria-label={`${label} ${score}점`}
+              />
+              <span className={`text-base leading-none ${isSelected ? "text-amber-400 group-hover:scale-110 transition" : "text-slate-300"}`}>
+                ★
+              </span>
+              <span className="text-[11px] sm:text-xs">{score}점</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemPrompt } from "@/components/write/ProblemPrompt";
 import { ReviewCardList } from "@/components/write/ReviewCardList";
+import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
 
 type WriteStatus = {
@@ -56,14 +57,18 @@ type Snapshot = {
 };
 
 export default function WritePage() {
-  const [studentKey, setStudentKey] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return sessionStorage.getItem("algo_student_key");
-    } catch {
-      return null;
-    }
-  });
+  const [studentKey, setStudentKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setStudentKey(sessionStorage.getItem("algo_student_key"));
+      } catch {
+        // ignore storage errors
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [algorithmText, setAlgorithmText] = useState("");
@@ -147,10 +152,6 @@ export default function WritePage() {
     } catch {
       // ignore storage error
     }
-  }
-
-  function handleInsertTemplate(textToInsert: string) {
-    setAlgorithmText((prev) => (prev ? `${prev}\n${textToInsert}` : textToInsert));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -301,7 +302,13 @@ export default function WritePage() {
             <ProblemPrompt
               problemType={snapshot.nextProblemType}
               exampleInput={snapshot.exampleInput}
-              onInsertTemplate={handleInsertTemplate}
+            />
+
+            <ProblemSandboxContainer
+              problemType={snapshot.nextProblemType}
+              onCopyHistory={(summary) => {
+                setAlgorithmText((prev) => (prev ? `${prev}\n\n${summary}` : summary));
+              }}
             />
 
             {/* Algorithm Writing Box Form */}
