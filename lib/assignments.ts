@@ -33,23 +33,24 @@ const COMBOS: [[ProblemType, ProblemType], [ProblemType, ProblemType]][] = [
   [["josephus", "pancake"], ["12coins", "card"]],
 ];
 
-/**
- * Default 12-student roster matching the example table in the spec.
- * Replace with the real class roster; any length works.
- */
+/** Class roster. Names are masked for privacy; phone numbers are never stored. */
 export const ROSTER: Roster = [
-  { studentId: "10101", name: "학생1" },
-  { studentId: "10102", name: "학생2" },
-  { studentId: "10103", name: "학생3" },
-  { studentId: "10104", name: "학생4" },
-  { studentId: "10105", name: "학생5" },
-  { studentId: "10106", name: "학생6" },
-  { studentId: "10107", name: "학생7" },
-  { studentId: "10108", name: "학생8" },
-  { studentId: "10109", name: "학생9" },
-  { studentId: "10110", name: "학생10" },
-  { studentId: "10111", name: "학생11" },
-  { studentId: "10112", name: "학생12" },
+  { studentId: "10118", name: "전OO" },
+  { studentId: "10401", name: "강OO" },
+  { studentId: "10403", name: "김OO" },
+  { studentId: "10432", name: "조OO" },
+  { studentId: "10201", name: "BOO" },
+  { studentId: "10208", name: "김OO" },
+  { studentId: "10221", name: "이OO" },
+  { studentId: "10233", name: "헤OO" },
+  { studentId: "10225", name: "이OO" },
+  { studentId: "10301", name: "강OO" },
+  { studentId: "10111", name: "박OO" },
+  { studentId: "10113", name: "박OO" },
+  { studentId: "10308", name: "남OO" },
+  { studentId: "10311", name: "박OO" },
+  { studentId: "10616", name: "양OO" },
+  { studentId: "10702", name: "강OO" },
 ];
 
 export function studentKeyOf(studentId: string, name: string): string {
