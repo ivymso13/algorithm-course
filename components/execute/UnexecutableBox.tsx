@@ -30,7 +30,7 @@ export function UnexecutableBox({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!reason.trim()) {
-      setError("사유를 입력해주세요.");
+      setError("실행 불가 사유를 입력해주세요.");
       return;
     }
     setError(null);
@@ -42,13 +42,14 @@ export function UnexecutableBox({
   function handleQuickSelect(tag: string) {
     setReason((prev) => (prev ? `${prev}, ${tag}` : tag));
     setIsExpanded(true);
+    setError(null);
   }
 
   return (
     <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xl">⚠️</span>
+          <span className="text-xl" aria-hidden="true">⚠️</span>
           <div>
             <h4 className="text-xs font-bold text-amber-900">
               실행 불가 / 명령 부재 신고
@@ -62,7 +63,9 @@ export function UnexecutableBox({
         <button
           type="button"
           onClick={() => setIsExpanded((prev) => !prev)}
-          className="rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 shadow-xs hover:bg-amber-100 transition cursor-pointer"
+          className="rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 shadow-xs hover:bg-amber-100 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-hidden"
+          aria-expanded={isExpanded}
+          aria-controls="unexecutable-form"
         >
           {isExpanded ? "닫기 ▲" : "신고 작성 ▼"}
         </button>
@@ -78,7 +81,11 @@ export function UnexecutableBox({
       )}
 
       {isExpanded && (
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3 border-t border-amber-200/80 pt-3">
+        <form
+          id="unexecutable-form"
+          onSubmit={handleSubmit}
+          className="mt-4 space-y-3 border-t border-amber-200/80 pt-3"
+        >
           <div>
             <span className="text-[11px] font-bold text-amber-900 block mb-1.5">
               빠른 사유 태그 선택:
@@ -89,7 +96,7 @@ export function UnexecutableBox({
                   key={tag}
                   type="button"
                   onClick={() => handleQuickSelect(tag)}
-                  className="rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 cursor-pointer transition shadow-2xs"
+                  className="rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 cursor-pointer transition shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-hidden"
                 >
                   + {tag}
                 </button>
@@ -98,31 +105,49 @@ export function UnexecutableBox({
           </div>
 
           <div>
+            <label htmlFor="unexecutable-reason-input" className="sr-only">
+              실행 불가 사유 입력
+            </label>
             <textarea
+              id="unexecutable-reason-input"
               required
               rows={2}
-              aria-label="실행 불가 사유"
-              className="w-full rounded-lg border border-amber-300 bg-white p-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-hidden"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "unexecutable-error" : undefined}
+              className="w-full rounded-lg border border-amber-300 bg-white p-2.5 text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-hidden"
               placeholder="예: 3단계에서 '확인한다'고만 적혀 있고 크면 어느 쪽으로 갈지 분기가 적혀 있지 않음"
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (error) setError(null);
+              }}
             />
           </div>
 
-          {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
+          {error && (
+            <p
+              id="unexecutable-error"
+              role="alert"
+              aria-live="assertive"
+              className="text-xs text-rose-600 font-bold flex items-center gap-1"
+            >
+              <span aria-hidden="true">⚠️</span>
+              <span>{error}</span>
+            </p>
+          )}
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-amber-100 cursor-pointer"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-amber-100 cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-hidden"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={loading || !reason.trim()}
-              className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-700 disabled:opacity-50 transition cursor-pointer"
+              className="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-700 disabled:opacity-50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:outline-hidden"
             >
               {loading ? "기록 중..." : "실행 불가 기록 제출"}
             </button>

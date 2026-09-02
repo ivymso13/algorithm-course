@@ -1,0 +1,29 @@
+name: CI
+
+# Runs the same checks `npm test` runs locally: a full vinext build, the
+# rendered-page smoke test, and every unit test (problems/assignments/
+# evaluation validation/session/validation/teacherAuth). Configure this
+# workflow as a required status check on `main` so a broken build or a
+# failing security-behavior test (e.g. teacherAuth's "no default password"
+# guarantee) can never reach the branch your hosting platform auto-deploys
+# from.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint

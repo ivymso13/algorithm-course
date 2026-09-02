@@ -1,7 +1,8 @@
 import * as XLSX from "xlsx";
 import { getDb } from "@/db";
-import { attempts, stageState, submissions } from "@/db/schema";
+import { attempts, submissions } from "@/db/schema";
 import { listAssignments } from "@/lib/assignments";
+import { getOrCreateDefaultCourse } from "@/lib/store";
 import type { EvaluationResponses } from "@/lib/store";
 
 function json(value: unknown): string {
@@ -10,10 +11,10 @@ function json(value: unknown): string {
 
 export async function buildExportWorkbook(): Promise<Uint8Array> {
   const db = await getDb();
-  const [allSubmissions, allAttempts, [stage]] = await Promise.all([
+  const [allSubmissions, allAttempts, stage] = await Promise.all([
     db.select().from(submissions),
     db.select().from(attempts),
-    db.select().from(stageState),
+    getOrCreateDefaultCourse(),
   ]);
   const submissionById = new Map(allSubmissions.map((s) => [s.id, s]));
 
@@ -92,8 +93,10 @@ export async function buildExportWorkbook(): Promise<Uint8Array> {
 
   const stageRows = [
     {
-      "2단계_활성화": stage?.stage2Active ? "Y" : "N",
-      활성화시각: stage?.activatedAt ?? "",
+      수업코드: stage.code,
+      "2단계_활성화": stage.stage2Active ? "Y" : "N",
+      활성화시각: stage.activatedAt ?? "",
+      보관기한_일: stage.retentionDays,
       내보낸시각: new Date().toISOString(),
     },
   ];

@@ -1,6 +1,7 @@
-import { getStage2Active } from "@/lib/store";
+import { getOrCreateDefaultCourse, getStage2Active } from "@/lib/store";
 
 export async function GET() {
-  const stage2Active = await getStage2Active();
+  const course = await getOrCreateDefaultCourse();
+  const stage2Active = await getStage2Active(course.id);
   return Response.json({ stage2Active });
 }

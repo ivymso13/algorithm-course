@@ -57,6 +57,7 @@ export default function TeacherPage() {
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "review" | "practice">("dashboard");
   const [stage2Active, setStage2Active] = useState(false);
+  const [course, setCourse] = useState<{ code: string; name: string; retentionDays: number } | null>(null);
   const [students, setStudents] = useState<DashboardStudent[]>([]);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
@@ -89,11 +90,13 @@ export default function TeacherPage() {
       const data = (await res.json()) as {
         students?: DashboardStudent[];
         stage2Active?: boolean;
+        course?: { code: string; name: string; retentionDays: number };
         error?: string;
       };
       if (!res.ok) throw new Error(data.error ?? "불러오기에 실패했습니다.");
       setStudents(data.students ?? []);
       setStage2Active(Boolean(data.stage2Active));
+      setCourse(data.course ?? null);
       setAuthed(true);
       try {
         sessionStorage.setItem("algo_teacher_pw", pw);
@@ -134,15 +137,23 @@ export default function TeacherPage() {
     if (password && !authed) {
       fetch("/api/teacher/dashboard", { headers: { "x-teacher-password": password } })
         .then((res) => res.json())
-        .then((data: { students?: DashboardStudent[]; stage2Active?: boolean; error?: string }) => {
-          if (!ignore) {
-            if (!data.error) {
-              setStudents(data.students ?? []);
-              setStage2Active(Boolean(data.stage2Active));
-              setAuthed(true);
+        .then(
+          (data: {
+            students?: DashboardStudent[];
+            stage2Active?: boolean;
+            course?: { code: string; name: string; retentionDays: number };
+            error?: string;
+          }) => {
+            if (!ignore) {
+              if (!data.error) {
+                setStudents(data.students ?? []);
+                setStage2Active(Boolean(data.stage2Active));
+                setCourse(data.course ?? null);
+                setAuthed(true);
+              }
             }
           }
-        })
+        )
         .catch(() => {
           // ignore auto-login failure on mount
         });
@@ -186,6 +197,21 @@ export default function TeacherPage() {
       setError(err instanceof Error ? err.message : "활성화에 실패했습니다.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function regenerateCourseCode() {
+    if (!confirm("수업 코드를 재발급하시겠습니까? 이전 코드로는 더 이상 새로 로그인할 수 없습니다 (이미 로그인한 학생의 세션은 유지됩니다).")) {
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch("/api/teacher/course", { method: "POST", headers: authHeaders() });
+      const data = (await res.json()) as { course?: { code: string; name: string; retentionDays: number }; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "코드 재발급에 실패했습니다.");
+      setCourse(data.course ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "코드 재발급에 실패했습니다.");
     }
   }
 
@@ -313,6 +339,25 @@ export default function TeacherPage() {
             <h1 className="text-xl font-bold text-slate-900 mt-1">
               알고리즘 수업 실시간 관리 & 토론 화면
             </h1>
+            {course && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500">학생 로그인용 수업 코드:</span>
+                <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-slate-900">
+                  {course.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={regenerateCourseCode}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                  title="코드를 재발급하면 이전 코드로는 새로 로그인할 수 없습니다"
+                >
+                  코드 재발급
+                </button>
+                <span className="text-[11px] text-slate-400">
+                  · 데이터 보관 기한 {course.retentionDays}일
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Quick Actions Bar */}

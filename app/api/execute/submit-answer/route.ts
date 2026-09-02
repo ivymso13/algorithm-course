@@ -1,6 +1,10 @@
-import { getAttemptAlgorithmText, sanitizeAttempt, submitFinalAnswer } from "@/lib/store";
+import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { getAttemptAlgorithmText, OwnershipError, sanitizeAttempt, submitFinalAnswer } from "@/lib/store";
 
 export async function POST(request: Request) {
+  const session = await requireStudentSession(request);
+  if (!session) return SESSION_ERROR_RESPONSE();
+
   const body = (await request.json().catch(() => ({}))) as {
     attemptId?: number;
     finalAnswer?: number;
@@ -12,12 +16,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const attempt = await submitFinalAnswer(attemptId, finalAnswer);
+    const attempt = await submitFinalAnswer(attemptId, session.studentKey, finalAnswer);
     const algorithmText = await getAttemptAlgorithmText(attempt);
     return Response.json({
       attempt: sanitizeAttempt(attempt, algorithmText, { revealAnswer: true }),
     });
   } catch (error) {
+    if (error instanceof OwnershipError) {
+      return Response.json({ error: error.message }, { status: 403 });
+    }
     const message = error instanceof Error ? error.message : "제출할 수 없습니다";
     return Response.json({ error: message }, { status: 400 });
   }

@@ -1,32 +1,189 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { attempts, stageState, submissions } from "@/db/schema";
+import { attempts, courses, sessions, students, submissions } from "@/db/schema";
 import { getAssignment, listAssignments, type ProblemType } from "@/lib/assignments";
 import { applyProblemAction, generateInstance, publicInputFor } from "@/lib/problems";
 import type { LogEntry } from "@/lib/problems/types";
+import {
+  expiresAtFromNow,
+  generateSessionToken,
+  hashSessionToken,
+  isExpired,
+} from "@/lib/session";
 
-const STAGE_ROW_ID = 1;
+/** Thrown when a caller tries to act on an attempt/submission they don't own. */
+export class OwnershipError extends Error {}
 
 // ---------------------------------------------------------------------------
-// Stage 2 gate
+// Course — the class this deployment is currently running. Public deploys
+// have no ChatGPT/GitHub login, so `code` is the only gate keeping strangers
+// off the roster; `stage2Active` replaces the old singleton `stage_state`.
 // ---------------------------------------------------------------------------
 
-export async function getStage2Active(): Promise<boolean> {
-  const db = await getDb();
-  const [row] = await db.select().from(stageState).where(eq(stageState.id, STAGE_ROW_ID));
-  return row?.stage2Active ?? false;
+const CODE_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I — avoids ambiguity on a whiteboard
+
+function generateCourseCode(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => CODE_CHARSET[b % CODE_CHARSET.length]).join("");
 }
 
-export async function activateStage2(): Promise<void> {
+/** Ensures at least one course exists and returns the earliest-created one. */
+export async function getOrCreateDefaultCourse() {
+  const db = await getDb();
+  const [existing] = await db.select().from(courses).orderBy(courses.id).limit(1);
+  if (existing) return existing;
+
+  const seedCode = process.env.COURSE_CODE?.trim().toUpperCase() || generateCourseCode();
+  const [created] = await db
+    .insert(courses)
+    .values({ code: seedCode, createdAt: new Date().toISOString() })
+    .returning();
+  return created;
+}
+
+export async function getCourseByCode(code: string) {
+  const db = await getDb();
+  const [row] = await db
+    .select()
+    .from(courses)
+    .where(eq(courses.code, code.toUpperCase()));
+  return row ?? null;
+}
+
+export async function getCourseById(courseId: number) {
+  const db = await getDb();
+  const [row] = await db.select().from(courses).where(eq(courses.id, courseId));
+  return row ?? null;
+}
+
+export async function regenerateCourseCode(courseId: number) {
+  const db = await getDb();
+  const [updated] = await db
+    .update(courses)
+    .set({ code: generateCourseCode() })
+    .where(eq(courses.id, courseId))
+    .returning();
+  return updated ?? null;
+}
+
+export async function getStage2Active(courseId: number): Promise<boolean> {
+  const course = await getCourseById(courseId);
+  return course?.stage2Active ?? false;
+}
+
+export async function activateStage2(courseId: number): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(courses)
+    .set({ stage2Active: true, activatedAt: new Date().toISOString() })
+    .where(eq(courses.id, courseId));
+}
+
+// ---------------------------------------------------------------------------
+// Students & sessions
+// ---------------------------------------------------------------------------
+
+/**
+ * Records (or refreshes) a login. The roster/assignment check itself still
+ * happens via `getAssignment` in lib/assignments.ts before this is called —
+ * this only persists the consent + login-history record for a roster member
+ * who is actually joining this course for the first time (or again).
+ */
+export async function findOrCreateStudent(input: {
+  courseId: number;
+  studentId: string;
+  name: string;
+  studentKey: string;
+}) {
   const db = await getDb();
   const now = new Date().toISOString();
+  const [existing] = await db
+    .select()
+    .from(students)
+    .where(and(eq(students.courseId, input.courseId), eq(students.studentKey, input.studentKey)));
+
+  if (existing) {
+    const [updated] = await db
+      .update(students)
+      .set({ lastLoginAt: now })
+      .where(eq(students.id, existing.id))
+      .returning();
+    return updated ?? existing;
+  }
+
+  const [created] = await db
+    .insert(students)
+    .values({
+      courseId: input.courseId,
+      studentId: input.studentId,
+      name: input.name,
+      studentKey: input.studentKey,
+      consentAt: now,
+      createdAt: now,
+      lastLoginAt: now,
+    })
+    .returning();
+  return created;
+}
+
+export type ActiveSession = {
+  id: number;
+  studentId: number;
+  courseId: number;
+  studentKey: string;
+  expiresAt: string;
+};
+
+/** Issues a new session and returns the raw token (never persisted as-is). */
+export async function createSession(input: {
+  studentDbId: number;
+  courseId: number;
+  studentKey: string;
+}): Promise<{ token: string; expiresAt: string }> {
+  const db = await getDb();
+  const token = generateSessionToken();
+  const tokenHash = await hashSessionToken(token);
+  const expiresAt = expiresAtFromNow();
+  const now = new Date().toISOString();
+  await db.insert(sessions).values({
+    tokenHash,
+    studentId: input.studentDbId,
+    courseId: input.courseId,
+    studentKey: input.studentKey,
+    createdAt: now,
+    expiresAt,
+    lastSeenAt: now,
+  });
+  return { token, expiresAt };
+}
+
+export async function getSessionByToken(token: string): Promise<ActiveSession | null> {
+  const db = await getDb();
+  const tokenHash = await hashSessionToken(token);
+  const [row] = await db.select().from(sessions).where(eq(sessions.tokenHash, tokenHash));
+  if (!row) return null;
+  if (isExpired(row.expiresAt)) {
+    await db.delete(sessions).where(eq(sessions.id, row.id));
+    return null;
+  }
   await db
-    .insert(stageState)
-    .values({ id: STAGE_ROW_ID, stage2Active: true, activatedAt: now })
-    .onConflictDoUpdate({
-      target: stageState.id,
-      set: { stage2Active: true, activatedAt: now },
-    });
+    .update(sessions)
+    .set({ lastSeenAt: new Date().toISOString() })
+    .where(eq(sessions.id, row.id));
+  return {
+    id: row.id,
+    studentId: row.studentId,
+    courseId: row.courseId,
+    studentKey: row.studentKey,
+    expiresAt: row.expiresAt,
+  };
+}
+
+export async function deleteSessionByToken(token: string): Promise<void> {
+  const db = await getDb();
+  const tokenHash = await hashSessionToken(token);
+  await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
 }
 
 // ---------------------------------------------------------------------------
@@ -157,8 +314,11 @@ export type AssignExecuteResult =
   | { kind: "resumed"; attempt: typeof attempts.$inferSelect; submission: typeof submissions.$inferSelect }
   | { kind: "created"; attempt: typeof attempts.$inferSelect; submission: typeof submissions.$inferSelect };
 
-export async function assignExecuteAttempt(studentKey: string): Promise<AssignExecuteResult> {
-  const stage2Active = await getStage2Active();
+export async function assignExecuteAttempt(
+  studentKey: string,
+  courseId: number
+): Promise<AssignExecuteResult> {
+  const stage2Active = await getStage2Active(courseId);
   if (!stage2Active) return { kind: "waiting" };
 
   const assignment = getAssignment(studentKey);
@@ -215,6 +375,22 @@ export async function getAttempt(id: number) {
   return row ?? null;
 }
 
+/**
+ * Same as `getAttempt`, but throws `OwnershipError` if the caller's session
+ * studentKey isn't the executor who owns this attempt — the IDOR gate for
+ * every execute/* endpoint. attemptId is a small sequential integer, so
+ * without this check any logged-in student could read or mutate any other
+ * student's in-progress attempt just by guessing/incrementing the id.
+ */
+export async function getOwnedAttempt(attemptId: number, ownerStudentKey: string) {
+  const attempt = await getAttempt(attemptId);
+  if (!attempt) throw new Error("attempt not found");
+  if (attempt.executorKey !== ownerStudentKey) {
+    throw new OwnershipError("본인이 실행 중인 시도가 아닙니다");
+  }
+  return attempt;
+}
+
 export async function getAttemptAlgorithmText(attempt: typeof attempts.$inferSelect) {
   const db = await getDb();
   const [submission] = await db
@@ -226,11 +402,11 @@ export async function getAttemptAlgorithmText(attempt: typeof attempts.$inferSel
 
 export async function applyActionAndPersist(
   attemptId: number,
+  ownerStudentKey: string,
   action: string,
   params: Record<string, unknown>
 ) {
-  const attempt = await getAttempt(attemptId);
-  if (!attempt) throw new Error("attempt not found");
+  const attempt = await getOwnedAttempt(attemptId, ownerStudentKey);
   if (attempt.status !== "in_progress") throw new Error("attempt is no longer in progress");
 
   const outcome = applyProblemAction(
@@ -260,9 +436,8 @@ export async function applyActionAndPersist(
   return updated;
 }
 
-export async function recordUnexecutable(attemptId: number, reason: string) {
-  const attempt = await getAttempt(attemptId);
-  if (!attempt) throw new Error("attempt not found");
+export async function recordUnexecutable(attemptId: number, ownerStudentKey: string, reason: string) {
+  const attempt = await getOwnedAttempt(attemptId, ownerStudentKey);
   if (attempt.status !== "in_progress") throw new Error("attempt is no longer in progress");
 
   const entry: LogEntry = { at: new Date().toISOString(), type: "unexecutable", reason };
@@ -278,9 +453,12 @@ export async function recordUnexecutable(attemptId: number, reason: string) {
   return updated;
 }
 
-export async function submitFinalAnswer(attemptId: number, finalAnswer: number) {
-  const attempt = await getAttempt(attemptId);
-  if (!attempt) throw new Error("attempt not found");
+export async function submitFinalAnswer(
+  attemptId: number,
+  ownerStudentKey: string,
+  finalAnswer: number
+) {
+  const attempt = await getOwnedAttempt(attemptId, ownerStudentKey);
   if (attempt.status !== "in_progress") throw new Error("attempt is no longer in progress");
 
   const isCorrect = Number.isInteger(finalAnswer) && finalAnswer === attempt.correctAnswer;
@@ -317,9 +495,12 @@ export type EvaluationResponses = {
   subjectiveFeedback?: string;
 };
 
-export async function submitEvaluation(attemptId: number, evaluation: EvaluationResponses) {
-  const attempt = await getAttempt(attemptId);
-  if (!attempt) throw new Error("attempt not found");
+export async function submitEvaluation(
+  attemptId: number,
+  ownerStudentKey: string,
+  evaluation: EvaluationResponses
+) {
+  const attempt = await getOwnedAttempt(attemptId, ownerStudentKey);
   if (attempt.status !== "submitted") throw new Error("submit a final answer before evaluating");
 
   const db = await getDb();

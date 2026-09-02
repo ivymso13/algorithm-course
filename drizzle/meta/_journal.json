@@ -8,6 +8,13 @@
       "when": 1787623342057,
       "tag": "0000_silent_jazinda",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788318173333,
+      "tag": "0001_old_baron_zemo",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,40 @@ import * as schema from "./schema";
 // statement is idempotent, so re-running it once tables already exist is a
 // no-op.
 const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS courses (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    code text NOT NULL,
+    name text DEFAULT '알고리즘 수업' NOT NULL,
+    stage2_active integer DEFAULT false NOT NULL,
+    activated_at text,
+    retention_days integer DEFAULT 90 NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS courses_code_idx ON courses (code)`,
+  `CREATE TABLE IF NOT EXISTS students (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    course_id integer NOT NULL,
+    student_id text NOT NULL,
+    name text NOT NULL,
+    student_key text NOT NULL,
+    consent_at text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    last_login_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS students_course_student_key_idx ON students (course_id, student_key)`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    token_hash text NOT NULL,
+    student_id integer NOT NULL,
+    course_id integer NOT NULL,
+    student_key text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    expires_at text NOT NULL,
+    last_seen_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions (token_hash)`,
+  `CREATE INDEX IF NOT EXISTS sessions_student_key_idx ON sessions (student_key)`,
+  `DROP TABLE IF EXISTS stage_state`,
   `CREATE TABLE IF NOT EXISTS submissions (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     student_key text NOT NULL,
@@ -48,11 +82,6 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS attempts_submission_idx ON attempts (submission_id)`,
   `CREATE INDEX IF NOT EXISTS attempts_executor_idx ON attempts (executor_key)`,
   `CREATE INDEX IF NOT EXISTS attempts_problem_type_idx ON attempts (problem_type)`,
-  `CREATE TABLE IF NOT EXISTS stage_state (
-    id integer PRIMARY KEY NOT NULL,
-    stage2_active integer DEFAULT false NOT NULL,
-    activated_at text
-  )`,
 ];
 
 let schemaReady: Promise<void> | null = null;

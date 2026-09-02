@@ -1,13 +1,11 @@
+import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
 import { assignExecuteAttempt, sanitizeAttempt } from "@/lib/store";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { studentKey?: string };
-  const studentKey = body.studentKey?.trim() ?? "";
-  if (!studentKey) {
-    return Response.json({ error: "studentKey is required" }, { status: 400 });
-  }
+  const session = await requireStudentSession(request);
+  if (!session) return SESSION_ERROR_RESPONSE();
 
-  const result = await assignExecuteAttempt(studentKey);
+  const result = await assignExecuteAttempt(session.studentKey, session.courseId);
   switch (result.kind) {
     case "waiting":
       return Response.json({ status: "waiting" });

@@ -4,15 +4,20 @@ import {
   parseOptionalRating,
   parseOptionalSubjectiveFeedback,
 } from "@/lib/evaluationValidation";
+import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
 import {
-  getAttempt,
   getAttemptAlgorithmText,
+  getOwnedAttempt,
+  OwnershipError,
   sanitizeAttempt,
   submitEvaluation,
   type EvaluationResponses,
 } from "@/lib/store";
 
 export async function POST(request: Request) {
+  const session = await requireStudentSession(request);
+  if (!session) return SESSION_ERROR_RESPONSE();
+
   const body = (await request.json().catch(() => ({}))) as {
     attemptId?: number;
     couldFollowFully?: boolean;
@@ -61,10 +66,10 @@ export async function POST(request: Request) {
   };
 
   try {
-    const attempt = await submitEvaluation(attemptId, evaluation);
+    const attempt = await submitEvaluation(attemptId, session.studentKey, evaluation);
     const algorithmText = await getAttemptAlgorithmText(attempt);
 
-    const assignment = getAssignment(attempt.executorKey);
+    const assignment = getAssignment(session.studentKey);
     const remaining = assignment
       ? assignment.execute.filter((t) => t !== attempt.problemType)
       : [];
@@ -76,21 +81,34 @@ export async function POST(request: Request) {
       remainingTypes: remaining,
     });
   } catch (error) {
+    if (error instanceof OwnershipError) {
+      return Response.json({ error: error.message }, { status: 403 });
+    }
     const message = error instanceof Error ? error.message : "평가를 제출할 수 없습니다";
     return Response.json({ error: message }, { status: 400 });
   }
 }
 
 export async function GET(request: Request) {
+  const session = await requireStudentSession(request);
+  if (!session) return SESSION_ERROR_RESPONSE();
+
   const url = new URL(request.url);
   const attemptId = Number(url.searchParams.get("attemptId"));
   if (!Number.isInteger(attemptId)) {
     return Response.json({ error: "attemptId가 필요합니다" }, { status: 400 });
   }
-  const attempt = await getAttempt(attemptId);
-  if (!attempt) return Response.json({ error: "not found" }, { status: 404 });
-  const algorithmText = await getAttemptAlgorithmText(attempt);
-  return Response.json({
-    attempt: sanitizeAttempt(attempt, algorithmText, { revealAnswer: attempt.status !== "in_progress" }),
-  });
+
+  try {
+    const attempt = await getOwnedAttempt(attemptId, session.studentKey);
+    const algorithmText = await getAttemptAlgorithmText(attempt);
+    return Response.json({
+      attempt: sanitizeAttempt(attempt, algorithmText, { revealAnswer: attempt.status !== "in_progress" }),
+    });
+  } catch (error) {
+    if (error instanceof OwnershipError) {
+      return Response.json({ error: error.message }, { status: 403 });
+    }
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
 }

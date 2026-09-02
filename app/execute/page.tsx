@@ -38,39 +38,34 @@ type AssignResponse =
 export default function ExecutePage() {
   const [studentKey, setStudentKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        setStudentKey(sessionStorage.getItem("algo_student_key"));
-      } catch {
-        // ignore storage errors
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   const [phase, setPhase] = useState<
-    "login" | "waiting" | "finished" | "noneAvailable" | "running" | "result"
-  >("login");
+    "checking" | "login" | "waiting" | "finished" | "noneAvailable" | "running" | "result"
+  >("checking");
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sessionResumed, setSessionResumed] = useState(false);
 
-  const requestAssignment = useCallback(async (key: string) => {
+  const requestAssignment = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/execute/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentKey: key }),
-      });
+      const res = await fetch("/api/execute/assign", { method: "POST" });
       const data = (await res.json()) as AssignResponse & { error?: string };
+      if (res.status === 401) {
+        setStudentKey(null);
+        setPhase("login");
+        setError("로그인 세션이 만료되었습니다. 안전한 수업 진행을 위해 다시 로그인해주세요.");
+        return;
+      }
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "요청에 실패했습니다.");
 
       if (data.status === "ready") {
         setAttempt(data.attempt);
         setPhase(data.attempt.status === "in_progress" ? "running" : "result");
+        if (data.resumed) {
+          setSessionResumed(true);
+        }
       } else {
         setPhase(data.status);
       }
@@ -81,67 +76,55 @@ export default function ExecutePage() {
     }
   }, []);
 
-  // Auto-restore login on mount
+  // On mount, ask the server (via the session cookie) who we are — no
+  // client-held studentKey is trusted for this anymore.
   useEffect(() => {
     let ignore = false;
-    if (studentKey && phase === "login") {
-      fetch("/api/execute/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentKey }),
+    fetch("/api/student/me")
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }: { ok: boolean; data: { studentKey?: string } }) => {
+        if (ignore) return;
+        if (ok && data.studentKey) {
+          setStudentKey(data.studentKey);
+          requestAssignment();
+        } else {
+          setPhase("login");
+        }
       })
-        .then((res) => res.json())
-        .then((data: AssignResponse & { error?: string }) => {
-          if (!ignore) {
-            if (data.status === "ready") {
-              setAttempt(data.attempt);
-              setPhase(data.attempt.status === "in_progress" ? "running" : "result");
-            } else if (data.status) {
-              setPhase(data.status);
-            }
-          }
-        })
-        .catch((err) => {
-          if (!ignore) {
-            setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
-          }
-        });
-    }
+      .catch(() => {
+        if (!ignore) setPhase("login");
+      });
     return () => {
       ignore = true;
     };
-  }, [studentKey, phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-polling for "waiting" and "noneAvailable" states
   useEffect(() => {
     if ((phase === "waiting" || phase === "noneAvailable") && studentKey) {
       const interval = setInterval(() => {
-        requestAssignment(studentKey);
+        requestAssignment();
       }, 3500);
       return () => clearInterval(interval);
     }
   }, [phase, studentKey, requestAssignment]);
 
-  async function handleLogin(studentId: string, name: string) {
+  async function handleLogin(courseCode: string, studentId: string, name: string) {
     setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/student/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, name }),
+        body: JSON.stringify({ courseCode, studentId, name, consent: true }),
       });
       const data = (await res.json()) as { studentKey?: string; error?: string };
       if (!res.ok || !data.studentKey) {
         throw new Error(data.error ?? "로그인에 실패했습니다.");
       }
       setStudentKey(data.studentKey);
-      try {
-        sessionStorage.setItem("algo_student_key", data.studentKey);
-      } catch {
-        // ignore storage error
-      }
-      await requestAssignment(data.studentKey);
+      await requestAssignment();
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
       setLoading(false);
@@ -152,11 +135,9 @@ export default function ExecutePage() {
     setStudentKey(null);
     setPhase("login");
     setAttempt(null);
-    try {
-      sessionStorage.removeItem("algo_student_key");
-    } catch {
-      // ignore storage error
-    }
+    fetch("/api/student/logout", { method: "POST" }).catch(() => {
+      // ignore network error on logout
+    });
   }
 
   async function handleAction(action: string, params: Record<string, unknown>) {
@@ -169,6 +150,12 @@ export default function ExecutePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ attemptId: attempt.id, action, params }),
       });
+      if (res.status === 401) {
+        setStudentKey(null);
+        setPhase("login");
+        setError("로그인 세션이 만료되었습니다. 안전한 수업 진행을 위해 다시 로그인해주세요.");
+        return;
+      }
       const data = (await res.json()) as { attempt?: Attempt; error?: string };
       if (!res.ok || !data.attempt) {
         throw new Error(data.error ?? "행동을 적용할 수 없습니다.");
@@ -191,6 +178,12 @@ export default function ExecutePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ attemptId: attempt.id, finalAnswer }),
       });
+      if (res.status === 401) {
+        setStudentKey(null);
+        setPhase("login");
+        setError("로그인 세션이 만료되었습니다. 안전한 수업 진행을 위해 다시 로그인해주세요.");
+        return;
+      }
       const data = (await res.json()) as { attempt?: Attempt; error?: string };
       if (!res.ok || !data.attempt) {
         throw new Error(data.error ?? "제출에 실패했습니다.");
@@ -204,6 +197,34 @@ export default function ExecutePage() {
     }
   }
 
+  if (phase === "checking") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <Navbar />
+        <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-16">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs"
+          >
+            <div
+              className="h-9 w-9 animate-spin rounded-full border-3 border-emerald-600 border-t-transparent"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+                로그인 세션 및 배정 과제를 확인하고 있습니다...
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                잠시만 기다리시면 실행 화면으로 연결됩니다.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (phase === "login" || !studentKey) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -211,7 +232,7 @@ export default function ExecutePage() {
         <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-12">
           <StudentLoginCard
             title="2단계 · 인간 컴퓨터 실행"
-            subtitle="학번과 이름을 입력해 다른 학생의 알고리즘을 실행하세요."
+            subtitle="수업 코드와 학번, 이름을 입력해 다른 학생의 알고리즘을 실행하세요."
             stepNumber="2단계"
             onLogin={handleLogin}
             loading={loading}
@@ -240,7 +261,7 @@ export default function ExecutePage() {
             <div className="pt-2 flex flex-col gap-2">
               <button
                 type="button"
-                onClick={() => studentKey && requestAssignment(studentKey)}
+                onClick={() => requestAssignment()}
                 disabled={loading}
                 className="w-full rounded-xl bg-slate-900 py-2.5 px-4 text-xs font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer"
               >
@@ -277,7 +298,7 @@ export default function ExecutePage() {
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => studentKey && requestAssignment(studentKey)}
+                onClick={() => requestAssignment()}
                 disabled={loading}
                 className="w-full rounded-xl bg-blue-600 py-2.5 px-4 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
               >
@@ -370,9 +391,41 @@ export default function ExecutePage() {
           </div>
         </header>
 
+        {/* Resumed Session Alert Banner */}
+        {sessionResumed && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-blue-200 bg-blue-50/95 p-3.5 sm:p-4 shadow-xs flex items-center justify-between gap-3 text-xs text-blue-900"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl" aria-hidden="true">⚡</span>
+              <div>
+                <span className="font-bold block text-xs sm:text-sm">진행 중이던 실행 세션이 복구되었습니다</span>
+                <span className="text-[11px] sm:text-xs text-blue-700">
+                  이전에 중단되었던 위치와 누적 행동 기록({attempt.actionCount}회)이 유지되어 있습니다. 이어서 실행하세요.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSessionResumed(false)}
+              className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+              aria-label="세션 복구 알림 닫기"
+            >
+              확인 ✕
+            </button>
+          </div>
+        )}
+
         {error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-700 shadow-xs">
-            ⚠️ {error}
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-800 shadow-xs flex items-center gap-2"
+          >
+            <span aria-hidden="true">⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
@@ -442,7 +495,7 @@ export default function ExecutePage() {
         {phase === "result" && (
           <ResultAndEvaluationPanel
             attempt={attempt}
-            onNextRound={() => requestAssignment(studentKey)}
+            onNextRound={() => requestAssignment()}
             loading={loading}
           />
         )}
@@ -724,13 +777,23 @@ function ResultAndEvaluationPanel({
           <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
             <div className="flex flex-wrap items-center justify-between gap-1">
               <label htmlFor="subjective-feedback" className="text-xs font-bold text-slate-800 block">
-                4. 주관식 한 줄 피드백 <span className="text-rose-500">*</span>
+                4. 주관식 한 줄 피드백 <span className="text-rose-500" aria-hidden="true">*</span>
               </label>
-              <span className="font-mono text-[11px] text-slate-400">
+              <span
+                id="feedback-char-count"
+                className={`font-mono text-[11px] font-semibold ${
+                  trimmed.length >= 2 && trimmed.length <= 200
+                    ? "text-emerald-600"
+                    : trimmed.length > 200
+                    ? "text-rose-600 font-bold"
+                    : "text-slate-400"
+                }`}
+              >
                 {trimmed.length} / 200자 (2~200자 필수)
+                {trimmed.length > 0 && trimmed.length < 2 && " (최소 2자 이상 필요)"}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p id="subjective-feedback-desc" className="text-[11px] text-slate-500">
               실행하면서 어려웠거나 고치면 좋을 점을 구체적으로 한 문장으로 적어주세요.
             </p>
 
@@ -739,8 +802,9 @@ function ResultAndEvaluationPanel({
               required
               rows={3}
               maxLength={200}
-              aria-label="주관식 피드백 입력"
-              className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+              aria-describedby="subjective-feedback-desc feedback-char-count"
+              aria-invalid={trimmed.length > 0 && (trimmed.length < 2 || trimmed.length > 200)}
+              className="w-full min-h-[80px] rounded-xl border border-slate-300 bg-white p-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
               placeholder="예: 3단계에서 조건 분기가 명확해서 따라 하기 쉬웠어요 / 2단계에서 크기를 비교한 후 어디로 갈지 설명이 부족해서 헷갈렸어요"
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
@@ -748,14 +812,17 @@ function ResultAndEvaluationPanel({
           </div>
 
           {error && (
-            <p className="text-xs text-rose-600 font-bold">⚠️ {error}</p>
+            <p role="alert" aria-live="assertive" className="text-xs text-rose-600 font-bold flex items-center gap-1">
+              <span aria-hidden="true">⚠️</span>
+              <span>{error}</span>
+            </p>
           )}
 
           <div className="pt-1">
             <button
               type="submit"
               disabled={submitting || !isValid}
-              className="w-full rounded-xl bg-slate-900 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center gap-2"
+              className="w-full rounded-xl bg-slate-900 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-hidden"
             >
               <span>{submitting ? "제출 중..." : "⭐ 평가 및 피드백 제출 완료하기 ➔"}</span>
             </button>
@@ -764,8 +831,8 @@ function ResultAndEvaluationPanel({
       ) : (
         /* Evaluation Submitted -> Next Action Button */
         <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-xs text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-sm">
-            <span>✓</span>
+          <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-sm">
+            <span aria-hidden="true">✓</span>
             <span>평가와 피드백이 성공적으로 제출되었습니다!</span>
           </div>
 
@@ -773,7 +840,7 @@ function ResultAndEvaluationPanel({
             type="button"
             onClick={onNextRound}
             disabled={loading}
-            className="rounded-xl bg-slate-900 px-8 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer"
+            className="rounded-xl bg-slate-900 px-8 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-hidden"
           >
             {loading ? "확인 중..." : "다음 배정된 알고리즘 실행하기 (2/2) ➔"}
           </button>
@@ -808,7 +875,7 @@ function RatingField({
     <fieldset className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-1">
         <legend className="text-xs font-bold text-slate-800">
-          {label} <span className="text-rose-500">*</span>
+          {label} <span className="text-rose-500" aria-hidden="true">*</span>
         </legend>
         <span className="text-[11px] font-semibold text-blue-700">
           {value ? ratingLabels[value] : "점수를 선택하세요 (1~5점)"}
@@ -830,7 +897,7 @@ function RatingField({
             <label
               key={score}
               htmlFor={radioId}
-              className={`group flex h-11 flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-xl border text-xs font-bold transition cursor-pointer select-none ${
+              className={`group flex h-11 flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-xl border text-xs font-bold transition cursor-pointer select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-offset-1 ${
                 isExact
                   ? "border-blue-600 bg-blue-600 text-white shadow-xs"
                   : isSelected
