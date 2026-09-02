@@ -5,9 +5,11 @@ import { coinsProblem, type CoinsInput, type CoinsState } from "@/lib/problems/c
 
 interface CoinsSandboxProps {
   onCopyHistory?: (summary: string) => void;
+  /** Larger text/buttons for projecting to a whole classroom. */
+  presentationMode?: boolean;
 }
 
-export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
+export function CoinsSandbox({ onCopyHistory, presentationMode = false }: CoinsSandboxProps) {
   // Generate local instance
   const [instance, setInstance] = useState(() => coinsProblem.generate());
   const [selectedCoins, setSelectedCoins] = useState<number[]>([]);
@@ -129,6 +131,58 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
       ? 7
       : 0;
 
+  // Classroom-projector sizing: swaps in noticeably larger text/buttons
+  // without touching the compact layout the student write-page uses.
+  const size = presentationMode
+    ? {
+        statText: "text-base",
+        controlBtn: "px-4 py-2 text-sm",
+        scaleBox: "h-64",
+        pole: "h-24 w-3.5",
+        pivotTop: "top-20",
+        pansTop: "top-[88px]",
+        pan: "min-h-[64px] w-44",
+        panLabel: "text-sm",
+        coinChip: "h-6 w-6 text-xs",
+        resultBadge: "gap-2 px-4 py-2 text-sm",
+        resultIdle: "text-sm",
+        sectionLabel: "text-sm",
+        coinGrid: "grid-cols-6 gap-2.5",
+        coinBtn: "h-16 text-lg",
+        lrTag: "text-[11px]",
+        actionGrid: "gap-3 pt-2",
+        actionBtn: "px-4 py-3 text-sm",
+        guessLabel: "text-sm",
+        guessBtn: "h-11 w-11 text-base",
+        checkBtn: "px-5 py-2.5 text-sm",
+        feedback: "p-4 text-sm",
+        exportLink: "text-sm",
+      }
+    : {
+        statText: "text-xs",
+        controlBtn: "px-2.5 py-1 text-xs",
+        scaleBox: "h-40",
+        pole: "h-16 w-2.5",
+        pivotTop: "top-14",
+        pansTop: "top-[64px]",
+        pan: "min-h-[48px] w-32",
+        panLabel: "text-[10px]",
+        coinChip: "h-4 w-4 text-[9px]",
+        resultBadge: "gap-1.5 px-3 py-1 text-xs",
+        resultIdle: "text-xs",
+        sectionLabel: "text-xs",
+        coinGrid: "grid-cols-6 sm:grid-cols-12 gap-1.5",
+        coinBtn: "h-10 text-xs",
+        lrTag: "text-[8px]",
+        actionGrid: "gap-2 pt-1",
+        actionBtn: "px-2.5 py-1.5 text-xs",
+        guessLabel: "text-xs",
+        guessBtn: "h-7 w-7 text-xs",
+        checkBtn: "px-3 py-1 text-xs",
+        feedback: "p-2.5 text-xs",
+        exportLink: "text-xs",
+      };
+
   return (
     <div className="space-y-4">
       {/* Sandbox Header Controls */}
@@ -137,7 +191,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
           <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800">
             직접 풀이 샌드박스
           </span>
-          <span className="text-xs text-slate-500">
+          <span className={`${size.statText} text-slate-500`}>
             저울질 횟수: <strong className="text-blue-700">{weighCount}회</strong> (기준 3회 이내)
           </span>
         </div>
@@ -146,14 +200,14 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
           <button
             type="button"
             onClick={handleReset}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+            className={`rounded-lg border border-slate-200 bg-white ${size.controlBtn} font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs`}
           >
             처음 상태로 초기화
           </button>
           <button
             type="button"
             onClick={handleNewProblem}
-            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 transition cursor-pointer shadow-2xs"
+            className={`rounded-lg bg-blue-600 ${size.controlBtn} font-bold text-white hover:bg-blue-700 transition cursor-pointer shadow-2xs`}
           >
             🎲 새 문제 생성
           </button>
@@ -163,33 +217,35 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
       {/* Visual Balance Scale */}
       <div className="rounded-xl border border-slate-200 bg-linear-to-b from-slate-50 to-white p-4">
         {/* Scale Diagram */}
-        <div className="relative mx-auto my-2 flex h-40 max-w-md items-center justify-center">
-          <div className="absolute bottom-2 h-16 w-2.5 rounded-t-lg bg-slate-400"></div>
+        <div className={`relative mx-auto my-2 flex ${size.scaleBox} max-w-md items-center justify-center`}>
+          <div className={`absolute bottom-2 ${size.pole} rounded-t-lg bg-slate-400`}></div>
           <div className="absolute bottom-0 h-2.5 w-24 rounded-md bg-slate-500"></div>
-          <div className="absolute top-14 h-4 w-4 rounded-full border-2 border-slate-600 bg-slate-200 z-10"></div>
+          <div
+            className={`absolute ${size.pivotTop} h-4 w-4 rounded-full border-2 border-slate-600 bg-slate-200 z-10`}
+          ></div>
 
           <div
-            className="absolute top-[64px] flex w-full max-w-md items-center justify-between transition-transform duration-500 ease-out"
+            className={`absolute ${size.pansTop} flex w-full max-w-md items-center justify-between transition-transform duration-500 ease-out`}
             style={{ transform: `rotate(${tiltDeg}deg)` }}
           >
             {/* Left Pan */}
             <div className="relative flex flex-col items-center">
               <div className="h-8 w-0.5 bg-slate-400"></div>
               <div
-                className={`min-h-[48px] w-32 rounded-b-xl border-t-2 p-1.5 shadow-2xs transition ${
+                className={`${size.pan} rounded-b-xl border-t-2 p-1.5 shadow-2xs transition ${
                   left.length > 0
                     ? "bg-blue-50/90 border-blue-400"
                     : "bg-slate-100/80 border-slate-300"
                 }`}
               >
-                <p className="text-center text-[10px] font-bold text-blue-800 mb-1">
+                <p className={`text-center ${size.panLabel} font-bold text-blue-800 mb-1`}>
                   왼쪽 접시 ({left.length}개)
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-1">
                   {left.map((c) => (
                     <span
                       key={c}
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white"
+                      className={`inline-flex ${size.coinChip} items-center justify-center rounded-full bg-blue-600 font-bold text-white`}
                     >
                       {c}
                     </span>
@@ -204,20 +260,20 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
             <div className="relative flex flex-col items-center">
               <div className="h-8 w-0.5 bg-slate-400"></div>
               <div
-                className={`min-h-[48px] w-32 rounded-b-xl border-t-2 p-1.5 shadow-2xs transition ${
+                className={`${size.pan} rounded-b-xl border-t-2 p-1.5 shadow-2xs transition ${
                   right.length > 0
                     ? "bg-purple-50/90 border-purple-400"
                     : "bg-slate-100/80 border-slate-300"
                 }`}
               >
-                <p className="text-center text-[10px] font-bold text-purple-800 mb-1">
+                <p className={`text-center ${size.panLabel} font-bold text-purple-800 mb-1`}>
                   오른쪽 접시 ({right.length}개)
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-1">
                   {right.map((c) => (
                     <span
                       key={c}
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[9px] font-bold text-white"
+                      className={`inline-flex ${size.coinChip} items-center justify-center rounded-full bg-purple-600 font-bold text-white`}
                     >
                       {c}
                     </span>
@@ -232,7 +288,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
         <div className="text-center mt-2">
           {lastHistory ? (
             <span
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold ${
+              className={`inline-flex items-center ${size.resultBadge} rounded-lg font-semibold ${
                 lastHistory.result === "balanced"
                   ? "bg-emerald-100 text-emerald-800"
                   : lastHistory.result === "left"
@@ -244,7 +300,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
               <span>(양쪽 무게 비교 완료)</span>
             </span>
           ) : (
-            <span className="text-xs text-slate-400">
+            <span className={`${size.resultIdle} text-slate-400`}>
               동전을 선택해 접시에 올리고 [저울질하기]를 누르세요.
             </span>
           )}
@@ -253,10 +309,10 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
 
       {/* 12 Coins Selection Bar */}
       <div className="space-y-2">
-        <span className="text-xs font-bold text-slate-700 block">
+        <span className={`${size.sectionLabel} font-bold text-slate-700 block`}>
           🪙 동전 1~12번 선택 (클릭하여 선택):
         </span>
-        <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
+        <div className={`grid ${size.coinGrid}`}>
           {Array.from({ length: 12 }, (_, i) => i + 1).map((coin) => {
             const isLeft = left.includes(coin);
             const isRight = right.includes(coin);
@@ -267,7 +323,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
                 key={coin}
                 type="button"
                 onClick={() => toggleCoin(coin)}
-                className={`relative flex h-10 w-full flex-col items-center justify-center rounded-lg font-bold text-xs transition cursor-pointer ${
+                className={`relative flex ${size.coinBtn} w-full flex-col items-center justify-center rounded-lg font-bold transition cursor-pointer ${
                   isSelected
                     ? "bg-slate-900 text-white ring-2 ring-blue-500 shadow-xs"
                     : isLeft
@@ -278,20 +334,20 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
                 }`}
               >
                 <span>{coin}</span>
-                {isLeft && <span className="text-[8px] text-blue-700 font-bold">L</span>}
-                {isRight && <span className="text-[8px] text-purple-700 font-bold">R</span>}
+                {isLeft && <span className={`${size.lrTag} text-blue-700 font-bold`}>L</span>}
+                {isRight && <span className={`${size.lrTag} text-purple-700 font-bold`}>R</span>}
               </button>
             );
           })}
         </div>
 
         {/* Action Button Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+        <div className={`grid grid-cols-2 sm:grid-cols-4 ${size.actionGrid}`}>
           <button
             type="button"
             onClick={handlePlaceLeft}
             disabled={selectedCoins.length === 0}
-            className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40 transition cursor-pointer"
+            className={`rounded-lg border border-blue-300 bg-blue-50 ${size.actionBtn} font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40 transition cursor-pointer`}
           >
             ⬅️ 왼쪽 저울에
           </button>
@@ -299,7 +355,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
             type="button"
             onClick={handlePlaceRight}
             disabled={selectedCoins.length === 0}
-            className="rounded-lg border border-purple-300 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-800 hover:bg-purple-100 disabled:opacity-40 transition cursor-pointer"
+            className={`rounded-lg border border-purple-300 bg-purple-50 ${size.actionBtn} font-bold text-purple-800 hover:bg-purple-100 disabled:opacity-40 transition cursor-pointer`}
           >
             ➡️ 오른쪽 저울에
           </button>
@@ -307,7 +363,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
             type="button"
             onClick={handleClearPans}
             disabled={left.length === 0 && right.length === 0}
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+            className={`rounded-lg border border-slate-300 bg-white ${size.actionBtn} font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer`}
           >
             🗑️ 저울 비우기
           </button>
@@ -315,7 +371,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
             type="button"
             onClick={handleWeigh}
             disabled={left.length === 0 || right.length === 0}
-            className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-40 transition cursor-pointer"
+            className={`rounded-lg bg-slate-900 ${size.actionBtn} font-bold text-white hover:bg-slate-800 disabled:opacity-40 transition cursor-pointer`}
           >
             ⚖️ 저울질하기
           </button>
@@ -324,7 +380,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
 
       {/* Guess Fake Coin & Answer Check */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-        <span className="text-xs font-bold text-slate-800 block">
+        <span className={`${size.guessLabel} font-bold text-slate-800 block`}>
           🎯 가짜 동전 번호 추론 및 정답 확인:
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -333,7 +389,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
               key={coin}
               type="button"
               onClick={() => setGuessCoin(coin)}
-              className={`h-7 w-7 rounded-md font-bold text-xs transition cursor-pointer ${
+              className={`${size.guessBtn} rounded-md font-bold transition cursor-pointer ${
                 guessCoin === coin
                   ? "bg-blue-600 text-white shadow-xs"
                   : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100"
@@ -347,7 +403,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
             type="button"
             onClick={handleCheckAnswer}
             disabled={guessCoin === null}
-            className="ml-auto rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40 transition cursor-pointer"
+            className={`ml-auto rounded-lg bg-emerald-600 ${size.checkBtn} font-bold text-white hover:bg-emerald-700 disabled:opacity-40 transition cursor-pointer`}
           >
             정답 확인
           </button>
@@ -355,7 +411,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
 
         {feedback && (
           <div
-            className={`rounded-lg p-2.5 text-xs font-semibold ${
+            className={`rounded-lg ${size.feedback} font-semibold ${
               feedback.isCorrect
                 ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
                 : "bg-rose-100 text-rose-900 border border-rose-300"
@@ -369,7 +425,7 @@ export function CoinsSandbox({ onCopyHistory }: CoinsSandboxProps) {
           <button
             type="button"
             onClick={handleExportSummary}
-            className="text-xs font-bold text-blue-600 hover:underline cursor-pointer block pt-1"
+            className={`${size.exportLink} font-bold text-blue-600 hover:underline cursor-pointer block pt-1`}
           >
             📋 내 조작 기록을 알고리즘 작성 힌트로 에디터에 삽입하기 ➔
           </button>

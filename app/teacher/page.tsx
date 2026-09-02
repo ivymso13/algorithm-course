@@ -61,6 +61,7 @@ export default function TeacherPage() {
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
   const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
+  const [presentationMode, setPresentationMode] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -857,28 +858,45 @@ export default function TeacherPage() {
               </p>
             </div>
 
-            {/* Problem Type Selector */}
-            <div className="flex flex-wrap gap-2">
-              {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
-                (pType) => (
-                  <button
-                    key={pType}
-                    type="button"
-                    onClick={() => setSelectedGroupType(pType)}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer ${
-                      selectedGroupType === pType
-                        ? "bg-blue-600 text-white"
-                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span>{PROBLEM_ICONS[pType]}</span>
-                    <span>{PROBLEM_LABELS[pType]}</span>
-                  </button>
-                )
-              )}
+            {/* Problem Type Selector + Presentation Mode Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+                  (pType) => (
+                    <button
+                      key={pType}
+                      type="button"
+                      onClick={() => setSelectedGroupType(pType)}
+                      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer ${
+                        selectedGroupType === pType
+                          ? "bg-blue-600 text-white"
+                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span>{PROBLEM_ICONS[pType]}</span>
+                      <span>{PROBLEM_LABELS[pType]}</span>
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPresentationMode((prev) => !prev)}
+                className={`rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer ${
+                  presentationMode
+                    ? "bg-slate-900 text-white"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {presentationMode ? "📽️ 발표 모드 (크게 보기)" : "🔎 기본 크기로 보기"}
+              </button>
             </div>
 
-            <ProblemSandboxContainer problemType={selectedGroupType} />
+            <ProblemSandboxContainer
+              problemType={selectedGroupType}
+              presentationMode={presentationMode}
+            />
           </section>
         )}
       </main>
