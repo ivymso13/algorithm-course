@@ -3,14 +3,20 @@ import test from "node:test";
 import {
   ALGORITHM_TEXT_MAX_LENGTH,
   ALGORITHM_TEXT_MIN_LENGTH,
+  ROUND_PROMPT_MAX_LENGTH,
+  ROUND_TITLE_MAX_LENGTH,
   UNEXECUTABLE_REASON_MAX_LENGTH,
   ValidationError,
+  WARMUP_FEEDBACK_MAX_LENGTH,
   validateAlgorithmText,
   validateConsent,
   validateCourseCode,
   validateName,
+  validateRoundPrompt,
+  validateRoundTitle,
   validateStudentId,
   validateUnexecutableReason,
+  validateWarmupFeedback,
 } from "../lib/validation.ts";
 
 test("validateCourseCode: accepts well-formed codes, trims whitespace", () => {
@@ -63,4 +69,23 @@ test("validateConsent: only `true` passes; anything else (including string 'true
   assert.throws(() => validateConsent(false), ValidationError);
   assert.throws(() => validateConsent("true"), ValidationError);
   assert.throws(() => validateConsent(undefined), ValidationError);
+});
+
+test("validateRoundTitle: enforces the min/max length window", () => {
+  assert.throws(() => validateRoundTitle("a"), ValidationError);
+  assert.throws(() => validateRoundTitle("a".repeat(ROUND_TITLE_MAX_LENGTH + 1)), ValidationError);
+  assert.equal(validateRoundTitle(" 워밍업 문제 "), "워밍업 문제");
+});
+
+test("validateRoundPrompt: enforces the min/max length window", () => {
+  assert.throws(() => validateRoundPrompt("short"), ValidationError);
+  assert.throws(() => validateRoundPrompt("a".repeat(ROUND_PROMPT_MAX_LENGTH + 1)), ValidationError);
+  const ok = "a".repeat(20);
+  assert.equal(validateRoundPrompt(ok), ok);
+});
+
+test("validateWarmupFeedback: enforces the min/max length window", () => {
+  assert.throws(() => validateWarmupFeedback("a"), ValidationError);
+  assert.throws(() => validateWarmupFeedback("a".repeat(WARMUP_FEEDBACK_MAX_LENGTH + 1)), ValidationError);
+  assert.equal(validateWarmupFeedback(" 좋아요 "), "좋아요");
 });

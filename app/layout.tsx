@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "알고리즘 첫 수업 — 인간 컴퓨터 체험",
-  description:
-    "학생이 쓴 알고리즘을 다른 학생이 그대로 실행해보는 재현성 테스트 활동.",
+  title: "알고리즘 워밍업",
+  description: "아이디어를 쓰고, 추천하고, 직접 따라 해보는 알고리즘 워밍업",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

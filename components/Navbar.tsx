@@ -60,10 +60,10 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
               </span>
               <div className="flex flex-col">
                 <span className="text-xs sm:text-sm font-bold tracking-tight leading-tight">
-                  알고리즘 첫 수업
+                  알고리즘 워밍업
                 </span>
                 <span className="hidden sm:inline text-[10px] text-slate-500 font-normal">
-                  인간 컴퓨터 활동
+                  아이디어 · 추천 · 체험
                 </span>
               </div>
             </Link>
@@ -80,8 +80,7 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
-              <span className="inline-block mr-1 text-[11px] text-blue-500 font-bold">1단계</span>
-              알고리즘 작성
+              워밍업
             </Link>
 
             <Link
@@ -93,8 +92,7 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
-              <span className="inline-block mr-1 text-[11px] text-emerald-600 font-bold">2단계</span>
-              인간 컴퓨터 실행
+              체험
             </Link>
 
             <Link

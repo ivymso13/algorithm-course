@@ -67,6 +67,43 @@ export function validateUnexecutableReason(value: unknown): string {
   return trimmed;
 }
 
+export const ROUND_TITLE_MIN_LENGTH = 2;
+export const ROUND_TITLE_MAX_LENGTH = 60;
+export const ROUND_PROMPT_MIN_LENGTH = 10;
+export const ROUND_PROMPT_MAX_LENGTH = 2000;
+export const WARMUP_FEEDBACK_MIN_LENGTH = 2;
+export const WARMUP_FEEDBACK_MAX_LENGTH = 200;
+
+export function validateRoundTitle(value: unknown): string {
+  const trimmed = requireString(value, "제목");
+  if (trimmed.length < ROUND_TITLE_MIN_LENGTH || trimmed.length > ROUND_TITLE_MAX_LENGTH) {
+    throw new ValidationError(
+      `제목은 ${ROUND_TITLE_MIN_LENGTH}자 이상 ${ROUND_TITLE_MAX_LENGTH}자 이하로 입력해주세요`
+    );
+  }
+  return trimmed;
+}
+
+export function validateRoundPrompt(value: unknown): string {
+  const trimmed = requireString(value, "문제 설명");
+  if (trimmed.length < ROUND_PROMPT_MIN_LENGTH || trimmed.length > ROUND_PROMPT_MAX_LENGTH) {
+    throw new ValidationError(
+      `문제 설명은 ${ROUND_PROMPT_MIN_LENGTH}자 이상 ${ROUND_PROMPT_MAX_LENGTH}자 이하로 입력해주세요`
+    );
+  }
+  return trimmed;
+}
+
+export function validateWarmupFeedback(value: unknown): string {
+  const trimmed = requireString(value, "피드백");
+  if (trimmed.length < WARMUP_FEEDBACK_MIN_LENGTH || trimmed.length > WARMUP_FEEDBACK_MAX_LENGTH) {
+    throw new ValidationError(
+      `피드백은 ${WARMUP_FEEDBACK_MIN_LENGTH}자 이상 ${WARMUP_FEEDBACK_MAX_LENGTH}자 이하로 입력해주세요`
+    );
+  }
+  return trimmed;
+}
+
 export function validateConsent(value: unknown): true {
   if (value !== true) {
     throw new ValidationError("개인정보 수집·이용에 동의해야 시작할 수 있습니다");

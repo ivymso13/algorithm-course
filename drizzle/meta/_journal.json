@@ -15,6 +15,13 @@
       "when": 1788318173333,
       "tag": "0001_old_baron_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788352849277,
+      "tag": "0002_tiny_malice",
+      "breakpoints": true
     }
   ]
 }

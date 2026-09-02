@@ -4,6 +4,33 @@ import { useEffect, useState, useCallback } from "react";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
+import {
+  WARMUP_ROUND_STATUS_LABELS,
+  WARMUP_VOTE_ICONS,
+  WARMUP_VOTE_LABELS,
+  WARMUP_VOTE_TYPES,
+  type WarmupRoundStatus,
+  type WarmupVoteType,
+} from "@/lib/warmupMeta";
+
+type WarmupRoundSummary = {
+  id: number;
+  title: string;
+  prompt: string;
+  status: WarmupRoundStatus;
+  submissionCount: number;
+  voteCount: number;
+  experienceCount: number;
+};
+
+type WarmupRoundDetail = {
+  round: WarmupRoundSummary;
+  items: {
+    submission: { id: number; studentId: string; studentName: string; anonLabel: string; algorithmText: string };
+    voteCounts: Record<WarmupVoteType, number>;
+    experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
+  }[];
+};
 
 type DashboardStudent = {
   studentKey: string;
@@ -55,10 +82,16 @@ export default function TeacherPage() {
   const [password, setPassword] = useState("");
 
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<"dashboard" | "review" | "practice">("dashboard");
+  const [tab, setTab] = useState<"warmup" | "dashboard" | "review" | "practice">("warmup");
   const [stage2Active, setStage2Active] = useState(false);
   const [course, setCourse] = useState<{ code: string; name: string; retentionDays: number } | null>(null);
   const [students, setStudents] = useState<DashboardStudent[]>([]);
+  const [rounds, setRounds] = useState<WarmupRoundSummary[]>([]);
+  const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
+  const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
+  const [newRoundTitle, setNewRoundTitle] = useState("");
+  const [newRoundPrompt, setNewRoundPrompt] = useState("");
+  const [warmupBusy, setWarmupBusy] = useState(false);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
   const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
@@ -82,6 +115,16 @@ export default function TeacherPage() {
     return { "x-teacher-password": customPw || password };
   }, [password]);
 
+  const loadWarmupRounds = useCallback(async () => {
+    try {
+      const res = await fetch("/api/teacher/warmup/rounds", { headers: authHeaders() });
+      const data = (await res.json()) as { rounds?: WarmupRoundSummary[]; error?: string };
+      if (res.ok) setRounds(data.rounds ?? []);
+    } catch {
+      // ignore — the warmup tab shows its own error state via the create/publish/close actions
+    }
+  }, [authHeaders]);
+
   const loadDashboardWithPw = useCallback(async (pw: string) => {
     setLoading(true);
     setError(null);
@@ -103,13 +146,14 @@ export default function TeacherPage() {
       } catch {
         // ignore storage error
       }
+      loadWarmupRounds();
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setAuthed(false);
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, [authHeaders, loadWarmupRounds]);
 
   const loadDashboard = useCallback(async () => {
     await loadDashboardWithPw(password);
@@ -131,6 +175,82 @@ export default function TeacherPage() {
     }
   }, [authHeaders]);
 
+  async function handleCreateRound(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setWarmupBusy(true);
+    try {
+      const res = await fetch("/api/teacher/warmup/rounds", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newRoundTitle.trim(), prompt: newRoundPrompt.trim() }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "라운드 생성에 실패했습니다.");
+      setNewRoundTitle("");
+      setNewRoundPrompt("");
+      await loadWarmupRounds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "라운드 생성에 실패했습니다.");
+    } finally {
+      setWarmupBusy(false);
+    }
+  }
+
+  async function handlePublishRound(roundId: number) {
+    setError(null);
+    setWarmupBusy(true);
+    try {
+      const res = await fetch("/api/teacher/warmup/publish", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ roundId }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "공개에 실패했습니다.");
+      await loadWarmupRounds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "공개에 실패했습니다.");
+    } finally {
+      setWarmupBusy(false);
+    }
+  }
+
+  async function handleCloseRound(roundId: number) {
+    if (!confirm("이 라운드를 종료하시겠습니까? 학생들은 더 이상 제출/투표/체험할 수 없습니다.")) return;
+    setError(null);
+    setWarmupBusy(true);
+    try {
+      const res = await fetch("/api/teacher/warmup/close", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ roundId }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "종료에 실패했습니다.");
+      await loadWarmupRounds();
+      if (roundDetailId === roundId) await loadRoundDetail(roundId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "종료에 실패했습니다.");
+    } finally {
+      setWarmupBusy(false);
+    }
+  }
+
+  const loadRoundDetail = useCallback(
+    async (roundId: number) => {
+      setRoundDetailId(roundId);
+      try {
+        const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, { headers: authHeaders() });
+        const data = (await res.json()) as WarmupRoundDetail & { error?: string };
+        if (res.ok) setRoundDetail(data);
+      } catch {
+        // ignore
+      }
+    },
+    [authHeaders]
+  );
+
   // Try auto-login on mount if password was stored
   useEffect(() => {
     let ignore = false;
@@ -150,6 +270,7 @@ export default function TeacherPage() {
                 setStage2Active(Boolean(data.stage2Active));
                 setCourse(data.course ?? null);
                 setAuthed(true);
+                loadWarmupRounds();
               }
             }
           }
@@ -161,20 +282,23 @@ export default function TeacherPage() {
     return () => {
       ignore = true;
     };
-  }, [password, authed]);
+  }, [password, authed, loadWarmupRounds]);
 
   // Auto-refresh interval
   useEffect(() => {
     if (!authed || !autoRefresh) return;
     const interval = setInterval(() => {
-      if (tab === "dashboard") {
+      if (tab === "warmup") {
+        loadWarmupRounds();
+        if (roundDetailId) loadRoundDetail(roundDetailId);
+      } else if (tab === "dashboard") {
         loadDashboard();
       } else {
         loadReview();
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [authed, autoRefresh, tab, loadDashboard, loadReview]);
+  }, [authed, autoRefresh, tab, roundDetailId, loadWarmupRounds, loadRoundDetail, loadDashboard, loadReview]);
 
   async function handleActivateStage2() {
     if (
@@ -314,80 +438,61 @@ export default function TeacherPage() {
       ? Math.round((correctExecutionCount / executeAttemptedCount) * 100)
       : 0;
 
+  // Warmup Metrics
+  const totalWarmupSubmissions = rounds.reduce((acc, r) => acc + r.submissionCount, 0);
+  const totalWarmupVotes = rounds.reduce((acc, r) => acc + r.voteCount, 0);
+  const totalWarmupExperiences = rounds.reduce((acc, r) => acc + r.experienceCount, 0);
+  const activeWarmupRounds = rounds.filter((r) => r.status === "open").length;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar />
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
-        {/* Top Teacher Control Bar */}
-        <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+        {/* Top Control Bar */}
+        <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[10px] font-bold text-white">
                 교사용 콘솔
               </span>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                  stage2Active
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                    : "bg-amber-100 text-amber-800 border border-amber-300"
-                }`}
-              >
-                {stage2Active ? "🟢 2단계 개방됨" : "🟡 2단계 대기 중"}
-              </span>
+              {course && (
+                <span className="rounded-lg bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-bold text-slate-800">
+                  수업 코드: <span className="text-blue-700 font-black tracking-wider">{course.code}</span>
+                </span>
+              )}
             </div>
-            <h1 className="text-xl font-bold text-slate-900 mt-1">
-              알고리즘 수업 실시간 관리 & 토론 화면
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 mt-1">
+              알고리즘 수업 관리 콘솔
             </h1>
-            {course && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500">학생 로그인용 수업 코드:</span>
-                <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-slate-900">
-                  {course.code}
-                </span>
-                <button
-                  type="button"
-                  onClick={regenerateCourseCode}
-                  className="text-[11px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
-                  title="코드를 재발급하면 이전 코드로는 새로 로그인할 수 없습니다"
-                >
-                  코드 재발급
-                </button>
-                <span className="text-[11px] text-slate-400">
-                  · 데이터 보관 기한 {course.retentionDays}일
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Quick Actions Bar */}
+          {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleActivateStage2}
-              disabled={loading || stage2Active}
-              className={`rounded-xl px-4 py-2 text-xs font-bold shadow-xs transition cursor-pointer ${
-                stage2Active
-                  ? "bg-emerald-600 text-white cursor-default opacity-90"
-                  : "bg-blue-600 hover:bg-blue-700 text-white animate-pulse"
-              }`}
-            >
-              {stage2Active ? "✓ 2단계 활성화 완료" : "🚀 2단계 전체 개방하기"}
-            </button>
+            {course && (
+              <button
+                type="button"
+                onClick={regenerateCourseCode}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                title="수업 코드를 재발급합니다"
+              >
+                코드 재발급
+              </button>
+            )}
 
             <button
               type="button"
               onClick={exportExcel}
-              className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1"
             >
               <span>📊</span>
-              <span>엑셀 내보내기 (.xlsx)</span>
+              <span>엑셀 다운로드</span>
             </button>
 
             <button
               type="button"
               onClick={() => setAutoRefresh((prev) => !prev)}
-              className={`rounded-xl border px-3 py-2 text-xs font-semibold shadow-xs transition cursor-pointer ${
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer ${
                 autoRefresh
                   ? "border-blue-400 bg-blue-50 text-blue-800"
                   : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -402,7 +507,7 @@ export default function TeacherPage() {
                 sessionStorage.removeItem("algo_teacher_pw");
                 setAuthed(false);
               }}
-              className="text-xs text-slate-400 hover:text-rose-600 px-2 py-1 cursor-pointer"
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-500 hover:text-rose-600 transition cursor-pointer"
             >
               로그아웃
             </button>
@@ -410,92 +515,341 @@ export default function TeacherPage() {
         </header>
 
         {/* Live Metrics Overview Cards */}
-        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 block">
-              등록 학생 수
-            </span>
-            <span className="text-2xl font-black text-slate-900">{totalStudents}명</span>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 block">
-              1단계 작성 완료율
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black text-blue-600">
-                {writeCompletedStudents}
+        {tab === "warmup" ? (
+          <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                등록 학생 수
               </span>
-              <span className="text-xs text-slate-400">/ {totalStudents}명</span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">{totalStudents}명</span>
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 block">
-              2단계 실행 완료 건수
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black text-emerald-600">
-                {executeAttemptedCount}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                워밍업 라운드
               </span>
-              <span className="text-xs text-slate-400">/ {totalPossibleExecutions}건</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-2xl font-black text-blue-600">{rounds.length}개</span>
+                <span className="text-xs text-slate-400 font-medium">({activeWarmupRounds}개 진행 중)</span>
+              </div>
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 block">
-              평균 정답 재현율
-            </span>
-            <span className="text-2xl font-black text-slate-900">{accuracyRate}%</span>
-          </div>
-        </section>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                누적 제출 건수
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-600">{totalWarmupSubmissions}건</span>
+            </div>
 
-        {/* Navigation Tabs between Dashboard & Review Mode */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                추천 투표 · 체험
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">
+                {totalWarmupVotes}건 · {totalWarmupExperiences}건
+              </span>
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  등록 학생 수
+                </span>
+                <span className="text-2xl font-black text-slate-900">{totalStudents}명</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  1단계 작성 완료율
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-blue-600">
+                    {writeCompletedStudents}
+                  </span>
+                  <span className="text-xs text-slate-400">/ {totalStudents}명</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  2단계 실행 완료 건수
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-emerald-600">
+                    {executeAttemptedCount}
+                  </span>
+                  <span className="text-xs text-slate-400">/ {totalPossibleExecutions}건</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                <span className="text-[11px] font-semibold text-slate-500 block">
+                  평균 정답 재현율
+                </span>
+                <span className="text-2xl font-black text-slate-900">{accuracyRate}%</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+              <span className="text-xs font-semibold text-slate-700">
+                2단계(인간 컴퓨터 실행) 개방 제어:
+              </span>
+              <button
+                type="button"
+                onClick={handleActivateStage2}
+                disabled={loading || stage2Active}
+                className={`rounded-xl px-4 py-1.5 text-xs font-bold transition cursor-pointer ${
+                  stage2Active
+                    ? "bg-emerald-600 text-white cursor-default opacity-90"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+              >
+                {stage2Active ? "✓ 2단계 활성화 완료" : "🚀 2단계 전체 개방하기"}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              setTab("warmup");
+              loadWarmupRounds();
+            }}
+            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+              tab === "warmup"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            🔥 워밍업 문제 관리 (기본)
+          </button>
+
+          <span className="text-slate-300 hidden sm:inline">|</span>
+
           <button
             type="button"
             onClick={() => {
               setTab("dashboard");
               loadDashboard();
             }}
-            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
               tab === "dashboard"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                ? "bg-slate-700 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            📋 1. 실시간 제출 및 진행 현황
+            (이전) 4문제 현황
           </button>
 
           <button
             type="button"
             onClick={loadReview}
-            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
               tab === "review"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                ? "bg-slate-700 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            📽️ 2. 수업 마무리 토론 화면 (프로젝터 모드)
+            (이전) 토론 화면
           </button>
 
           <button
             type="button"
             onClick={() => setTab("practice")}
-            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
               tab === "practice"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                ? "bg-slate-700 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            🧩 3. 문제별 함께 풀어보기
+            (이전) 문제별 풀어보기
           </button>
         </div>
 
         {error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-700 shadow-xs">
+          <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-700 shadow-xs">
             ⚠️ {error}
           </div>
+        )}
+
+        {/* TAB 0: Warm-up round management */}
+        {tab === "warmup" && (
+          <section className="space-y-4">
+            {/* 1. Create Warmup Round */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+              <h2 className="text-sm font-bold text-slate-900">➕ 새 워밍업 문제 만들기</h2>
+              <form onSubmit={handleCreateRound} className="space-y-2.5">
+                <input
+                  type="text"
+                  required
+                  maxLength={60}
+                  placeholder="문제 제목 (예: 오늘의 워밍업 — 최댓값 찾기)"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                  value={newRoundTitle}
+                  onChange={(e) => setNewRoundTitle(e.target.value)}
+                />
+                <textarea
+                  required
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="문제 지시문 (학생 화면에 그대로 표시됩니다)"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                  value={newRoundPrompt}
+                  onChange={(e) => setNewRoundPrompt(e.target.value)}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={warmupBusy || !newRoundTitle.trim() || !newRoundPrompt.trim()}
+                    className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    {warmupBusy ? "저장 중..." : "+ 라운드 만들기"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* 2. Round List & Live Status */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-900">📊 라운드 목록 및 현황 ({rounds.length})</h2>
+                <button
+                  type="button"
+                  onClick={loadWarmupRounds}
+                  className="text-xs text-blue-600 hover:underline font-semibold cursor-pointer"
+                >
+                  새로고침
+                </button>
+              </div>
+
+              {rounds.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-400">
+                  아직 만든 라운드가 없습니다. 위에서 문제를 만들어 공개하세요.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {rounds.map((round) => (
+                    <div key={round.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              round.status === "open"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : round.status === "closed"
+                                ? "bg-slate-100 text-slate-700 border border-slate-300"
+                                : "bg-amber-100 text-amber-800 border border-amber-300"
+                            }`}
+                          >
+                            {WARMUP_ROUND_STATUS_LABELS[round.status]}
+                          </span>
+                          <span className="text-sm font-bold text-slate-900">{round.title}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {round.status === "draft" && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublishRound(round.id)}
+                              disabled={warmupBusy}
+                              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              🚀 공개하기
+                            </button>
+                          )}
+                          {round.status === "open" && (
+                            <button
+                              type="button"
+                              onClick={() => handleCloseRound(round.id)}
+                              disabled={warmupBusy}
+                              className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              ⏹️ 라운드 종료
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (roundDetailId === round.id) {
+                                setRoundDetailId(null);
+                              } else {
+                                loadRoundDetail(round.id);
+                              }
+                            }}
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                          >
+                            {roundDetailId === round.id ? "현황 닫기 ▲" : `현황 보기 (${round.submissionCount}명) ▼`}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
+                        <span className="font-semibold text-slate-700">제출 {round.submissionCount}건</span>
+                        <span>·</span>
+                        <span>투표 {round.voteCount}건</span>
+                        <span>·</span>
+                        <span>체험 {round.experienceCount}건</span>
+                      </div>
+
+                      {roundDetailId === round.id && roundDetail && (
+                        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                          <h3 className="text-xs font-bold text-slate-800">
+                            제출 목록 및 동료 피드백 ({roundDetail.items.length}명)
+                          </h3>
+                          {roundDetail.items.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-2">아직 제출이 없습니다.</p>
+                          ) : (
+                            roundDetail.items.map((item) => (
+                              <div key={item.submission.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-bold text-slate-800">
+                                    {item.submission.anonLabel} · {item.submission.studentId} {item.submission.studentName}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    {WARMUP_VOTE_TYPES.map((type) => (
+                                      <span
+                                        key={type}
+                                        title={WARMUP_VOTE_LABELS[type]}
+                                        className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+                                      >
+                                        {WARMUP_VOTE_ICONS[type]} {item.voteCounts[type]}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <pre className="whitespace-pre-wrap rounded-lg bg-white p-2.5 font-mono text-[11px] leading-relaxed text-slate-800 max-h-36 overflow-y-auto border border-slate-200">
+                                  {item.submission.algorithmText}
+                                </pre>
+                                {item.experiences.length > 0 ? (
+                                  <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
+                                    <span className="text-[10px] font-bold text-slate-400 block mb-0.5">동료 체험 피드백:</span>
+                                    {item.experiences.map((exp, idx) => (
+                                      <p key={idx} className="text-[11px] text-slate-700">
+                                        <span className="font-bold">{exp.executable ? "✅" : "❌"} {exp.executorName} ({exp.executorId}):</span> “{exp.feedback}”
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400">아직 동료 체험 피드백이 없습니다.</p>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         )}
 
         {/* TAB 1: Live Dashboard */}

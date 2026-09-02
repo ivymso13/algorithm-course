@@ -29,7 +29,7 @@ test("server-renders the landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /인간 컴퓨터/);
+  assert.match(html, /알고리즘 워밍업/);
   assert.match(html, /href="\/write"/);
   assert.match(html, /href="\/execute"/);
   assert.match(html, /href="\/teacher"/);
@@ -41,8 +41,7 @@ test("server-renders the write page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /1단계/);
-  assert.match(html, /알고리즘 작성/);
+  assert.match(html, /워밍업/);
 });
 
 test("server-renders the execute page", async () => {
@@ -51,8 +50,7 @@ test("server-renders the execute page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /2단계/);
-  assert.match(html, /인간 컴퓨터 실행/);
+  assert.match(html, /체험/);
 });
 
 test("server-renders the teacher page", async () => {

@@ -148,3 +148,115 @@ export const attempts = sqliteTable(
     problemTypeIdx: index("attempts_problem_type_idx").on(table.problemType),
   })
 );
+
+// ---------------------------------------------------------------------------
+// Warm-up rounds — the site's current default activity: the teacher writes
+// one free-form problem, publishes it, the whole class submits an algorithm
+// for it, then reviews each other's submissions anonymously (board + vote +
+// a generic step-check "experience"). Unlike submissions/attempts above
+// (kept intact as a reusable template, not deleted), this flow has no fixed
+// problem type and no per-type simulator — only one round is ever "open" at
+// a time (§courses no longer needs a stage2 gate for this flow).
+// ---------------------------------------------------------------------------
+
+/** One teacher-authored warm-up problem. `status`: draft -> open -> closed. */
+export const warmupRounds = sqliteTable(
+  "warmup_rounds",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    courseId: integer("course_id").notNull(),
+    title: text("title").notNull(),
+    prompt: text("prompt").notNull(),
+    status: text("status").notNull().default("draft"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    publishedAt: text("published_at"),
+    closedAt: text("closed_at"),
+  },
+  (table) => ({
+    courseIdx: index("warmup_rounds_course_idx").on(table.courseId),
+  })
+);
+
+/**
+ * One student's algorithm for one round. `anonLabel` (e.g. "참가자 3") is
+ * the only identity shown to peers on the board — `studentId`/`studentName`
+ * stay in the row for the teacher-only detail view.
+ */
+export const warmupSubmissions = sqliteTable(
+  "warmup_submissions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    roundId: integer("round_id").notNull(),
+    studentKey: text("student_key").notNull(),
+    studentId: text("student_id").notNull(),
+    studentName: text("student_name").notNull(),
+    anonLabel: text("anon_label").notNull(),
+    algorithmText: text("algorithm_text").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    roundStudentIdx: uniqueIndex("warmup_submissions_round_student_idx").on(
+      table.roundId,
+      table.studentKey
+    ),
+    roundIdx: index("warmup_submissions_round_idx").on(table.roundId),
+  })
+);
+
+/**
+ * One student's recommendation tag on another student's submission. The
+ * (submission, voter, type) unique index is the duplicate-vote guard from
+ * the spec — casting the same tag twice on the same submission is a no-op
+ * toggle-off (see lib/warmupStore.ts `toggleWarmupVote`), not a stacked vote.
+ */
+export const warmupVotes = sqliteTable(
+  "warmup_votes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    submissionId: integer("submission_id").notNull(),
+    roundId: integer("round_id").notNull(),
+    voterStudentKey: text("voter_student_key").notNull(),
+    voteType: text("vote_type").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    uniqueVoteIdx: uniqueIndex("warmup_votes_unique_idx").on(
+      table.submissionId,
+      table.voterStudentKey,
+      table.voteType
+    ),
+    submissionIdx: index("warmup_votes_submission_idx").on(table.submissionId),
+  })
+);
+
+/**
+ * One student's generic step-check walkthrough of another student's
+ * submission: which lines of the algorithm text they checked off while
+ * following along, whether they could execute it end to end, and one short
+ * feedback note. No simulator/grading — "generic" per the spec.
+ */
+export const warmupExperiences = sqliteTable(
+  "warmup_experiences",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    submissionId: integer("submission_id").notNull(),
+    roundId: integer("round_id").notNull(),
+    executorStudentKey: text("executor_student_key").notNull(),
+    executorId: text("executor_id").notNull(),
+    executorName: text("executor_name").notNull(),
+    checkedSteps: text("checked_steps", { mode: "json" }).notNull(),
+    totalSteps: integer("total_steps").notNull(),
+    executable: integer("executable", { mode: "boolean" }).notNull(),
+    feedback: text("feedback").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    uniqueExperienceIdx: uniqueIndex("warmup_experiences_unique_idx").on(
+      table.submissionId,
+      table.executorStudentKey
+    ),
+    submissionIdx: index("warmup_experiences_submission_idx").on(table.submissionId),
+  })
+);

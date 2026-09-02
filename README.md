@@ -9,6 +9,20 @@ Router 스타일 + Cloudflare Workers) 사이트입니다. Cloudflare D1(SQLite 
 로직/스키마/API는 기능적으로 완성되어 있고, 페이지는 의도적으로 최소 스타일(기본
 Tailwind 유틸리티)만 적용된 골격 상태입니다.
 
+## 현재 기본 활동 — 워밍업 라운드
+
+`/write`, `/execute`는 이제 고정 4문제 배정이 아니라 **교사가 진행하는 단일
+워밍업 라운드**를 사용합니다: 교사가 문제 하나를 만들어 공개 → 전원이 알고리즘을
+제출 → 제출 후 익명 보드에서 서로의 알고리즘에 4가지 유형으로 투표(중복 방지) →
+보드에서 고른 알고리즘을 범용 단계 체크리스트로 따라가며 실행 가능 여부+짧은
+피드백 제출 → 교사가 라운드를 종료. `lib/warmupStore.ts` / `db/schema.ts`의
+`warmup_*` 테이블 / `app/api/warmup/**`, `app/api/teacher/warmup/**`가 이 흐름을
+담당합니다. 기존 4문제(12coins/card/josephus/pancake) 시뮬레이터·배정 로직
+(`lib/problems/*`, `lib/assignments.ts`, `submissions`/`attempts` 테이블,
+`app/api/write/*`·`app/api/execute/*`의 기존 라우트)은 삭제하지 않고 그대로
+남겨두었습니다 — 교사용 대시보드의 "(이전 방식)" 탭과 "문제별 함께 풀어보기"
+탭에서 계속 쓸 수 있는 선택형 체험 템플릿입니다.
+
 ## 공개 배포 보안 모델 (중요)
 
 이 사이트는 ChatGPT/GitHub 계정 로그인 없이 **누구나 URL만 알면 접근 가능한 공개

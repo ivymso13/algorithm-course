@@ -1,172 +1,185 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
-import { ProblemPrompt } from "@/components/write/ProblemPrompt";
-import { ReviewCardList } from "@/components/write/ReviewCardList";
-import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
-import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
+import {
+  WARMUP_VOTE_ICONS,
+  WARMUP_VOTE_LABELS,
+  WARMUP_VOTE_TYPES,
+  type WarmupVoteType,
+} from "@/lib/warmupMeta";
 
-type WriteStatus = {
-  problemType: ProblemType;
-  submitted: boolean;
+type RoundInfo = {
+  id: number;
+  title: string;
+  prompt: string;
+  status: "draft" | "open" | "closed";
+};
+
+type MySubmission = {
+  id: number;
   algorithmText: string;
-  submittedAt: string | null;
-  updatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
-type ReviewCard = {
-  attempt: {
-    id: number;
-    problemType: ProblemType;
-    executorName: string;
-    finalAnswer: number | null;
-    correctAnswer: number;
-    isCorrect: boolean | null;
-    actionCount: number;
-    referenceActionCount: number;
-    unexecutableFlag: boolean;
-    unexecutableReason: string | null;
-    actionLog: unknown[];
-    evaluationResponses: {
-      couldFollowFully: boolean;
-      unexecutablePoint: string;
-      hadAmbiguity: boolean;
-      ambiguityNote: string;
-      consideredCorrect: boolean;
-      correctnessReason: string;
-    } | null;
-  };
-  submission: { algorithmText: string; problemType: ProblemType } | null;
-};
-
-type Snapshot = {
-  studentKey: string;
-  assignment: {
-    studentId: string;
-    name: string;
-    write: ProblemType[];
-    execute: ProblemType[];
-  };
-  writeStatus: WriteStatus[];
-  nextProblemType: ProblemType | null;
-  exampleInput: unknown;
-  reviewCards: ReviewCard[];
+type BoardEntry = {
+  id: number;
+  anonLabel: string;
+  algorithmText: string;
+  voteCounts: Record<WarmupVoteType, number>;
+  myVotes: WarmupVoteType[];
+  experienced: boolean;
 };
 
 export default function WritePage() {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [studentLabel, setStudentLabel] = useState<string | null>(null);
+  const [round, setRound] = useState<RoundInfo | null>(null);
+  const [mySubmission, setMySubmission] = useState<MySubmission | null>(null);
+  const [sessionRestoredNotice, setSessionRestoredNotice] = useState(false);
+
   const [algorithmText, setAlgorithmText] = useState("");
+  const [draftRestoredNotice, setDraftRestoredNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
-  const [draftRestoredNotice, setDraftRestoredNotice] = useState(false);
-  const [sessionRestoredNotice, setSessionRestoredNotice] = useState(false);
 
-  const fetchSnapshot = useCallback(async () => {
-    setLoading(true);
+  const [board, setBoard] = useState<BoardEntry[] | null>(null);
+  const [boardLoading, setBoardLoading] = useState(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
+  const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
+
+  const loadRound = useCallback(async (): Promise<{ ok: boolean; hadSubmission: boolean }> => {
+    const res = await fetch("/api/warmup/round");
+    if (res.status === 401) {
+      setLoggedIn(false);
+      return { ok: false, hadSubmission: false };
+    }
+    const data = (await res.json()) as {
+      studentKey?: string;
+      round: RoundInfo | null;
+      mySubmission: MySubmission | null;
+    };
+    setLoggedIn(true);
+    if (data.studentKey) setStudentLabel(data.studentKey);
+    setRound(data.round);
+    setMySubmission(data.mySubmission);
+    if (data.mySubmission && !algorithmText) {
+      setAlgorithmText(data.mySubmission.algorithmText);
+    }
+    return { ok: true, hadSubmission: Boolean(data.mySubmission) };
+  }, [algorithmText]);
+
+  const loadBoard = useCallback(async () => {
+    setBoardLoading(true);
+    setBoardError(null);
     try {
-      const res = await fetch("/api/write/next");
-      const data = (await res.json()) as Snapshot & { error?: string };
-      if (res.status === 401) {
-        setSnapshot(null);
-        setError("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
-        return;
-      }
+      const res = await fetch("/api/warmup/board");
+      const data = (await res.json()) as { entries?: BoardEntry[]; error?: string };
       if (!res.ok) {
-        setSnapshot(null);
+        setBoardError(data.error ?? "보드를 불러오지 못했습니다.");
         return;
       }
-      setSnapshot(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      setBoard(data.entries ?? []);
+    } catch {
+      setBoardError("보드를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      setBoardLoading(false);
     }
   }, []);
 
-  // On mount, ask the server (via session cookie) if we're already logged in
+  // On mount, check session
   useEffect(() => {
     let ignore = false;
-    fetch("/api/write/next")
-      .then((res) => res.json().then((data) => ({ status: res.status, ok: res.ok, data })))
-      .then(({ status, ok, data }: { status: number; ok: boolean; data: Snapshot & { error?: string } }) => {
-        if (ignore) return;
-        if (ok && data.studentKey) {
-          setSnapshot(data);
-          setSessionRestoredNotice(true);
-          const timer = setTimeout(() => setSessionRestoredNotice(false), 5000);
-          return () => clearTimeout(timer);
-        } else if (status === 401) {
-          // Normal logged-out state
-        }
-      })
-      .catch(() => {
-        // treat as logged out
-      })
-      .finally(() => {
-        if (!ignore) setCheckingSession(false);
-      });
+    const timer = window.setTimeout(() => {
+      loadRound()
+        .then(({ ok, hadSubmission }) => {
+          if (ignore) return;
+          if (ok && hadSubmission) {
+            setSessionRestoredNotice(true);
+            window.setTimeout(() => setSessionRestoredNotice(false), 4000);
+          }
+        })
+        .catch(() => {
+          // treat as logged out
+        })
+        .finally(() => {
+          if (!ignore) setCheckingSession(false);
+        });
+    }, 0);
     return () => {
       ignore = true;
+      window.clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Restore draft from sessionStorage when nextProblemType is active
+  // Once submitted, load anonymous board
   useEffect(() => {
-    if (snapshot?.nextProblemType) {
-      const draftKey = `algo_draft_${snapshot.nextProblemType}`;
+    if (!mySubmission) return;
+    const timer = window.setTimeout(() => loadBoard(), 0);
+    return () => window.clearTimeout(timer);
+  }, [mySubmission, loadBoard]);
+
+  // Poll while waiting for teacher to publish round
+  useEffect(() => {
+    if (checkingSession || !loggedIn || round) return;
+    const interval = window.setInterval(() => {
+      loadRound().catch(() => {});
+    }, 3500);
+    return () => window.clearInterval(interval);
+  }, [checkingSession, loggedIn, round, loadRound]);
+
+  // Restore draft if not yet submitted
+  useEffect(() => {
+    if (!round || mySubmission) return;
+    const draftKey = `algo_warmup_draft_${round.id}`;
+    const timer = window.setTimeout(() => {
       try {
-        const savedDraft = sessionStorage.getItem(draftKey);
-        if (savedDraft && !algorithmText) {
-          const restoreTimer = window.setTimeout(() => {
-            setAlgorithmText(savedDraft);
-            setDraftRestoredNotice(true);
-            window.setTimeout(() => setDraftRestoredNotice(false), 5000);
-          }, 0);
-          return () => window.clearTimeout(restoreTimer);
+        const saved = sessionStorage.getItem(draftKey);
+        if (saved && !algorithmText) {
+          setAlgorithmText(saved);
+          setDraftRestoredNotice(true);
+          window.setTimeout(() => setDraftRestoredNotice(false), 4000);
         }
       } catch {
-        // ignore storage errors
+        // ignore
       }
-    }
-  }, [snapshot?.nextProblemType, algorithmText]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round?.id, mySubmission]);
 
   function handleAlgorithmChange(text: string) {
     setAlgorithmText(text);
-    if (snapshot?.nextProblemType) {
-      const draftKey = `algo_draft_${snapshot.nextProblemType}`;
+    if (round) {
+      const draftKey = `algo_warmup_draft_${round.id}`;
       try {
-        if (text.trim()) {
-          sessionStorage.setItem(draftKey, text);
-        } else {
-          sessionStorage.removeItem(draftKey);
-        }
+        if (text.trim()) sessionStorage.setItem(draftKey, text);
+        else sessionStorage.removeItem(draftKey);
       } catch {
         // ignore
       }
     }
   }
 
-  async function handleLogin(courseCode: string, sId: string, sName: string) {
+  async function handleLogin(courseCode: string, studentId: string, name: string) {
     setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/student/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseCode, studentId: sId, name: sName, consent: true }),
+        body: JSON.stringify({ courseCode, studentId, name, consent: true }),
       });
-      const data = (await res.json()) as Snapshot & { error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "로그인에 실패했습니다.");
-      }
-      setSnapshot(data);
-      setAlgorithmText("");
-      setDraftRestoredNotice(false);
+      const data = (await res.json()) as { studentKey?: string; error?: string };
+      if (!res.ok || !data.studentKey) throw new Error(data.error ?? "로그인에 실패했습니다.");
+      setStudentLabel(data.studentKey);
+      await loadRound();
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
     } finally {
@@ -175,62 +188,52 @@ export default function WritePage() {
   }
 
   async function handleLogout() {
-    setSnapshot(null);
+    setLoggedIn(false);
+    setRound(null);
+    setMySubmission(null);
+    setBoard(null);
     setAlgorithmText("");
-    setDraftRestoredNotice(false);
-    setSessionRestoredNotice(false);
     try {
       await fetch("/api/student/logout", { method: "POST" });
     } catch {
-      // ignore network error on logout
+      // ignore
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!snapshot?.nextProblemType) return;
+    if (!round) return;
     setError(null);
 
     const trimmed = algorithmText.trim();
-    if (!trimmed) {
-      setError("알고리즘 내용을 입력하세요.");
-      return;
-    }
     if (trimmed.length < 10) {
-      setError("알고리즘을 조금 더 구체적으로 단계별로 서술해주세요. (최소 10자 이상)");
+      setError("알고리즘을 10자 이상 단계별로 적어주세요.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch("/api/write/submit", {
+      const res = await fetch("/api/warmup/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          problemType: snapshot.nextProblemType,
-          algorithmText: trimmed,
-        }),
+        body: JSON.stringify({ algorithmText: trimmed }),
       });
-      const data = (await res.json()) as Snapshot & { error?: string };
+      const data = (await res.json()) as { mySubmission?: MySubmission; error?: string };
       if (res.status === 401) {
-        setSnapshot(null);
-        setError("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+        setLoggedIn(false);
+        setError("세션이 만료되었습니다. 다시 로그인해주세요.");
         return;
       }
-      if (!res.ok) throw new Error(data.error ?? "제출에 실패했습니다.");
+      if (!res.ok || !data.mySubmission) throw new Error(data.error ?? "제출에 실패했습니다.");
 
-      // Clear draft on successful submit
       try {
-        sessionStorage.removeItem(`algo_draft_${snapshot.nextProblemType}`);
+        sessionStorage.removeItem(`algo_warmup_draft_${round.id}`);
       } catch {
         // ignore
       }
-
-      setSnapshot((prev) => (prev ? { ...prev, ...data } : data));
-      setAlgorithmText("");
-      setDraftRestoredNotice(false);
-      setSubmitSuccess("알고리즘이 성공적으로 제출되었습니다!");
-      setTimeout(() => setSubmitSuccess(null), 4000);
+      setMySubmission(data.mySubmission);
+      setSubmitSuccess("알고리즘이 성공적으로 제출되었습니다.");
+      window.setTimeout(() => setSubmitSuccess(null), 3500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
     } finally {
@@ -238,41 +241,46 @@ export default function WritePage() {
     }
   }
 
+  async function handleVote(submissionId: number, voteType: WarmupVoteType) {
+    const key = `${submissionId}:${voteType}`;
+    setPendingVotes((prev) => new Set(prev).add(key));
+    try {
+      const res = await fetch("/api/warmup/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId, voteType }),
+      });
+      if (res.ok) await loadBoard();
+    } finally {
+      setPendingVotes((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   if (checkingSession) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navbar />
-        <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-16">
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs"
-          >
-            <div
-              className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent"
-              aria-hidden="true"
-            />
-            <div>
-              <p className="text-sm font-bold text-slate-800">
-                로그인 세션을 확인하고 있습니다...
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                작업 중이던 페이지로 안전하게 연결합니다.
-              </p>
-            </div>
+        <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-16 text-sm text-slate-500">
+          <div role="status" aria-live="polite" className="flex items-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <span>세션 확인 중...</span>
           </div>
         </main>
       </div>
     );
   }
 
-  if (!snapshot) {
+  if (!loggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navbar />
         <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-8 sm:py-12">
           <StudentLoginCard
-            title="1단계 · 알고리즘 작성"
+            title="워밍업 참여"
             subtitle="수업 코드와 학번, 이름을 입력해 시작하세요."
             stepNumber="1단계"
             onLogin={handleLogin}
@@ -284,28 +292,60 @@ export default function WritePage() {
     );
   }
 
-  const assignedWrite = snapshot.assignment.write;
-  const completedCount = snapshot.writeStatus.filter((w) => w.submitted).length;
-  const totalCount = assignedWrite.length;
+  const hasSubmitted = Boolean(mySubmission);
+  const isOpen = round?.status === "open";
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navbar currentStudentKey={snapshot.studentKey} onLogout={handleLogout} />
+      <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
-        {/* Session Restored Gentle Notice Banner */}
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+        {/* 5-Stage Visual Workflow Tracker */}
+        <nav
+          aria-label="워밍업 진행 순서"
+          className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs"
+        >
+          <div className="flex items-center justify-between gap-1 overflow-x-auto text-[11px] font-medium text-slate-500">
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${round ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400"}`}>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">1</span>
+              <span>현재 문제</span>
+            </div>
+            <span className="text-slate-300">➔</span>
+
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-emerald-50 text-emerald-800 font-bold" : round ? "bg-blue-50 text-blue-800 font-bold ring-1 ring-blue-300" : "text-slate-400"}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"}`}>
+                {hasSubmitted ? "✓" : "2"}
+              </span>
+              <span>알고리즘 작성</span>
+            </div>
+            <span className="text-slate-300">➔</span>
+
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400 opacity-60"}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>3</span>
+              <span>익명 아이디어</span>
+            </div>
+            <span className="text-slate-300">➔</span>
+
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400 opacity-60"}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>4</span>
+              <span>추천</span>
+            </div>
+            <span className="text-slate-300">➔</span>
+
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-400 opacity-60"}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-emerald-600 text-white" : "bg-slate-300 text-slate-700"}`}>5</span>
+              <span>단계별 체험</span>
+            </div>
+          </div>
+        </nav>
+
         {sessionRestoredNotice && (
           <div
             role="status"
             aria-live="polite"
-            className="rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-2.5 text-xs text-blue-900 flex items-center justify-between gap-2 shadow-2xs"
+            className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs text-blue-900 flex items-center justify-between gap-2 shadow-2xs"
           >
-            <div className="flex items-center gap-2">
-              <span className="text-base" aria-hidden="true">👋</span>
-              <span>
-                <strong>{snapshot.assignment.name}</strong>님의 이전 과제 세션이 복구되었습니다. 이어서 작성하세요.
-              </span>
-            </div>
+            <span>👋 이전 세션이 복구되었습니다.</span>
             <button
               type="button"
               onClick={() => setSessionRestoredNotice(false)}
@@ -317,361 +357,216 @@ export default function WritePage() {
           </div>
         )}
 
-        {/* Step Progress Stepper Bar */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div>
-              <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">
-                1단계 진행 현황
-              </span>
-              <h1 className="text-base sm:text-lg font-bold text-slate-900">
-                {snapshot.assignment.studentId} · {snapshot.assignment.name}님의 작성 과제
-              </h1>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-600">진행도:</span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                {completedCount} / {totalCount} 완료
-              </span>
-            </div>
-          </div>
-
-          {/* Stepper nodes */}
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {assignedWrite.map((pType, idx) => {
-              const status = snapshot.writeStatus.find((w) => w.problemType === pType);
-              const isCurrent = snapshot.nextProblemType === pType;
-              const isDone = Boolean(status?.submitted);
-
-              return (
-                <div
-                  key={pType}
-                  className={`flex items-center gap-3 rounded-xl p-3 border transition ${
-                    isDone
-                      ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
-                      : isCurrent
-                      ? "border-blue-300 bg-blue-50/70 text-blue-950 ring-2 ring-blue-200"
-                      : "border-slate-200 bg-slate-50 text-slate-500 opacity-60"
+        {!round ? (
+          /* Empty / Waiting state */
+          <section className="rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-xs space-y-2">
+            <span className="text-3xl inline-block" aria-hidden="true">⏳</span>
+            <h1 className="text-base font-bold text-slate-900">진행 중인 워밍업이 없습니다</h1>
+            <p className="text-xs text-slate-500">선생님이 문제를 공개하면 화면이 자동으로 갱신됩니다.</p>
+          </section>
+        ) : (
+          <>
+            {/* 1. 현재 문제 (Current Problem) */}
+            <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 sm:p-5 shadow-xs space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">1. 현재 문제</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    isOpen
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-200 text-slate-700"
                   }`}
                 >
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      isDone
-                        ? "bg-emerald-600 text-white"
-                        : isCurrent
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-300 text-slate-700"
-                    }`}
-                  >
-                    {isDone ? "✓" : idx + 1}
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="text-[11px] font-semibold opacity-75">
-                      문제 {idx + 1}
-                    </p>
-                    <p className="truncate text-xs font-bold">
-                      {PROBLEM_ICONS[pType]} {PROBLEM_LABELS[pType]}
-                    </p>
-                  </div>
+                  {isOpen ? "진행 중" : "종료됨"}
+                </span>
+              </div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-900">{round.title}</h1>
+              <p className="text-xs sm:text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {round.prompt}
+              </p>
+            </section>
+
+            {submitSuccess && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 shadow-xs flex items-center gap-2"
+              >
+                <span aria-hidden="true">✓</span>
+                <span>{submitSuccess}</span>
+              </div>
+            )}
+
+            {/* 2. 알고리즘 작성 (Algorithm Writing) */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-900">2. 알고리즘 작성</h2>
+                  {hasSubmitted && (
+                    <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      제출 완료 (수정 가능)
+                    </span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Success Alert Banner */}
-        {submitSuccess && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-800 shadow-xs flex items-center gap-2"
-          >
-            <span aria-hidden="true">🎉</span>
-            <span>{submitSuccess}</span>
-          </div>
-        )}
-
-        {/* Review Cards Section (Review of execute evaluations) */}
-        {snapshot.reviewCards.length > 0 && (
-          <ReviewCardList cards={snapshot.reviewCards} />
-        )}
-
-        {/* Problem Writing Section (Active Problem) */}
-        {snapshot.nextProblemType ? (
-          <section className="space-y-4">
-            <ProblemPrompt
-              problemType={snapshot.nextProblemType}
-              exampleInput={snapshot.exampleInput}
-            />
-
-            <ProblemSandboxContainer
-              problemType={snapshot.nextProblemType}
-              onCopyHistory={(summary) => {
-                setAlgorithmText((prev) => (prev ? `${prev}\n\n${summary}` : summary));
-              }}
-            />
-
-            {/* Algorithm Writing Box Form */}
-            <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    ✍️ 알고리즘 작성 에디터
-                  </h3>
-                  <p id="algorithm-hint" className="text-xs text-slate-500">
-                    실행자가 그대로 따라 할 수 있도록 한 줄씩 번호를 매겨 적으세요.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <span
-                    id="algorithm-char-count"
-                    className={`font-semibold ${
-                      algorithmText.trim().length >= 10
-                        ? "text-emerald-600"
-                        : algorithmText.trim().length > 0
-                        ? "text-amber-600"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {algorithmText.trim().length} / 4,000자
-                    {algorithmText.trim().length > 0 && algorithmText.trim().length < 10 && (
-                      <span className="ml-1 text-[11px] font-normal">
-                        ({10 - algorithmText.trim().length}자 더 필요)
-                      </span>
-                    )}
-                    {algorithmText.trim().length >= 10 && (
-                      <span className="ml-1 text-[11px]">✓ 충족</span>
-                    )}
-                  </span>
-                  <span className="text-slate-300" aria-hidden="true">•</span>
-                  <span className="text-slate-400">
-                    {algorithmText.split("\n").filter(Boolean).length}줄
-                  </span>
-                </div>
+                <span className={`text-xs font-mono ${algorithmText.trim().length >= 10 ? "text-slate-500" : "text-amber-600"}`}>
+                  {algorithmText.length} / 4,000자
+                </span>
               </div>
 
-              {/* Draft Recovered Notice */}
               {draftRestoredNotice && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="rounded-xl border border-blue-200 bg-blue-50/80 px-3.5 py-2 text-xs text-blue-900 flex items-center justify-between gap-2 shadow-2xs"
-                >
-                  <span className="flex items-center gap-2">
-                    <span aria-hidden="true">💾</span>
-                    <span>이전에 작성 중이던 알고리즘 초안이 복구되었습니다.</span>
-                  </span>
+                <div className="rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-xs text-blue-900 flex items-center justify-between gap-2">
+                  <span>💾 작성 중이던 초안이 복구되었습니다.</span>
                   <button
                     type="button"
                     onClick={() => setDraftRestoredNotice(false)}
                     className="text-blue-700 hover:text-blue-900 font-bold p-1 cursor-pointer"
-                    aria-label="초안 복구 안내 닫기"
+                    aria-label="초안 알림 닫기"
                   >
                     ✕
                   </button>
                 </div>
               )}
 
-              <div className="relative">
-                <label htmlFor="algorithm-textarea" className="sr-only">
-                  알고리즘 내용 작성
-                </label>
+              <form onSubmit={handleSubmit} className="space-y-3">
                 <textarea
-                  id="algorithm-textarea"
                   required
-                  rows={10}
-                  aria-describedby="algorithm-hint algorithm-char-count"
-                  aria-invalid={Boolean(error)}
-                  className="w-full min-h-[180px] rounded-xl border border-slate-300 bg-slate-50/50 p-3 sm:p-4 font-mono text-base sm:text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-                  placeholder={`1. 카드를 왼쪽부터 확인한다.\n2. 만약 현재 카드의 숫자가 목표 숫자보다 크다면:\n   - 탐색 범위를 왼쪽 절반으로 좁힌다.\n3. 목표 숫자를 찾을 때까지 또는 범위가 빌 때까지 1~2를 반복한다.\n4. 목표 숫자가 없으면 0을 최종 답으로 출력한다.`}
+                  rows={6}
+                  disabled={!isOpen}
+                  aria-label="알고리즘 내용"
+                  className="w-full min-h-[140px] rounded-xl border border-slate-300 bg-slate-50/50 p-3 font-mono text-base sm:text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 focus:outline-hidden disabled:opacity-60"
+                  placeholder={`1. 시작 조건 확인\n2. 단계별 구체적 조작\n3. 종료 및 결과 출력`}
                   value={algorithmText}
                   onChange={(e) => handleAlgorithmChange(e.target.value)}
                 />
-              </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  aria-live="assertive"
-                  className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-bold text-rose-800 flex items-center gap-2"
-                >
-                  <span aria-hidden="true">⚠️</span>
-                  <span>{error}</span>
-                </div>
-              )}
+                {error && (
+                  <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                    ⚠️ {error}
+                  </div>
+                )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => handleAlgorithmChange("")}
-                  disabled={!algorithmText || loading}
-                  className="text-xs text-slate-400 hover:text-slate-600 underline cursor-pointer disabled:opacity-30 p-1"
-                >
-                  입력 지우기
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading || !algorithmText.trim()}
-                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden"
-                >
-                  {loading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true" />
-                      제출 중...
-                    </span>
-                  ) : (
-                    <span>
-                      {completedCount + 1 === totalCount
-                        ? "최종 제출 완료하기 ➔"
-                        : "제출하고 다음 문제로 ➔"}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </section>
-        ) : (
-          /* All Problems Completed State */
-          <section className="space-y-6">
-            <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-linear-to-b from-emerald-50 to-white p-6 shadow-xs text-center space-y-4">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-3xl text-white shadow-xs">
-                🎉
-              </div>
-
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  배정된 2개 문제를 모두 제출했습니다!
-                </h2>
-                <p className="mt-1.5 text-xs sm:text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-                  수고하셨습니다. 여러분이 작성한 알고리즘은 2단계에서 다른 학생(인간 컴퓨터)에게 무작위로 전달되어 실행됩니다.
-                  교사의 안내에 따라 2단계 실행 화면으로 이동하세요.
-                </p>
-              </div>
-
-              <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  href="/execute"
-                  className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 transition focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
-                >
-                  2단계 · 인간 컴퓨터 실행 화면으로 이동 ➔
-                </Link>
-              </div>
-            </div>
-
-            {/* Submitted Algorithms Review & Edit Accordions */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900">
-                  📜 내가 제출한 알고리즘 목록 (수정 가능)
-                </h3>
-                <span className="text-xs text-slate-400">
-                  필요 시 내용을 수정하고 저장할 수 있습니다.
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {snapshot.writeStatus.map((item, idx) => (
-                  <details
-                    key={item.problemType}
-                    className="group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 transition"
+                {isOpen ? (
+                  <button
+                    type="submit"
+                    disabled={loading || !algorithmText.trim()}
+                    className="w-full rounded-xl bg-blue-600 py-2.5 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
                   >
-                    <summary className="flex items-center justify-between p-3.5 cursor-pointer bg-white font-bold text-xs text-slate-800 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden">
-                      <div className="flex items-center gap-2">
-                        <span>{PROBLEM_ICONS[item.problemType]}</span>
-                        <span>문제 {idx + 1}: {PROBLEM_LABELS[item.problemType]}</span>
-                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          제출 완료
-                        </span>
-                      </div>
-                      <span className="text-slate-400 group-open:rotate-180 transition text-xs" aria-hidden="true">
-                        ▼
-                      </span>
-                    </summary>
+                    {loading ? "저장 중..." : hasSubmitted ? "수정 내용 저장" : "알고리즘 제출 ➔"}
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-400 text-center py-1">이 라운드는 종료되어 제출할 수 없습니다.</p>
+                )}
+              </form>
+            </section>
 
-                    <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
-                      <EditSubmission
-                        problemType={item.problemType}
-                        initialText={item.algorithmText}
-                        onSaved={fetchSnapshot}
-                      />
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          </section>
+            {/* 3 & 4. 익명 아이디어 & 추천 (Anonymous Ideas & Recommendations) */}
+            {!hasSubmitted ? (
+              <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-xs space-y-1">
+                <p className="text-xs font-bold text-slate-700">🔒 3·4·5단계 (익명 아이디어 · 추천 · 체험)</p>
+                <p className="text-[11px] text-slate-500">
+                  내 알고리즘을 제출하면 다른 학생들의 아이디어를 확인하고 추천·체험할 수 있습니다.
+                </p>
+              </section>
+            ) : (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-slate-900">3. 익명 아이디어 & 4. 추천</h2>
+                    {board && (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                        {board.length}개
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadBoard}
+                    disabled={boardLoading}
+                    className="text-xs text-blue-600 hover:underline font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    {boardLoading ? "새로고침 중..." : "새로고침"}
+                  </button>
+                </div>
+
+                {boardError && (
+                  <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                    ⚠️ {boardError}
+                  </div>
+                )}
+
+                {board === null ? (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-400">
+                    아이디어 불러오는 중...
+                  </div>
+                ) : board.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-xs text-slate-400">
+                    아직 다른 제출이 없습니다. 잠시 후 새로고침해보세요.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {board.map((entry) => (
+                      <article
+                        key={entry.id}
+                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-800">
+                            {entry.anonLabel}
+                          </span>
+                          {entry.experienced && (
+                            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                              ✓ 체험 완료
+                            </span>
+                          )}
+                        </div>
+
+                        <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800 max-h-40 overflow-y-auto">
+                          {entry.algorithmText}
+                        </pre>
+
+                        {/* Recommendation Tags (추천) + Direct Experience Link (단계별 체험) */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="추천 태그">
+                            {WARMUP_VOTE_TYPES.map((type) => {
+                              const voted = entry.myVotes.includes(type);
+                              const pending = pendingVotes.has(`${entry.id}:${type}`);
+                              return (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  disabled={pending || !isOpen}
+                                  onClick={() => handleVote(entry.id, type)}
+                                  aria-pressed={voted}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold transition cursor-pointer disabled:opacity-50 ${
+                                    voted
+                                      ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-300"
+                                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <span aria-hidden="true">{WARMUP_VOTE_ICONS[type]}</span>
+                                  <span>{WARMUP_VOTE_LABELS[type]}</span>
+                                  <span className="font-mono text-[10px] text-slate-500">{entry.voteCounts[type]}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <Link
+                            href={`/execute?submissionId=${entry.id}`}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition shrink-0"
+                          >
+                            5. 체험하기 ➔
+                          </Link>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </>
         )}
       </main>
-    </div>
-  );
-}
-
-function EditSubmission({
-  problemType,
-  initialText,
-  onSaved,
-}: {
-  problemType: ProblemType;
-  initialText: string;
-  onSaved: () => void;
-}) {
-  const [text, setText] = useState(initialText);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function save() {
-    setSaving(true);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/write/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problemType, algorithmText: text }),
-      });
-      if (!res.ok) throw new Error("수정에 실패했습니다.");
-      setMsg("수정 사항이 저장되었습니다!");
-      onSaved();
-      setTimeout(() => setMsg(null), 3000);
-    } catch {
-      setMsg("저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <label htmlFor={`edit-algo-${problemType}`} className="text-[11px] font-bold text-slate-700 block">
-        알고리즘 본문 수정:
-      </label>
-      <textarea
-        id={`edit-algo-${problemType}`}
-        rows={6}
-        className="w-full rounded-xl border border-slate-300 bg-white p-3 font-mono text-base sm:text-xs leading-relaxed text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-hidden"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-
-      <div className="flex items-center justify-between">
-        {msg ? (
-          <span role="status" aria-live="polite" className="text-xs font-bold text-emerald-700">{msg}</span>
-        ) : (
-          <span className="text-[11px] text-slate-400">
-            수정 후 아래 버튼을 누르면 즉시 반영됩니다.
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !text.trim()}
-          className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:outline-hidden"
-        >
-          {saving ? "저장 중..." : "수정 내용 저장"}
-        </button>
-      </div>
     </div>
   );
 }
