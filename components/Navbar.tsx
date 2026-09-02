@@ -1,6 +1,8 @@
 "use client";
 
-import Link from "next/link";
+/* Native links intentionally avoid a client-router navigation bug seen in some classroom browsers. */
+/* eslint-disable @next/next/no-html-link-for-pages */
+
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 
@@ -51,7 +53,7 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2.5 sm:px-6 sm:py-3 gap-2">
           {/* Brand Logo */}
           <div className="flex items-center gap-2.5">
-            <Link
+            <a
               href="/"
               className="flex items-center gap-2 font-bold text-slate-900 transition hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden rounded-lg p-1"
             >
@@ -66,12 +68,12 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
                   아이디어 · 추천 · 체험
                 </span>
               </div>
-            </Link>
+            </a>
           </div>
 
           {/* Navigation Links & Desktop Student Status */}
           <nav aria-label="메인 네비게이션" className="flex items-center gap-1 sm:gap-2">
-            <Link
+            <a
               href="/write"
               aria-current={pathname.startsWith("/write") ? "page" : undefined}
               className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden ${
@@ -81,9 +83,9 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
               }`}
             >
               워밍업
-            </Link>
+            </a>
 
-            <Link
+            <a
               href="/execute"
               aria-current={pathname.startsWith("/execute") ? "page" : undefined}
               className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
@@ -93,9 +95,9 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
               }`}
             >
               체험
-            </Link>
+            </a>
 
-            <Link
+            <a
               href="/teacher"
               aria-current={pathname.startsWith("/teacher") ? "page" : undefined}
               className={`rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:outline-hidden ${
@@ -105,7 +107,7 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
               }`}
             >
               교사용
-            </Link>
+            </a>
 
             {/* Desktop Student Session Badge & Logout */}
             {activeStudent && (

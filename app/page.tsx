@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 
 export const metadata: Metadata = {
@@ -91,12 +90,12 @@ export default function Home() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100">
-                <Link
+                <a
                   href={card.href}
                   className={`flex w-full items-center justify-center rounded-xl py-2.5 px-4 text-xs font-bold transition shadow-xs ${card.buttonClass}`}
                 >
                   {card.actionText}
-                </Link>
+                </a>
               </div>
             </div>
           ))}
