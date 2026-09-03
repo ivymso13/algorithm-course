@@ -7,7 +7,7 @@ export async function GET(request: Request) {
 
   const course = await getOrCreateDefaultCourse();
   const [students, stage2Active, openWarmupRound] = await Promise.all([
-    teacherDashboard(),
+    teacherDashboard(course.id),
     getStage2Active(course.id),
     getOpenWarmupRoundWithSubmitters(course.id),
   ]);

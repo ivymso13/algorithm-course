@@ -17,9 +17,29 @@ const SCHEMA_STATEMENTS = [
     stage2_active integer DEFAULT false NOT NULL,
     activated_at text,
     retention_days integer DEFAULT 90 NOT NULL,
-    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    roster_seeded_at text
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS courses_code_idx ON courses (code)`,
+  `CREATE TABLE IF NOT EXISTS roster (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    course_id integer NOT NULL,
+    school text NOT NULL,
+    student_id text NOT NULL,
+    name text NOT NULL,
+    student_key text NOT NULL,
+    sort_order integer NOT NULL,
+    active integer DEFAULT true NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS roster_course_idx ON roster (course_id)`,
+  // Superseded by the two UNIQUE indexes below; dropped by name (idempotent)
+  // in case an earlier bootstrap already created it as a plain, non-unique
+  // index — CREATE INDEX IF NOT EXISTS alone wouldn't upgrade it in place.
+  `DROP INDEX IF EXISTS roster_course_student_key_idx`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS roster_course_student_key_unique_idx ON roster (course_id, student_key)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS roster_course_student_id_unique_idx ON roster (course_id, student_id)`,
   `CREATE TABLE IF NOT EXISTS students (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     course_id integer NOT NULL,
@@ -134,13 +154,27 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS warmup_experiences_submission_idx ON warmup_experiences (submission_id)`,
 ];
 
+// `courses` predates this column, so a database that already ran the
+// bootstrap once (or a real deployment mid-migration) has a `courses` table
+// without it — CREATE TABLE IF NOT EXISTS above only helps brand new
+// databases. Added as its own statement, outside the batch, so a "duplicate
+// column" failure here (the expected, idempotent case) can't abort the rest
+// of ensureSchema's batch.
+async function ensureRosterSeededAtColumn(d1: D1Database): Promise<void> {
+  try {
+    await d1.prepare(`ALTER TABLE courses ADD COLUMN roster_seeded_at text`).run();
+  } catch (error) {
+    if (!(error instanceof Error) || !/duplicate column/i.test(error.message)) throw error;
+  }
+}
+
 let schemaReady: Promise<void> | null = null;
 
 function ensureSchema(d1: D1Database): Promise<void> {
   if (!schemaReady) {
     schemaReady = d1
       .batch(SCHEMA_STATEMENTS.map((sql) => d1.prepare(sql)))
-      .then(() => undefined)
+      .then(() => ensureRosterSeededAtColumn(d1))
       .catch((error) => {
         schemaReady = null; // allow a retry on the next call instead of caching a failure
         throw error;

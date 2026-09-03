@@ -22,6 +22,27 @@
       "when": 1788352849277,
       "tag": "0002_tiny_malice",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788405182124,
+      "tag": "0003_dear_leopardon",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788405933599,
+      "tag": "0004_lush_black_widow",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788406362616,
+      "tag": "0005_crazy_exiles",
+      "breakpoints": true
     }
   ]
 }

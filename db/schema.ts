@@ -18,6 +18,11 @@ export const courses = sqliteTable(
     activatedAt: text("activated_at"),
     retentionDays: integer("retention_days").notNull().default(90),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    // Set once, the first time this course's roster is seeded from
+    // DEFAULT_ROSTER (see lib/roster.ts). Deliberately independent of the
+    // roster table's current row count — a teacher emptying the roster later
+    // must never cause it to silently reseed the old default students.
+    rosterSeededAt: text("roster_seeded_at"),
   },
   (table) => ({
     codeIdx: uniqueIndex("courses_code_idx").on(table.code),
@@ -25,12 +30,55 @@ export const courses = sqliteTable(
 );
 
 /**
+ * The teacher-editable class roster (school/student ID/name) — the source of
+ * truth for problem-type assignment (see `lib/roster.ts`). Seeded once per
+ * course from `lib/assignments.ts`'s `DEFAULT_ROSTER` so existing deployments
+ * keep their roster unchanged after this table was introduced.
+ *
+ * `sortOrder` is assigned once at creation and never reused or renumbered —
+ * write/execute problem-type pairing is derived from it (see
+ * `comboForSortOrder`), so editing or deleting *other* students can never
+ * reshuffle a student's own assignment. `active=false` is a soft delete: used
+ * instead of a hard delete whenever the student already has submissions/
+ * votes/attempts, so that data is never orphaned or lost (see
+ * `lib/roster.ts`'s `deleteRosterStudent`).
+ *
+ * The (course_id, student_id) and (course_id, student_key) indexes are
+ * UNIQUE — across every row, active or deactivated — not just to keep two
+ * *active* students from colliding, but to stop a student ID/identity that
+ * already has real history from ever being handed to a different row (see
+ * `lib/rosterGuards.ts`'s `assertNoDuplicateStudentId`). They also close the
+ * concurrent-request race an app-level check alone can't: two simultaneous
+ * adds/edits for the same identity now fail at the DB layer, which
+ * `lib/roster.ts` normalizes back into the same RosterDuplicateError.
+ */
+export const roster = sqliteTable(
+  "roster",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    courseId: integer("course_id").notNull(),
+    school: text("school").notNull(),
+    studentId: text("student_id").notNull(),
+    name: text("name").notNull(),
+    studentKey: text("student_key").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    courseIdx: index("roster_course_idx").on(table.courseId),
+    courseStudentKeyIdx: uniqueIndex("roster_course_student_key_unique_idx").on(table.courseId, table.studentKey),
+    courseStudentIdIdx: uniqueIndex("roster_course_student_id_unique_idx").on(table.courseId, table.studentId),
+  })
+);
+
+/**
  * A student who has actually logged into a course (course code + student ID
- * + name, all matched against `lib/assignments.ts`'s hardcoded roster/
- * assignment table). This is a login/consent record, not the source of
- * truth for problem-type assignment — `lib/assignments.ts` keeps that role
- * unchanged. `studentKey` mirrors the `"{studentId} {name}"` format already
- * used as the foreign key on submissions/attempts.
+ * + name, matched against the `roster` table). This is a login/consent
+ * record, not the source of truth for problem-type assignment — `roster`
+ * keeps that role. `studentKey` mirrors the `"{studentId} {name}"` format
+ * already used as the foreign key on submissions/attempts.
  */
 export const students = sqliteTable(
   "students",

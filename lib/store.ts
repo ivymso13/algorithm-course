@@ -1,8 +1,9 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { attempts, courses, sessions, students, submissions } from "@/db/schema";
-import { getAssignment, listAssignments, type ProblemType } from "@/lib/assignments";
+import { type ProblemType } from "@/lib/assignments";
 import { applyProblemAction, generateInstance, publicInputFor } from "@/lib/problems";
+import { getAssignment, listAssignments, seedRosterForCourse } from "@/lib/roster";
 import type { LogEntry } from "@/lib/problems/types";
 import {
   expiresAtFromNow,
@@ -28,18 +29,35 @@ function generateCourseCode(): string {
   return Array.from(bytes, (b) => CODE_CHARSET[b % CODE_CHARSET.length]).join("");
 }
 
-/** Ensures at least one course exists and returns the earliest-created one. */
+/**
+ * Ensures at least one course exists and returns the earliest-created one.
+ * Also ensures that course's roster has been seeded from DEFAULT_ROSTER —
+ * exactly once ever, tracked by `rosterSeededAt` rather than the roster
+ * table's current row count, so a teacher later emptying the roster can
+ * never cause it to silently reseed the old default students.
+ */
 export async function getOrCreateDefaultCourse() {
   const db = await getDb();
   const [existing] = await db.select().from(courses).orderBy(courses.id).limit(1);
-  if (existing) return existing;
+  const course =
+    existing ??
+    (
+      await db
+        .insert(courses)
+        .values({
+          code: process.env.COURSE_CODE?.trim().toUpperCase() || generateCourseCode(),
+          createdAt: new Date().toISOString(),
+        })
+        .returning()
+    )[0];
 
-  const seedCode = process.env.COURSE_CODE?.trim().toUpperCase() || generateCourseCode();
-  const [created] = await db
-    .insert(courses)
-    .values({ code: seedCode, createdAt: new Date().toISOString() })
-    .returning();
-  return created;
+  if (!course.rosterSeededAt) {
+    await seedRosterForCourse(course.id);
+    const now = new Date().toISOString();
+    await db.update(courses).set({ rosterSeededAt: now }).where(eq(courses.id, course.id));
+    return { ...course, rosterSeededAt: now };
+  }
+  return course;
 }
 
 export async function getCourseByCode(code: string) {
@@ -243,8 +261,8 @@ export async function listReviewCardsForAuthor(studentKey: string) {
   }));
 }
 
-export async function writePhaseSnapshot(studentKey: string) {
-  const assignment = getAssignment(studentKey);
+export async function writePhaseSnapshot(studentKey: string, courseId: number) {
+  const assignment = await getAssignment(courseId, studentKey);
   if (!assignment) return null;
 
   const existing = await listSubmissionsByStudent(studentKey);
@@ -321,7 +339,7 @@ export async function assignExecuteAttempt(
   const stage2Active = await getStage2Active(courseId);
   if (!stage2Active) return { kind: "waiting" };
 
-  const assignment = getAssignment(studentKey);
+  const assignment = await getAssignment(courseId, studentKey);
   if (!assignment) return { kind: "finished" };
 
   const resumable = await findInProgressAttempt(studentKey);
@@ -548,12 +566,15 @@ export function sanitizeAttempt(
 // Teacher views
 // ---------------------------------------------------------------------------
 
-export async function teacherDashboard() {
+export async function teacherDashboard(courseId: number) {
   const db = await getDb();
-  const allSubmissions = await db.select().from(submissions);
-  const allAttempts = await db.select().from(attempts);
+  const [allSubmissions, allAttempts, assignments] = await Promise.all([
+    db.select().from(submissions),
+    db.select().from(attempts),
+    listAssignments(courseId),
+  ]);
 
-  return listAssignments().map((assignment) => {
+  return assignments.map((assignment) => {
     const write = assignment.write.map((problemType) => {
       const submission = allSubmissions.find(
         (s) => s.studentKey === assignment.studentKey && s.problemType === problemType
@@ -575,6 +596,7 @@ export async function teacherDashboard() {
       };
     });
     return {
+      id: assignment.id,
       studentKey: assignment.studentKey,
       studentId: assignment.studentId,
       name: assignment.name,

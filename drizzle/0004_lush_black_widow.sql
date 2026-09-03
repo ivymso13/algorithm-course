@@ -1,0 +1,1 @@
+ALTER TABLE `courses` ADD `roster_seeded_at` text;

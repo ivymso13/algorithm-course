@@ -35,6 +35,7 @@ type WarmupRoundDetail = {
 };
 
 type DashboardStudent = {
+  id: number;
   studentKey: string;
   studentId: string;
   name: string;
@@ -102,6 +103,13 @@ export default function TeacherPage() {
   const [openWarmupRound, setOpenWarmupRound] = useState<OpenWarmupRoundInfo>(null);
   const [rosterSearch, setRosterSearch] = useState("");
   const [rosterFilter, setRosterFilter] = useState<"all" | "submitted" | "not-submitted">("all");
+  const [rosterBusy, setRosterBusy] = useState(false);
+  const rosterBusyRef = useRef(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [addForm, setAddForm] = useState({ school: "", studentId: "", name: "" });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ school: "", studentId: "", name: "" });
   const [rounds, setRounds] = useState<WarmupRoundSummary[]>([]);
   const [warmupProblems, setWarmupProblems] = useState<WarmupProblem[]>([]);
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
@@ -262,6 +270,82 @@ export default function TeacherPage() {
         setRoundDetailId(null);
         setRoundDetail(null);
       }
+    }, "삭제에 실패했습니다.");
+  }
+
+  /** Same busy-guard pattern as `runWarmupAction`, scoped to roster add/edit/delete. */
+  async function runRosterAction(action: () => Promise<void>, fallbackErrorMessage: string) {
+    if (rosterBusyRef.current) return;
+    rosterBusyRef.current = true;
+    setError(null);
+    setNotice(null);
+    setRosterBusy(true);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : fallbackErrorMessage);
+    } finally {
+      rosterBusyRef.current = false;
+      setRosterBusy(false);
+    }
+  }
+
+  async function handleAddStudent() {
+    await runRosterAction(async () => {
+      const res = await fetch("/api/teacher/roster", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(addForm),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "학생 추가에 실패했습니다.");
+      setAddForm({ school: "", studentId: "", name: "" });
+      setAddingStudent(false);
+      setNotice("학생을 추가했습니다.");
+      await loadDashboard();
+    }, "학생 추가에 실패했습니다.");
+  }
+
+  function startEditStudent(student: DashboardStudent) {
+    setEditingId(student.id);
+    setEditForm({ school: student.school, studentId: student.studentId, name: student.name });
+  }
+
+  async function handleSaveEdit(id: number) {
+    await runRosterAction(async () => {
+      const res = await fetch("/api/teacher/roster", {
+        method: "PATCH",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...editForm }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "학생 정보 수정에 실패했습니다.");
+      setEditingId(null);
+      setNotice("학생 정보를 수정했습니다.");
+      await loadDashboard();
+    }, "학생 정보 수정에 실패했습니다.");
+  }
+
+  async function handleDeleteStudent(student: DashboardStudent) {
+    if (
+      !confirm(
+        `"${student.school} ${student.studentId} ${student.name}" 학생을 삭제하시겠습니까?\n제출/투표 기록이 있으면 완전히 삭제하지 않고 명단에서 비활성화됩니다.`
+      )
+    )
+      return;
+    await runRosterAction(async () => {
+      const res = await fetch(`/api/teacher/roster?id=${student.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = (await res.json().catch(() => ({}))) as { mode?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "삭제에 실패했습니다.");
+      setNotice(
+        data.mode === "delete"
+          ? "학생을 삭제했습니다."
+          : "제출/투표 기록이 있어 완전히 삭제하지 않고 명단에서 비활성화했습니다."
+      );
+      await loadDashboard();
     }, "삭제에 실패했습니다.");
   }
 
@@ -795,6 +879,12 @@ export default function TeacherPage() {
           </div>
         )}
 
+        {notice && (
+          <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800 shadow-xs">
+            ✓ {notice}
+          </div>
+        )}
+
         {/* TAB 0: Warm-up round management */}
         {tab === "warmup" && (
           <section className="space-y-4">
@@ -975,16 +1065,79 @@ export default function TeacherPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-bold text-slate-900">학생 명단 ({students.length}명)</h2>
-                {openWarmupRound ? (
-                  <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-bold">
-                    진행 중: {openWarmupRound.title}
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold">
-                    진행 중인 라운드 없음
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {openWarmupRound ? (
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-bold">
+                      진행 중: {openWarmupRound.title}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold">
+                      진행 중인 라운드 없음
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddingStudent((prev) => !prev)}
+                    className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-bold text-white hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    {addingStudent ? "취소" : "+ 학생 추가"}
+                  </button>
+                </div>
               </div>
+
+              {addingStudent && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddStudent();
+                  }}
+                  className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                >
+                  <div className="flex-1 min-w-[100px]">
+                    <label htmlFor="add-school" className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      학교
+                    </label>
+                    <input
+                      id="add-school"
+                      required
+                      value={addForm.school}
+                      onChange={(e) => setAddForm((prev) => ({ ...prev, school: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[90px]">
+                    <label htmlFor="add-studentId" className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      학번
+                    </label>
+                    <input
+                      id="add-studentId"
+                      required
+                      value={addForm.studentId}
+                      onChange={(e) => setAddForm((prev) => ({ ...prev, studentId: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[90px]">
+                    <label htmlFor="add-name" className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      이름
+                    </label>
+                    <input
+                      id="add-name"
+                      required
+                      value={addForm.name}
+                      onChange={(e) => setAddForm((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={rosterBusy}
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    저장
+                  </button>
+                </form>
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 <label htmlFor="roster-search" className="sr-only">
@@ -1020,40 +1173,119 @@ export default function TeacherPage() {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-              <table className="w-full min-w-[420px] text-xs">
+              <table className="w-full min-w-[560px] text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-left">
                   <tr>
                     <th className="p-3">학교</th>
                     <th className="p-3 w-20">학번</th>
                     <th className="p-3 w-24">이름</th>
                     {openWarmupRound && <th className="p-3 w-20 text-center">제출</th>}
+                    <th className="p-3 w-28 text-right">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRoster.map((s) => {
                     const submitted = openWarmupRound?.submittedStudentKeys.includes(s.studentKey) ?? false;
+                    const isEditing = editingId === s.id;
                     return (
                       <tr key={s.studentKey} className="hover:bg-slate-50/80 transition">
-                        <td className="p-3 text-slate-700">{s.school}</td>
-                        <td className="p-3 font-mono font-bold text-slate-900">{s.studentId}</td>
-                        <td className="p-3 font-semibold text-slate-800">{s.name}</td>
-                        {openWarmupRound && (
-                          <td className="p-3 text-center">
-                            <span
-                              className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                submitted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
-                              }`}
-                            >
-                              {submitted ? "✓ 제출" : "대기"}
-                            </span>
-                          </td>
+                        {isEditing ? (
+                          <>
+                            <td className="p-2">
+                              <label htmlFor={`edit-school-${s.id}`} className="sr-only">
+                                학교
+                              </label>
+                              <input
+                                id={`edit-school-${s.id}`}
+                                value={editForm.school}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, school: e.target.value }))}
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <label htmlFor={`edit-studentId-${s.id}`} className="sr-only">
+                                학번
+                              </label>
+                              <input
+                                id={`edit-studentId-${s.id}`}
+                                value={editForm.studentId}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, studentId: e.target.value }))}
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs font-mono focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <label htmlFor={`edit-name-${s.id}`} className="sr-only">
+                                이름
+                              </label>
+                              <input
+                                id={`edit-name-${s.id}`}
+                                value={editForm.name}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                              />
+                            </td>
+                            {openWarmupRound && <td className="p-2" />}
+                            <td className="p-2 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(s.id)}
+                                disabled={rosterBusy}
+                                className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                              >
+                                저장
+                              </button>{" "}
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                disabled={rosterBusy}
+                                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                              >
+                                취소
+                              </button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-3 text-slate-700">{s.school}</td>
+                            <td className="p-3 font-mono font-bold text-slate-900">{s.studentId}</td>
+                            <td className="p-3 font-semibold text-slate-800">{s.name}</td>
+                            {openWarmupRound && (
+                              <td className="p-3 text-center">
+                                <span
+                                  className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                    submitted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  {submitted ? "✓ 제출" : "대기"}
+                                </span>
+                              </td>
+                            )}
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => startEditStudent(s)}
+                                disabled={rosterBusy}
+                                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                              >
+                                수정
+                              </button>{" "}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStudent(s)}
+                                disabled={rosterBusy}
+                                className="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50 cursor-pointer"
+                              >
+                                삭제
+                              </button>
+                            </td>
+                          </>
                         )}
                       </tr>
                     );
                   })}
                   {filteredRoster.length === 0 && (
                     <tr>
-                      <td colSpan={openWarmupRound ? 4 : 3} className="p-6 text-center text-slate-400">
+                      <td colSpan={openWarmupRound ? 5 : 4} className="p-6 text-center text-slate-400">
                         검색 결과가 없습니다.
                       </td>
                     </tr>

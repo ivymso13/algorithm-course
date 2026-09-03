@@ -1,7 +1,8 @@
-import { getAssignment, studentKeyOf } from "@/lib/assignments";
+import { studentKeyOf } from "@/lib/assignments";
 import { buildSessionCookie } from "@/lib/session";
 import { jsonWithCookie } from "@/lib/http";
 import { createSession, findOrCreateStudent, getCourseByCode, writePhaseSnapshot } from "@/lib/store";
+import { getAssignment } from "@/lib/roster";
 import {
   ValidationError,
   validateConsent,
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   const studentKey = studentKeyOf(studentId, name);
-  const assignment = getAssignment(studentKey);
+  const assignment = await getAssignment(course.id, studentKey);
   if (!assignment) {
     return Response.json(
       { error: "학번+이름이 배정 목록에 없습니다. 교사에게 문의하세요." },
@@ -54,6 +55,6 @@ export async function POST(request: Request) {
     studentKey,
   });
 
-  const snapshot = await writePhaseSnapshot(studentKey);
+  const snapshot = await writePhaseSnapshot(studentKey, course.id);
   return jsonWithCookie({ studentKey, assignment, ...snapshot }, buildSessionCookie(token));
 }
