@@ -150,6 +150,11 @@ export default function TeacherPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setAuthed(false);
+      try {
+        sessionStorage.removeItem("algo_teacher_pw");
+      } catch {
+        // ignore storage error
+      }
     } finally {
       setLoading(false);
     }
@@ -365,13 +370,13 @@ export default function TeacherPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navbar />
-        <main className="mx-auto flex w-full max-w-6xl flex-1 items-start px-4 py-8 sm:px-6 sm:py-12">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 space-y-5">
-            <div className="space-y-2">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-xl text-white shadow-xs">
+        <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-16">
+          <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-6">
+            <div className="text-center space-y-2">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xs">
                 🔒
               </div>
-              <h1 className="pt-1 text-lg font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-slate-900">
                 교사용 관리 대시보드 로그인
               </h1>
               <p className="text-xs text-slate-500">
