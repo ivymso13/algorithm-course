@@ -136,14 +136,14 @@ export default function ExecutePage() {
     };
   }, [loggedIn, hasSubmissionId, submissionId, loadSubmissionData]);
 
-  async function handleLogin(courseCode: string, school: string, studentId: string) {
+  async function handleLogin(school: string, studentId: string) {
     setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/student/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseCode, school, studentId, consent: true }),
+        body: JSON.stringify({ school, studentId, consent: true }),
       });
       const data = (await res.json()) as { studentKey?: string; error?: string };
       if (!res.ok || !data.studentKey) throw new Error(data.error ?? "로그인에 실패했습니다.");
@@ -227,7 +227,7 @@ export default function ExecutePage() {
         <main className="mx-auto flex flex-1 w-full items-center justify-center px-4 py-8 sm:py-12">
           <StudentLoginCard
             title="알고리즘 체험"
-            subtitle="수업 코드와 학교, 학번을 입력해 시작하세요."
+            subtitle="학교와 학번을 입력해 시작하세요."
             stepNumber="2단계"
             onLogin={handleLogin}
             loading={loading}

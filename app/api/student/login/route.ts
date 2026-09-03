@@ -1,22 +1,19 @@
 import { buildSessionCookie } from "@/lib/session";
 import { jsonWithCookie } from "@/lib/http";
-import { createSession, findOrCreateStudent, getCourseByCode, writePhaseSnapshot } from "@/lib/store";
+import { createSession, findOrCreateStudent, getOrCreateDefaultCourse, writePhaseSnapshot } from "@/lib/store";
 import { getAssignmentBySchoolAndStudentId } from "@/lib/roster";
-import { ValidationError, validateConsent, validateCourseCode, validateSchool, validateStudentId } from "@/lib/validation";
+import { ValidationError, validateConsent, validateSchool, validateStudentId } from "@/lib/validation";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    courseCode?: string;
     school?: string;
     studentId?: string;
     consent?: boolean;
   };
 
-  let courseCode: string;
   let school: string;
   let studentId: string;
   try {
-    courseCode = validateCourseCode(body.courseCode);
     school = validateSchool(body.school);
     studentId = validateStudentId(body.studentId);
     validateConsent(body.consent);
@@ -27,10 +24,9 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  const course = await getCourseByCode(courseCode);
-  if (!course) {
-    return Response.json({ error: "수업 코드가 올바르지 않습니다. 교사에게 문의하세요." }, { status: 404 });
-  }
+  // The site runs a single course — the client never selects or supplies
+  // one, so it can't be pointed at a course it doesn't belong to.
+  const course = await getOrCreateDefaultCourse();
 
   // School + student ID is the login identifier — never the client-supplied
   // name (there isn't one). The real name/studentKey always come from the

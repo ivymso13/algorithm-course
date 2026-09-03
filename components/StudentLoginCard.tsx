@@ -6,12 +6,11 @@ interface StudentLoginCardProps {
   title: string;
   subtitle: string;
   stepNumber: "1단계" | "2단계";
-  onLogin: (courseCode: string, school: string, studentId: string) => Promise<void>;
+  onLogin: (school: string, studentId: string) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
 
-const COURSE_CODE_REGEX = /^[A-Za-z0-9-]{4,32}$/;
 const SCHOOL_REGEX = /^[A-Za-zㄱ-ㆎ가-힣0-9·\s-]{1,40}$/;
 const STUDENT_ID_REGEX = /^[A-Za-z0-9]{1,20}$/;
 
@@ -23,14 +22,12 @@ export function StudentLoginCard({
   loading,
   error,
 }: StudentLoginCardProps) {
-  const [courseCode, setCourseCode] = useState("");
   const [school, setSchool] = useState("");
   const [studentId, setStudentId] = useState("");
   const [consent, setConsent] = useState(false);
 
   // Field validation errors
   const [fieldErrors, setFieldErrors] = useState<{
-    courseCode?: string;
     school?: string;
     studentId?: string;
     consent?: string;
@@ -38,25 +35,17 @@ export function StudentLoginCard({
 
   // Touched state for blur validation
   const [touched, setTouched] = useState<{
-    courseCode?: boolean;
     school?: boolean;
     studentId?: boolean;
     consent?: boolean;
   }>({});
 
-  const courseCodeInputRef = useRef<HTMLInputElement>(null);
   const schoolInputRef = useRef<HTMLInputElement>(null);
   const studentIdInputRef = useRef<HTMLInputElement>(null);
   const consentInputRef = useRef<HTMLInputElement>(null);
 
-  function validateField(field: "courseCode" | "school" | "studentId" | "consent", value: unknown): string | undefined {
-    if (field === "courseCode") {
-      const val = typeof value === "string" ? value.trim() : "";
-      if (!val) return "수업 코드를 입력해주세요.";
-      if (!COURSE_CODE_REGEX.test(val)) {
-        return "수업 코드는 4~32자 영문, 숫자, 하이픈(-)만 사용할 수 있습니다.";
-      }
-    } else if (field === "school") {
+  function validateField(field: "school" | "studentId" | "consent", value: unknown): string | undefined {
+    if (field === "school") {
       const val = typeof value === "string" ? value.trim() : "";
       if (!val) return "학교를 입력해주세요.";
       if (!SCHOOL_REGEX.test(val)) {
@@ -76,18 +65,11 @@ export function StudentLoginCard({
     return undefined;
   }
 
-  function handleBlur(field: "courseCode" | "school" | "studentId") {
+  function handleBlur(field: "school" | "studentId") {
     setTouched((prev) => ({ ...prev, [field]: true }));
-    const val = field === "courseCode" ? courseCode : field === "school" ? school : studentId;
+    const val = field === "school" ? school : studentId;
     const errorMsg = validateField(field, val);
     setFieldErrors((prev) => ({ ...prev, [field]: errorMsg }));
-  }
-
-  function handleCourseCodeChange(val: string) {
-    setCourseCode(val);
-    if (touched.courseCode) {
-      setFieldErrors((prev) => ({ ...prev, courseCode: validateField("courseCode", val) }));
-    }
   }
 
   function handleSchoolChange(val: string) {
@@ -114,20 +96,17 @@ export function StudentLoginCard({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const codeErr = validateField("courseCode", courseCode);
     const schoolErr = validateField("school", school);
     const sIdErr = validateField("studentId", studentId);
     const consentErr = validateField("consent", consent);
 
     const newErrors = {
-      courseCode: codeErr,
       school: schoolErr,
       studentId: sIdErr,
       consent: consentErr,
     };
 
     setTouched({
-      courseCode: true,
       school: true,
       studentId: true,
       consent: true,
@@ -135,10 +114,6 @@ export function StudentLoginCard({
     setFieldErrors(newErrors);
 
     // Focus the first invalid input for keyboard and screen reader accessibility
-    if (codeErr) {
-      courseCodeInputRef.current?.focus();
-      return;
-    }
     if (schoolErr) {
       schoolInputRef.current?.focus();
       return;
@@ -152,7 +127,7 @@ export function StudentLoginCard({
       return;
     }
 
-    await onLogin(courseCode.trim(), school.trim(), studentId.trim());
+    await onLogin(school.trim(), studentId.trim());
   }
 
   const isStep1 = stepNumber === "1단계";
@@ -192,11 +167,6 @@ export function StudentLoginCard({
                 <span>입력 정보를 다시 확인해주세요</span>
               </div>
               <p className="leading-relaxed pl-6 font-medium">{error}</p>
-              {error.includes("수업 코드") && (
-                <p className="text-[11px] text-rose-700 pl-6">
-                  👉 선생님께서 칠판이나 화면에 안내해주신 최신 수업 코드를 확인하세요.
-                </p>
-              )}
               {error.includes("학교와 학번") && (
                 <p className="text-[11px] text-rose-700 pl-6">
                   👉 출석부 명단에 등록된 학교와 학번인지 확인하고, 오타나 띄어쓰기를 점검하세요.
@@ -209,54 +179,6 @@ export function StudentLoginCard({
               )}
             </div>
           )}
-
-          {/* Course Code Field */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="course-code" className="text-xs font-semibold text-slate-700">
-                수업 코드 <span className="text-rose-500" aria-hidden="true">*</span>
-              </label>
-              <span id="course-code-hint" className="text-[11px] text-slate-400">
-                영문·숫자·하이픈 4~32자
-              </span>
-            </div>
-            <input
-              ref={courseCodeInputRef}
-              id="course-code"
-              type="text"
-              required
-              autoComplete="off"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-required="true"
-              aria-invalid={Boolean(fieldErrors.courseCode)}
-              aria-describedby={
-                fieldErrors.courseCode
-                  ? "course-code-error course-code-hint"
-                  : "course-code-hint"
-              }
-              className={`w-full min-h-[44px] rounded-lg border bg-white px-3 py-2.5 text-base sm:text-sm text-slate-900 shadow-2xs transition focus:ring-2 focus:outline-hidden ${
-                fieldErrors.courseCode
-                  ? "border-rose-400 bg-rose-50/30 focus:border-rose-500 focus:ring-rose-200"
-                  : "border-slate-300 focus:border-blue-500 focus:ring-blue-200"
-              }`}
-              placeholder="예: ALGO-2024"
-              value={courseCode}
-              onChange={(e) => handleCourseCodeChange(e.target.value)}
-              onBlur={() => handleBlur("courseCode")}
-            />
-            {fieldErrors.courseCode && (
-              <p
-                id="course-code-error"
-                role="alert"
-                className="mt-1 text-[11px] font-semibold text-rose-600 flex items-center gap-1"
-              >
-                <span aria-hidden="true">⚠️</span>
-                <span>{fieldErrors.courseCode}</span>
-              </p>
-            )}
-          </div>
 
           {/* School & Student ID Fields (Responsive 1-col on mobile, 2-col on sm+) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -373,7 +295,7 @@ export function StudentLoginCard({
             <ul id="privacy-notice-details" className="space-y-1 text-[11px] leading-relaxed text-slate-600 list-none p-0 m-0">
               <li className="flex items-start gap-1.5">
                 <strong className="text-slate-800 shrink-0">· 수집 항목:</strong>
-                <span>학교, 학번, 이름(사전 등록된 명단 정보), 수업 코드, 작성 알고리즘, 실행 기록 및 동료 평가 응답</span>
+                <span>학교, 학번, 이름(사전 등록된 명단 정보), 작성 알고리즘, 실행 기록 및 동료 평가 응답</span>
               </li>
               <li className="flex items-start gap-1.5">
                 <strong className="text-slate-800 shrink-0">· 수집 목적:</strong>
