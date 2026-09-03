@@ -3,11 +3,15 @@ import { getDb } from "@/db";
 import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
+import {
+  assertWarmupRoundDeletable,
+  assertWarmupRoundExists,
+  WarmupNotFoundError,
+  WarmupOwnershipError,
+  WarmupStateError,
+} from "@/lib/warmupRoundGuards";
 
-/** A round isn't in the state an action requires (e.g. voting on a closed round). */
-export class WarmupStateError extends Error {}
-/** A caller tried to act on their own submission (self-vote/self-experience) or someone else's data. */
-export class WarmupOwnershipError extends Error {}
+export { WarmupNotFoundError, WarmupOwnershipError, WarmupStateError };
 
 // ---------------------------------------------------------------------------
 // Teacher: round lifecycle
@@ -78,8 +82,7 @@ export async function listWarmupRoundsForCourse(courseId: number) {
 }
 
 export async function publishWarmupRound(id: number, courseId: number) {
-  const round = await getWarmupRound(id);
-  if (!round || round.courseId !== courseId) throw new Error("라운드를 찾을 수 없습니다");
+  const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
   if (round.status === "closed") throw new WarmupStateError("종료된 라운드는 다시 공개할 수 없습니다");
   if (round.status === "open") return round;
 
@@ -98,8 +101,7 @@ export async function publishWarmupRound(id: number, courseId: number) {
 }
 
 export async function closeWarmupRound(id: number, courseId: number) {
-  const round = await getWarmupRound(id);
-  if (!round || round.courseId !== courseId) throw new Error("라운드를 찾을 수 없습니다");
+  const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
   if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드가 아닙니다");
 
   const db = await getDb();
@@ -109,6 +111,25 @@ export async function closeWarmupRound(id: number, courseId: number) {
     .where(eq(warmupRounds.id, id))
     .returning();
   return updated;
+}
+
+/**
+ * Deletes a draft/closed round and every row that hangs off it (votes,
+ * experiences, submissions). Irreversible, so all four deletes run as one D1
+ * batch — atomic (all-or-nothing), instead of risking a partial delete if a
+ * later statement fails.
+ */
+export async function deleteWarmupRound(id: number, courseId: number) {
+  const round = await getWarmupRound(id);
+  assertWarmupRoundDeletable(round, courseId);
+
+  const db = await getDb();
+  await db.batch([
+    db.delete(warmupVotes).where(eq(warmupVotes.roundId, id)),
+    db.delete(warmupExperiences).where(eq(warmupExperiences.roundId, id)),
+    db.delete(warmupSubmissions).where(eq(warmupSubmissions.roundId, id)),
+    db.delete(warmupRounds).where(eq(warmupRounds.id, id)),
+  ]);
 }
 
 export async function teacherWarmupRoundDetail(id: number, courseId: number) {

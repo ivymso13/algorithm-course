@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
@@ -93,6 +93,11 @@ export default function TeacherPage() {
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
   const [warmupBusy, setWarmupBusy] = useState(false);
+  // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
+  // (used to disable buttons) only takes effect on the next render, so a very
+  // fast repeat click can still fire before React re-renders. This ref flips
+  // synchronously, closing that gap.
+  const warmupBusyRef = useRef(false);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
   const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
@@ -167,10 +172,29 @@ export default function TeacherPage() {
     }
   }, [authHeaders]);
 
-  async function handleCreateRound(problemId: string) {
+  /**
+   * Runs one warm-up round action with the busy guard held for its duration.
+   * `warmupBusyRef` closes the double-click race that `warmupBusy` state
+   * alone can't: the ref flips before any await, so a second click fired in
+   * the same tick (before React re-renders the disabled buttons) is dropped.
+   */
+  async function runWarmupAction(action: () => Promise<void>, fallbackErrorMessage: string) {
+    if (warmupBusyRef.current) return;
+    warmupBusyRef.current = true;
     setError(null);
     setWarmupBusy(true);
     try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : fallbackErrorMessage);
+    } finally {
+      warmupBusyRef.current = false;
+      setWarmupBusy(false);
+    }
+  }
+
+  async function handleCreateRound(problemId: string) {
+    await runWarmupAction(async () => {
       const res = await fetch("/api/teacher/warmup/rounds", {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -179,17 +203,11 @@ export default function TeacherPage() {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "라운드 생성에 실패했습니다.");
       await loadWarmupRounds();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "라운드 생성에 실패했습니다.");
-    } finally {
-      setWarmupBusy(false);
-    }
+    }, "라운드 생성에 실패했습니다.");
   }
 
   async function handlePublishRound(roundId: number) {
-    setError(null);
-    setWarmupBusy(true);
-    try {
+    await runWarmupAction(async () => {
       const res = await fetch("/api/teacher/warmup/publish", {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -198,18 +216,12 @@ export default function TeacherPage() {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "공개에 실패했습니다.");
       await loadWarmupRounds();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "공개에 실패했습니다.");
-    } finally {
-      setWarmupBusy(false);
-    }
+    }, "공개에 실패했습니다.");
   }
 
   async function handleCloseRound(roundId: number) {
     if (!confirm("이 라운드를 종료하시겠습니까? 학생들은 더 이상 제출/투표/체험할 수 없습니다.")) return;
-    setError(null);
-    setWarmupBusy(true);
-    try {
+    await runWarmupAction(async () => {
       const res = await fetch("/api/teacher/warmup/close", {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -219,11 +231,28 @@ export default function TeacherPage() {
       if (!res.ok) throw new Error(data.error ?? "종료에 실패했습니다.");
       await loadWarmupRounds();
       if (roundDetailId === roundId) await loadRoundDetail(roundId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "종료에 실패했습니다.");
-    } finally {
-      setWarmupBusy(false);
-    }
+    }, "종료에 실패했습니다.");
+  }
+
+  async function handleDeleteRound(round: WarmupRoundSummary) {
+    const impact =
+      round.submissionCount + round.voteCount + round.experienceCount > 0
+        ? `제출 ${round.submissionCount}건, 투표 ${round.voteCount}건, 체험 ${round.experienceCount}건이 함께 삭제됩니다. `
+        : "";
+    if (!confirm(`"${round.title}" 라운드를 삭제하시겠습니까?\n${impact}이 작업은 되돌릴 수 없습니다.`)) return;
+    await runWarmupAction(async () => {
+      const res = await fetch(`/api/teacher/warmup/round?id=${round.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "삭제에 실패했습니다.");
+      setRounds((prev) => prev.filter((r) => r.id !== round.id));
+      if (roundDetailId === round.id) {
+        setRoundDetailId(null);
+        setRoundDetail(null);
+      }
+    }, "삭제에 실패했습니다.");
   }
 
   const loadRoundDetail = useCallback(
@@ -751,6 +780,15 @@ export default function TeacherPage() {
                               ⏹️ 라운드 종료
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRound(round)}
+                            disabled={warmupBusy || round.status === "open"}
+                            title={round.status === "open" ? "진행 중인 라운드는 먼저 종료해야 삭제할 수 있습니다" : "삭제하면 되돌릴 수 없습니다"}
+                            className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            🗑️ 삭제
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
