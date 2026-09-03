@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
+import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
+import type { ProblemType } from "@/lib/assignments";
 import {
   WARMUP_VOTE_ICONS,
   WARMUP_VOTE_LABELS,
@@ -16,6 +18,7 @@ type RoundInfo = {
   title: string;
   prompt: string;
   status: "draft" | "open" | "closed";
+  problemType: ProblemType | null;
 };
 
 type MySubmission = {
@@ -44,6 +47,7 @@ export default function WritePage() {
 
   const [algorithmText, setAlgorithmText] = useState("");
   const [draftRestoredNotice, setDraftRestoredNotice] = useState(false);
+  const [sandboxCopyNotice, setSandboxCopyNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
@@ -165,6 +169,28 @@ export default function WritePage() {
         // ignore
       }
     }
+  }
+
+  /**
+   * Only ever runs when the student clicks the sandbox's own "기록 복사"
+   * button (passed in as `onCopyHistory`) — never automatically. An empty
+   * draft is simply filled in; existing content is preserved unless the
+   * student explicitly confirms appending, so a practice run can never
+   * silently overwrite algorithm text already written.
+   */
+  function handleCopySandboxHistory(summary: string) {
+    const existing = algorithmText.trim();
+    if (!existing) {
+      handleAlgorithmChange(summary);
+    } else {
+      const confirmed = window.confirm(
+        "이미 작성한 알고리즘 내용이 있습니다. 실습 기록을 뒤에 추가할까요?"
+      );
+      if (!confirmed) return;
+      handleAlgorithmChange(`${algorithmText}\n\n${summary}`);
+    }
+    setSandboxCopyNotice(true);
+    window.setTimeout(() => setSandboxCopyNotice(false), 3500);
   }
 
   async function handleLogin(school: string, studentId: string) {
@@ -300,7 +326,7 @@ export default function WritePage() {
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        {/* 5-Stage Visual Workflow Tracker */}
+        {/* 6-Stage Visual Workflow Tracker */}
         <nav
           aria-label="워밍업 진행 순서"
           className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs"
@@ -312,28 +338,34 @@ export default function WritePage() {
             </div>
             <span className="text-slate-300">➔</span>
 
+            <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${round ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400"}`}>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">2</span>
+              <span>직접 실습</span>
+            </div>
+            <span className="text-slate-300">➔</span>
+
             <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-emerald-50 text-emerald-800 font-bold" : round ? "bg-blue-50 text-blue-800 font-bold ring-1 ring-blue-300" : "text-slate-400"}`}>
               <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"}`}>
-                {hasSubmitted ? "✓" : "2"}
+                {hasSubmitted ? "✓" : "3"}
               </span>
               <span>알고리즘 작성</span>
             </div>
             <span className="text-slate-300">➔</span>
 
             <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400 opacity-60"}`}>
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>3</span>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>4</span>
               <span>익명 아이디어</span>
             </div>
             <span className="text-slate-300">➔</span>
 
             <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-blue-50 text-blue-800 font-bold" : "text-slate-400 opacity-60"}`}>
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>4</span>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-blue-600 text-white" : "bg-slate-300 text-slate-700"}`}>5</span>
               <span>추천</span>
             </div>
             <span className="text-slate-300">➔</span>
 
             <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg ${hasSubmitted ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-400 opacity-60"}`}>
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-emerald-600 text-white" : "bg-slate-300 text-slate-700"}`}>5</span>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${hasSubmitted ? "bg-emerald-600 text-white" : "bg-slate-300 text-slate-700"}`}>6</span>
               <span>단계별 체험</span>
             </div>
           </div>
@@ -386,6 +418,33 @@ export default function WritePage() {
               </p>
             </section>
 
+            {/* 2. 직접 실습해보기 (Interactive Sandbox) — hidden when the round can't be
+                mapped to a sandbox (legacy round with no matching problem); writing is
+                unaffected either way. */}
+            {round.problemType && (
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider px-1">
+                  2. 직접 실습해보기
+                </span>
+                <ProblemSandboxContainer
+                  problemType={round.problemType}
+                  onCopyHistory={handleCopySandboxHistory}
+                  defaultOpen={false}
+                />
+              </div>
+            )}
+
+            {sandboxCopyNotice && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-900 shadow-2xs flex items-center gap-2"
+              >
+                <span aria-hidden="true">🧪</span>
+                <span>실습 기록이 알고리즘 초안에 반영되었습니다.</span>
+              </div>
+            )}
+
             {submitSuccess && (
               <div
                 role="status"
@@ -397,11 +456,11 @@ export default function WritePage() {
               </div>
             )}
 
-            {/* 2. 알고리즘 작성 (Algorithm Writing) */}
+            {/* 3. 알고리즘 작성 (Algorithm Writing) */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-slate-900">2. 알고리즘 작성</h2>
+                  <h2 className="text-sm font-bold text-slate-900">3. 알고리즘 작성</h2>
                   {hasSubmitted && (
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                       제출 완료 (수정 가능)
@@ -459,10 +518,10 @@ export default function WritePage() {
               </form>
             </section>
 
-            {/* 3 & 4. 익명 아이디어 & 추천 (Anonymous Ideas & Recommendations) */}
+            {/* 4 & 5. 익명 아이디어 & 추천 (Anonymous Ideas & Recommendations) */}
             {!hasSubmitted ? (
               <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-xs space-y-1">
-                <p className="text-xs font-bold text-slate-700">🔒 3·4·5단계 (익명 아이디어 · 추천 · 체험)</p>
+                <p className="text-xs font-bold text-slate-700">🔒 4·5·6단계 (익명 아이디어 · 추천 · 체험)</p>
                 <p className="text-[11px] text-slate-500">
                   내 알고리즘을 제출하면 다른 학생들의 아이디어를 확인하고 추천·체험할 수 있습니다.
                 </p>
@@ -471,7 +530,7 @@ export default function WritePage() {
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-bold text-slate-900">3. 익명 아이디어 & 4. 추천</h2>
+                    <h2 className="text-sm font-bold text-slate-900">4. 익명 아이디어 & 5. 추천</h2>
                     {board && (
                       <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
                         {board.length}개
@@ -555,7 +614,7 @@ export default function WritePage() {
                             href={`/execute?submissionId=${entry.id}`}
                             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition shrink-0"
                           >
-                            5. 체험하기 ➔
+                            6. 체험하기 ➔
                           </Link>
                         </div>
                       </article>

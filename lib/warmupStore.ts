@@ -17,11 +17,11 @@ export { WarmupNotFoundError, WarmupOwnershipError, WarmupStateError };
 // Teacher: round lifecycle
 // ---------------------------------------------------------------------------
 
-export async function createWarmupRound(courseId: number, title: string, prompt: string) {
+export async function createWarmupRound(courseId: number, title: string, prompt: string, problemId: string | null) {
   const db = await getDb();
   const [row] = await db
     .insert(warmupRounds)
-    .values({ courseId, title, prompt, status: "draft", createdAt: new Date().toISOString() })
+    .values({ courseId, title, prompt, problemId, status: "draft", createdAt: new Date().toISOString() })
     .returning();
   return row;
 }

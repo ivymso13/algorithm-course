@@ -215,7 +215,18 @@ export const attempts = sqliteTable(
 // a time (§courses no longer needs a stage2 gate for this flow).
 // ---------------------------------------------------------------------------
 
-/** One teacher-authored warm-up problem. `status`: draft -> open -> closed. */
+/**
+ * One teacher-authored warm-up problem. `status`: draft -> open -> closed.
+ *
+ * `problemId` is the source `WARMUP_PROBLEMS` entry (see
+ * lib/warmupProblems.ts) this round was created from — nullable because
+ * rounds created before this column existed have none. It's how the student
+ * write page safely knows which interactive sandbox (if any) matches the
+ * currently open round; a null value falls back to matching the round's
+ * title/prompt against the problem bank (see
+ * `resolveWarmupSandboxProblemType`), and if that also fails the sandbox is
+ * simply hidden — writing an algorithm never depends on this column.
+ */
 export const warmupRounds = sqliteTable(
   "warmup_rounds",
   {
@@ -223,6 +234,7 @@ export const warmupRounds = sqliteTable(
     courseId: integer("course_id").notNull(),
     title: text("title").notNull(),
     prompt: text("prompt").notNull(),
+    problemId: text("problem_id"),
     status: text("status").notNull().default("draft"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     publishedAt: text("published_at"),

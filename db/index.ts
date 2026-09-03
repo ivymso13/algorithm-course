@@ -109,6 +109,7 @@ const SCHEMA_STATEMENTS = [
     course_id integer NOT NULL,
     title text NOT NULL,
     prompt text NOT NULL,
+    problem_id text,
     status text DEFAULT 'draft' NOT NULL,
     created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
     published_at text,
@@ -156,18 +157,23 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS warmup_experiences_submission_idx ON warmup_experiences (submission_id)`,
 ];
 
-// `courses` predates this column, so a database that already ran the
-// bootstrap once (or a real deployment mid-migration) has a `courses` table
-// without it — CREATE TABLE IF NOT EXISTS above only helps brand new
-// databases. Added as its own statement, outside the batch, so a "duplicate
-// column" failure here (the expected, idempotent case) can't abort the rest
-// of ensureSchema's batch.
-async function ensureRosterSeededAtColumn(d1: D1Database): Promise<void> {
+// Some columns were added to tables that predate them, so a database that
+// already ran the bootstrap once (or a real deployment mid-migration) may
+// have that table without the new column — CREATE TABLE IF NOT EXISTS above
+// only helps brand new databases. Each is run as its own statement, outside
+// the batch, so a "duplicate column" failure (the expected, idempotent case
+// once the column exists) can't abort the rest of ensureSchema's batch.
+async function ensureColumn(d1: D1Database, table: string, column: string, sqlType: string): Promise<void> {
   try {
-    await d1.prepare(`ALTER TABLE courses ADD COLUMN roster_seeded_at text`).run();
+    await d1.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqlType}`).run();
   } catch (error) {
     if (!(error instanceof Error) || !/duplicate column/i.test(error.message)) throw error;
   }
+}
+
+async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
+  await ensureColumn(d1, "courses", "roster_seeded_at", "text");
+  await ensureColumn(d1, "warmup_rounds", "problem_id", "text");
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -176,7 +182,7 @@ function ensureSchema(d1: D1Database): Promise<void> {
   if (!schemaReady) {
     schemaReady = d1
       .batch(SCHEMA_STATEMENTS.map((sql) => d1.prepare(sql)))
-      .then(() => ensureRosterSeededAtColumn(d1))
+      .then(() => ensureRetrofittedColumns(d1))
       .catch((error) => {
         schemaReady = null; // allow a retry on the next call instead of caching a failure
         throw error;

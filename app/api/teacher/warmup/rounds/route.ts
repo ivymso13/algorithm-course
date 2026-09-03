@@ -19,6 +19,6 @@ export async function POST(request: Request) {
   if (!problem) return Response.json({ error: "등록된 문제를 선택하세요" }, { status: 400 });
 
   const course = await getOrCreateDefaultCourse();
-  const round = await createWarmupRound(course.id, problem.title, problem.prompt);
+  const round = await createWarmupRound(course.id, problem.title, problem.prompt, problem.id);
   return Response.json({ round });
 }

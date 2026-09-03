@@ -1,3 +1,5 @@
+import type { ProblemType } from "@/lib/assignments";
+
 /** Source-controlled warm-up problem bank. Add one object to publish a new option. */
 export const WARMUP_PROBLEMS = [
   {
@@ -27,4 +29,33 @@ export type WarmupProblem = (typeof WARMUP_PROBLEMS)[number];
 export function getWarmupProblem(id: unknown): WarmupProblem | undefined {
   if (typeof id !== "string") return undefined;
   return WARMUP_PROBLEMS.find((problem) => problem.id === id);
+}
+
+/** Which interactive sandbox (see components/write/sandbox) matches each source problem. */
+export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemType> = {
+  "fake-coin": "12coins",
+  "hidden-card": "card",
+  josephus: "josephus",
+  "pancake-sort": "pancake",
+};
+
+/**
+ * Which sandbox (if any) matches a warm-up round, for the student write
+ * page's "직접 실습해보기" section. Prefers the round's stored `problemId`;
+ * rounds created before that column existed have none, so this falls back
+ * to matching the round's title/prompt against the problem bank (rounds are
+ * only ever created by copying a bank entry's title/prompt verbatim, so an
+ * exact match reliably recovers the source problem for old rows). Returns
+ * null — hide the sandbox, writing is unaffected — when neither resolves.
+ */
+export function resolveWarmupSandboxProblemType(round: {
+  problemId: string | null;
+  title: string;
+  prompt: string;
+}): ProblemType | null {
+  const byId = getWarmupProblem(round.problemId);
+  if (byId) return WARMUP_PROBLEM_SANDBOX_TYPES[byId.id];
+
+  const byContent = WARMUP_PROBLEMS.find((p) => p.title === round.title || p.prompt === round.prompt);
+  return byContent ? WARMUP_PROBLEM_SANDBOX_TYPES[byContent.id] : null;
 }

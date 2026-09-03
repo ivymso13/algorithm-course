@@ -7,7 +7,12 @@ import {
   WARMUP_VOTE_TYPES,
 } from "../lib/warmupMeta.ts";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "../lib/warmupSteps.ts";
-import { getWarmupProblem, WARMUP_PROBLEMS } from "../lib/warmupProblems.ts";
+import {
+  getWarmupProblem,
+  resolveWarmupSandboxProblemType,
+  WARMUP_PROBLEM_SANDBOX_TYPES,
+  WARMUP_PROBLEMS,
+} from "../lib/warmupProblems.ts";
 import {
   assertWarmupRoundDeletable,
   assertWarmupRoundExists,
@@ -24,6 +29,42 @@ test("source problem bank exposes unique, complete problems", () => {
     assert.equal(getWarmupProblem(problem.id), problem);
   }
   assert.equal(getWarmupProblem("unknown"), undefined);
+});
+
+test("WARMUP_PROBLEM_SANDBOX_TYPES: every problem bank entry maps to exactly the intended sandbox", () => {
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["fake-coin"], "12coins");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["hidden-card"], "card");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["josephus"], "josephus");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["pancake-sort"], "pancake");
+  // Every bank entry must have a mapping — a future problem added without
+  // one would otherwise blow up resolveWarmupSandboxProblemType silently.
+  for (const problem of WARMUP_PROBLEMS) {
+    assert.ok(WARMUP_PROBLEM_SANDBOX_TYPES[problem.id], `missing sandbox mapping for ${problem.id}`);
+  }
+});
+
+test("resolveWarmupSandboxProblemType: resolves by problemId when present", () => {
+  const round = { problemId: "josephus", title: "다른 제목", prompt: "다른 설명" };
+  assert.equal(resolveWarmupSandboxProblemType(round), "josephus");
+});
+
+test("resolveWarmupSandboxProblemType: falls back to matching title/prompt when problemId is null (legacy rounds)", () => {
+  const bank = WARMUP_PROBLEMS.find((p) => p.id === "pancake-sort")!;
+  const byTitle = { problemId: null, title: bank.title, prompt: "수정된 설명" };
+  const byPrompt = { problemId: null, title: "수정된 제목", prompt: bank.prompt };
+  assert.equal(resolveWarmupSandboxProblemType(byTitle), "pancake");
+  assert.equal(resolveWarmupSandboxProblemType(byPrompt), "pancake");
+});
+
+test("resolveWarmupSandboxProblemType: returns null when nothing matches — sandbox hidden, writing unaffected", () => {
+  const round = { problemId: null, title: "완전히 새로운 자유 문제", prompt: "교사가 직접 지어낸 설명" };
+  assert.equal(resolveWarmupSandboxProblemType(round), null);
+});
+
+test("resolveWarmupSandboxProblemType: an unknown problemId still falls back to title/prompt matching", () => {
+  const bank = WARMUP_PROBLEMS.find((p) => p.id === "hidden-card")!;
+  const round = { problemId: "deleted-from-bank", title: bank.title, prompt: bank.prompt };
+  assert.equal(resolveWarmupSandboxProblemType(round), "card");
 });
 
 test("WARMUP_VOTE_TYPES: exactly the 4 spec'd recommendation types, each with a short label and icon", () => {

@@ -14,14 +14,19 @@ interface ProblemSandboxContainerProps {
   /** Larger text/buttons for projecting to a whole classroom, and skips the
    * write-page-oriented header chrome (the caller supplies its own). */
   presentationMode?: boolean;
+  /** Initial collapsed/expanded state (non-presentation mode only). Defaults
+   * to open; the write page starts it collapsed so the extra practice step
+   * doesn't push the algorithm textarea too far down on mobile. */
+  defaultOpen?: boolean;
 }
 
 export function ProblemSandboxContainer({
   problemType,
   onCopyHistory,
   presentationMode = false,
+  defaultOpen = true,
 }: ProblemSandboxContainerProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   const label = PROBLEM_LABELS[problemType];
   const icon = PROBLEM_ICONS[problemType];
