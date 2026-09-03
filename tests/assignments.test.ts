@@ -17,6 +17,18 @@ test("roster: students are ordered by school and then student ID", () => {
   assert.deepEqual(keys, [...keys].sort((a, b) => a.localeCompare(b, "ko")));
 });
 
+test("assignments: registered student count matches ROSTER exactly, with school carried through", () => {
+  // Guards the teacher dashboard/roster's "등록 학생 수" against silent
+  // undercounting: if two roster rows ever collided on studentKey, the map
+  // would silently drop one and this would catch it.
+  assert.equal(ASSIGNMENTS.size, ROSTER.length);
+  for (const student of ROSTER) {
+    const key = studentKeyOf(student.studentId, student.name);
+    const assignment = ASSIGNMENTS.get(key);
+    assert.equal(assignment?.school, student.school, `school missing/mismatched for ${key}`);
+  }
+});
+
 test("assignments: every student's execute pair is exactly the complement of their write pair", () => {
   for (const assignment of ASSIGNMENTS.values()) {
     const combined = new Set([...assignment.write, ...assignment.execute]);

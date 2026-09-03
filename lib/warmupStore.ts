@@ -42,6 +42,26 @@ export async function getOpenWarmupRound(courseId: number) {
   return row ?? null;
 }
 
+/**
+ * The currently open round (if any) plus which students have already
+ * submitted to it — the roster tab's only need from the warm-up domain, kept
+ * separate from `teacherWarmupRoundDetail` (which also loads votes/
+ * experiences/full algorithm text, unnecessary for a submitted/not-submitted
+ * column).
+ */
+export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
+  const round = await getOpenWarmupRound(courseId);
+  if (!round) return null;
+
+  const db = await getDb();
+  const rows = await db
+    .select({ studentKey: warmupSubmissions.studentKey })
+    .from(warmupSubmissions)
+    .where(eq(warmupSubmissions.roundId, round.id));
+
+  return { id: round.id, title: round.title, submittedStudentKeys: rows.map((r) => r.studentKey) };
+}
+
 function countByRound<T extends { roundId: number }>(rows: T[]): Map<number, number> {
   const map = new Map<number, number>();
   for (const row of rows) map.set(row.roundId, (map.get(row.roundId) ?? 0) + 1);

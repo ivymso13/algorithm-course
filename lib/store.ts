@@ -578,6 +578,7 @@ export async function teacherDashboard() {
       studentKey: assignment.studentKey,
       studentId: assignment.studentId,
       name: assignment.name,
+      school: assignment.school,
       write,
       execute,
       writeComplete: write.every((w) => w.submitted),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
@@ -38,9 +38,20 @@ type DashboardStudent = {
   studentKey: string;
   studentId: string;
   name: string;
+  school: string;
   write: { problemType: ProblemType; submitted: boolean; submittedAt: string | null }[];
   execute: { problemType: ProblemType; executed: boolean; isCorrect: boolean | null; status: string | null }[];
   writeComplete: boolean;
+};
+
+type OpenWarmupRoundInfo = { id: number; title: string; submittedStudentKeys: string[] } | null;
+
+type DashboardResponse = {
+  students?: DashboardStudent[];
+  stage2Active?: boolean;
+  openWarmupRound?: OpenWarmupRoundInfo;
+  course?: { code: string; name: string; retentionDays: number };
+  error?: string;
 };
 
 type ReviewAttempt = {
@@ -84,10 +95,13 @@ export default function TeacherPage() {
   const [password, setPassword] = useState("");
 
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<"warmup" | "dashboard" | "review" | "practice">("warmup");
+  const [tab, setTab] = useState<"warmup" | "roster" | "dashboard" | "review" | "practice">("warmup");
   const [stage2Active, setStage2Active] = useState(false);
   const [course, setCourse] = useState<{ code: string; name: string; retentionDays: number } | null>(null);
   const [students, setStudents] = useState<DashboardStudent[]>([]);
+  const [openWarmupRound, setOpenWarmupRound] = useState<OpenWarmupRoundInfo>(null);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterFilter, setRosterFilter] = useState<"all" | "submitted" | "not-submitted">("all");
   const [rounds, setRounds] = useState<WarmupRoundSummary[]>([]);
   const [warmupProblems, setWarmupProblems] = useState<WarmupProblem[]>([]);
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
@@ -132,15 +146,11 @@ export default function TeacherPage() {
     setError(null);
     try {
       const res = await fetch("/api/teacher/dashboard", { headers: authHeaders(pw) });
-      const data = (await res.json()) as {
-        students?: DashboardStudent[];
-        stage2Active?: boolean;
-        course?: { code: string; name: string; retentionDays: number };
-        error?: string;
-      };
+      const data = (await res.json()) as DashboardResponse;
       if (!res.ok) throw new Error(data.error ?? "불러오기에 실패했습니다.");
       setStudents(data.students ?? []);
       setStage2Active(Boolean(data.stage2Active));
+      setOpenWarmupRound(data.openWarmupRound ?? null);
       setCourse(data.course ?? null);
       setAuthed(true);
       loadWarmupRounds();
@@ -255,6 +265,24 @@ export default function TeacherPage() {
     }, "삭제에 실패했습니다.");
   }
 
+  const filteredRoster = useMemo(() => {
+    const search = rosterSearch.trim();
+    const submittedKeys = new Set(openWarmupRound?.submittedStudentKeys ?? []);
+    return students
+      .filter((s) => !search || s.school.includes(search) || s.studentId.includes(search) || s.name.includes(search))
+      .filter((s) => {
+        if (!openWarmupRound || rosterFilter === "all") return true;
+        const submitted = submittedKeys.has(s.studentKey);
+        return rosterFilter === "submitted" ? submitted : !submitted;
+      })
+      .sort(
+        (a, b) =>
+          a.school.localeCompare(b.school, "ko") ||
+          a.studentId.localeCompare(b.studentId) ||
+          a.name.localeCompare(b.name, "ko")
+      );
+  }, [students, rosterSearch, rosterFilter, openWarmupRound]);
+
   const loadRoundDetail = useCallback(
     async (roundId: number) => {
       setRoundDetailId(roundId);
@@ -275,24 +303,18 @@ export default function TeacherPage() {
     if (password && !authed) {
       fetch("/api/teacher/dashboard", { headers: { "x-teacher-password": password } })
         .then((res) => res.json())
-        .then(
-          (data: {
-            students?: DashboardStudent[];
-            stage2Active?: boolean;
-            course?: { code: string; name: string; retentionDays: number };
-            error?: string;
-          }) => {
-            if (!ignore) {
-              if (!data.error) {
-                setStudents(data.students ?? []);
-                setStage2Active(Boolean(data.stage2Active));
-                setCourse(data.course ?? null);
-                setAuthed(true);
-                loadWarmupRounds();
-              }
+        .then((data: DashboardResponse) => {
+          if (!ignore) {
+            if (!data.error) {
+              setStudents(data.students ?? []);
+              setStage2Active(Boolean(data.stage2Active));
+              setOpenWarmupRound(data.openWarmupRound ?? null);
+              setCourse(data.course ?? null);
+              setAuthed(true);
+              loadWarmupRounds();
             }
           }
-        )
+        })
         .catch(() => {
           // ignore auto-login failure on mount
         });
@@ -302,6 +324,19 @@ export default function TeacherPage() {
     };
   }, [password, authed, loadWarmupRounds]);
 
+  /** Refreshes whichever tab's data is currently on screen — backs both the manual and the auto-refresh button. */
+  async function refreshActiveTab() {
+    if (tab === "warmup") {
+      await loadWarmupRounds();
+      if (roundDetailId) await loadRoundDetail(roundDetailId);
+    } else if (tab === "roster" || tab === "dashboard") {
+      await loadDashboard();
+    } else if (tab === "review") {
+      await loadReview();
+    }
+    // "practice" has no server data to refresh.
+  }
+
   // Auto-refresh interval
   useEffect(() => {
     if (!authed || !autoRefresh) return;
@@ -309,9 +344,9 @@ export default function TeacherPage() {
       if (tab === "warmup") {
         loadWarmupRounds();
         if (roundDetailId) loadRoundDetail(roundDetailId);
-      } else if (tab === "dashboard") {
+      } else if (tab === "roster" || tab === "dashboard") {
         loadDashboard();
-      } else {
+      } else if (tab === "review") {
         loadReview();
       }
     }, 4000);
@@ -500,6 +535,15 @@ export default function TeacherPage() {
 
             <button
               type="button"
+              onClick={refreshActiveTab}
+              disabled={loading || warmupBusy}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition cursor-pointer"
+            >
+              🔄 새로고침
+            </button>
+
+            <button
+              type="button"
               onClick={exportExcel}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1"
             >
@@ -568,6 +612,43 @@ export default function TeacherPage() {
               </span>
             </div>
           </section>
+        ) : tab === "roster" ? (
+          <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                등록 학생 수
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-slate-900">{totalStudents}명</span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                진행 중인 라운드
+              </span>
+              <span className="text-sm sm:text-base font-bold text-blue-600 block truncate">
+                {openWarmupRound ? openWarmupRound.title : "없음"}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                제출 완료
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-600">
+                {openWarmupRound ? openWarmupRound.submittedStudentKeys.length : "-"}
+                {openWarmupRound && <span className="text-xs text-slate-400 font-medium"> / {totalStudents}명</span>}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                미제출
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-amber-600">
+                {openWarmupRound ? totalStudents - openWarmupRound.submittedStudentKeys.length : "-"}
+              </span>
+            </div>
+          </section>
         ) : (
           <section className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -630,63 +711,82 @@ export default function TeacherPage() {
           </section>
         )}
 
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-          <button
-            type="button"
-            onClick={() => {
-              setTab("warmup");
-              loadWarmupRounds();
-            }}
-            className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
-              tab === "warmup"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            🔥 워밍업 문제 관리 (기본)
-          </button>
+        {/* Navigation Tabs: primary (round management, roster) up top, legacy features below */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("warmup");
+                loadWarmupRounds();
+              }}
+              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+                tab === "warmup"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              🔥 문제·라운드 관리
+            </button>
 
-          <span className="text-slate-300 hidden sm:inline">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("roster");
+                loadDashboard();
+              }}
+              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
+                tab === "roster"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              👥 학생 명단
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setTab("dashboard");
-              loadDashboard();
-            }}
-            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-              tab === "dashboard"
-                ? "bg-slate-700 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            (이전) 4문제 현황
-          </button>
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">이전 기능</span>
 
-          <button
-            type="button"
-            onClick={loadReview}
-            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-              tab === "review"
-                ? "bg-slate-700 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            (이전) 토론 화면
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("dashboard");
+                loadDashboard();
+              }}
+              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                tab === "dashboard"
+                  ? "bg-slate-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              4문제 현황
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setTab("practice")}
-            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-              tab === "practice"
-                ? "bg-slate-700 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            (이전) 문제별 풀어보기
-          </button>
+            <button
+              type="button"
+              onClick={loadReview}
+              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                tab === "review"
+                  ? "bg-slate-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              토론 화면
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTab("practice")}
+              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                tab === "practice"
+                  ? "bg-slate-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              문제별 풀어보기
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -865,6 +965,101 @@ export default function TeacherPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* TAB: Student roster */}
+        {tab === "roster" && (
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-slate-900">학생 명단 ({students.length}명)</h2>
+                {openWarmupRound ? (
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-bold">
+                    진행 중: {openWarmupRound.title}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold">
+                    진행 중인 라운드 없음
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="roster-search" className="sr-only">
+                  학교·학번·이름 검색
+                </label>
+                <input
+                  id="roster-search"
+                  type="text"
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  placeholder="학교·학번·이름 검색"
+                  className="flex-1 min-w-[160px] rounded-xl border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
+                />
+                {openWarmupRound && (
+                  <div className="flex items-center gap-1.5">
+                    {(["all", "submitted", "not-submitted"] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setRosterFilter(f)}
+                        className={`rounded-lg px-3 py-1 text-xs font-semibold cursor-pointer ${
+                          rosterFilter === f
+                            ? "bg-slate-900 text-white"
+                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {f === "all" ? "전체" : f === "submitted" ? "제출" : "미제출"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="w-full min-w-[420px] text-xs">
+                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-left">
+                  <tr>
+                    <th className="p-3">학교</th>
+                    <th className="p-3 w-20">학번</th>
+                    <th className="p-3 w-24">이름</th>
+                    {openWarmupRound && <th className="p-3 w-20 text-center">제출</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredRoster.map((s) => {
+                    const submitted = openWarmupRound?.submittedStudentKeys.includes(s.studentKey) ?? false;
+                    return (
+                      <tr key={s.studentKey} className="hover:bg-slate-50/80 transition">
+                        <td className="p-3 text-slate-700">{s.school}</td>
+                        <td className="p-3 font-mono font-bold text-slate-900">{s.studentId}</td>
+                        <td className="p-3 font-semibold text-slate-800">{s.name}</td>
+                        {openWarmupRound && (
+                          <td className="p-3 text-center">
+                            <span
+                              className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                submitted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {submitted ? "✓ 제출" : "대기"}
+                            </span>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {filteredRoster.length === 0 && (
+                    <tr>
+                      <td colSpan={openWarmupRound ? 4 : 3} className="p-6 text-center text-slate-400">
+                        검색 결과가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
         )}

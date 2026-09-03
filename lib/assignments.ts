@@ -15,6 +15,7 @@ export type Roster = { school: string; studentId: string; name: string }[];
 export type Assignment = {
   studentId: string;
   name: string;
+  school: string;
   studentKey: string;
   write: [ProblemType, ProblemType];
   execute: [ProblemType, ProblemType];
@@ -68,6 +69,7 @@ function buildAssignments(roster: Roster): Map<string, Assignment> {
     map.set(studentKey, {
       studentId: student.studentId,
       name: student.name,
+      school: student.school,
       studentKey,
       write: combo[0],
       execute: combo[1],
