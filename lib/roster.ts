@@ -55,19 +55,29 @@ export async function seedRosterForCourse(courseId: number): Promise<void> {
   if (existingCount > 0) return;
 
   const now = new Date().toISOString();
-  await db.insert(rosterTable).values(
-    DEFAULT_ROSTER.map((student, index) => ({
-      courseId,
-      school: student.school,
-      studentId: student.studentId,
-      name: student.name,
-      studentKey: studentKeyOf(student.studentId, student.name),
-      sortOrder: index,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    }))
-  ).onConflictDoNothing();
+  // D1 limits the number of bound parameters in one statement. Inserting
+  // the entire roster as one multi-row INSERT exceeds that limit once each
+  // student's fields are bound, so use one statement per student inside a
+  // single atomic batch. onConflictDoNothing also makes concurrent first
+  // requests safe when two isolates try to seed at the same time.
+  await db.batch(
+    DEFAULT_ROSTER.map((student, index) =>
+      db
+        .insert(rosterTable)
+        .values({
+          courseId,
+          school: student.school,
+          studentId: student.studentId,
+          name: student.name,
+          studentKey: studentKeyOf(student.studentId, student.name),
+          sortOrder: index,
+          active: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing()
+    )
+  );
 }
 
 /**
