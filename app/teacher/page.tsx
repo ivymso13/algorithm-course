@@ -100,17 +100,6 @@ export default function TeacherPage() {
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        setPassword(sessionStorage.getItem("algo_teacher_pw") || "");
-      } catch {
-        // ignore storage errors
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   const authHeaders = useCallback((customPw?: string): HeadersInit => {
     return { "x-teacher-password": customPw || password };
   }, [password]);
@@ -141,20 +130,10 @@ export default function TeacherPage() {
       setStage2Active(Boolean(data.stage2Active));
       setCourse(data.course ?? null);
       setAuthed(true);
-      try {
-        sessionStorage.setItem("algo_teacher_pw", pw);
-      } catch {
-        // ignore storage error
-      }
       loadWarmupRounds();
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setAuthed(false);
-      try {
-        sessionStorage.removeItem("algo_teacher_pw");
-      } catch {
-        // ignore storage error
-      }
     } finally {
       setLoading(false);
     }
@@ -509,7 +488,7 @@ export default function TeacherPage() {
             <button
               type="button"
               onClick={() => {
-                sessionStorage.removeItem("algo_teacher_pw");
+                setPassword("");
                 setAuthed(false);
               }}
               className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-500 hover:text-rose-600 transition cursor-pointer"
