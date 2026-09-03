@@ -67,7 +67,7 @@ export async function seedRosterForCourse(courseId: number): Promise<void> {
       createdAt: now,
       updatedAt: now,
     }))
-  );
+  ).onConflictDoNothing();
 }
 
 /**

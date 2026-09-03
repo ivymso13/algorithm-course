@@ -92,6 +92,18 @@ type ReviewGroup = {
   }[];
 };
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const body = await response.text();
+  if (!body) {
+    throw new Error(`서버 응답이 비어 있습니다. 잠시 후 다시 시도해주세요. (${response.status})`);
+  }
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new Error(`서버 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요. (${response.status})`);
+  }
+}
+
 export default function TeacherPage() {
   const [password, setPassword] = useState("");
 
@@ -154,7 +166,7 @@ export default function TeacherPage() {
     setError(null);
     try {
       const res = await fetch("/api/teacher/dashboard", { headers: authHeaders(pw) });
-      const data = (await res.json()) as DashboardResponse;
+      const data = await readJsonResponse<DashboardResponse>(res);
       if (!res.ok) throw new Error(data.error ?? "불러오기에 실패했습니다.");
       setStudents(data.students ?? []);
       setStage2Active(Boolean(data.stage2Active));
