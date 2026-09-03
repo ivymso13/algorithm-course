@@ -1,7 +1,11 @@
 "use client";
 
+/* Native <a> links intentionally avoid a client-router navigation bug seen in
+ * some classroom browsers (see components/Navbar.tsx for the original fix):
+ * after a next/link soft navigation, the destination page's client
+ * components did not reliably hydrate, leaving buttons unresponsive. */
+
 import { useState } from "react";
-import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
@@ -95,7 +99,7 @@ export default function WriteProblemPage() {
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        {/* 4-Step Navigation */}
+        {/* 3-Step Navigation */}
         <StudentStepNav currentStep={1} hasSubmitted={hasSubmitted} />
 
         {sessionRestoredNotice && (
@@ -125,11 +129,11 @@ export default function WriteProblemPage() {
           </section>
         ) : (
           <>
-            {/* 1. 문제 확인 (Problem Details) */}
+            {/* 문제 확인 (Problem Details) */}
             <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 sm:p-5 shadow-xs space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
-                  1. 문제 확인
+                  문제 확인
                 </span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -155,11 +159,11 @@ export default function WriteProblemPage() {
                 className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-bold text-blue-900 shadow-2xs flex items-center gap-2"
               >
                 <span aria-hidden="true">🧪</span>
-                <span>실습 기록이 알고리즘 초안에 복사되었습니다. 2단계 작성 화면에서 확인하세요.</span>
+                <span>실습 기록이 알고리즘 초안에 복사되었습니다. 알고리즘 작성 화면에서 확인하세요.</span>
               </div>
             )}
 
-            {/* 2. 직접 실습 (Interactive Sandbox) */}
+            {/* 직접 실습 (Interactive Sandbox) */}
             {round.problemType ? (
               <section className="space-y-2">
                 <div className="flex items-center justify-between px-1">
@@ -189,26 +193,26 @@ export default function WriteProblemPage() {
             <div className="pt-2">
               {hasSubmitted ? (
                 <div className="flex flex-col sm:flex-row items-center gap-2.5">
-                  <Link
+                  <a
                     href="/write/algorithm"
                     className="w-full sm:w-1/2 rounded-xl border border-slate-300 bg-white py-3 px-4 text-xs sm:text-sm font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition text-center"
                   >
                     ✏️ 내 알고리즘 수정하기
-                  </Link>
-                  <Link
+                  </a>
+                  <a
                     href="/write/explore"
                     className="w-full sm:w-1/2 rounded-xl bg-blue-600 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition text-center"
                   >
-                    3단계: 아이디어 보드로 가기 ➔
-                  </Link>
+                    아이디어 보드로 가기 ➔
+                  </a>
                 </div>
               ) : (
-                <Link
+                <a
                   href="/write/algorithm"
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition"
                 >
-                  <span>2단계: 단계별 알고리즘 작성하러 가기 ➔</span>
-                </Link>
+                  <span>단계별 알고리즘 작성하러 가기 ➔</span>
+                </a>
               )}
             </div>
           </>

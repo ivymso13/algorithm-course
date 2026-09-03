@@ -5,7 +5,9 @@ import { useRef, useState } from "react";
 interface StudentLoginCardProps {
   title: string;
   subtitle: string;
-  stepNumber: "1단계" | "2단계" | "3단계" | "4단계";
+  /** A short badge label, e.g. "1단계" for a numbered flow step, or a plain
+   * label like "체험" for a page that isn't part of the numbered flow. */
+  stepNumber: string;
   onLogin: (school: string, studentId: string) => Promise<void>;
   loading: boolean;
   error: string | null;

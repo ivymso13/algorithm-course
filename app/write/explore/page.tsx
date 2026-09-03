@@ -1,7 +1,11 @@
 "use client";
 
+/* Native <a> links intentionally avoid a client-router navigation bug seen in
+ * some classroom browsers (see components/Navbar.tsx for the original fix):
+ * after a next/link soft navigation, the destination page's client
+ * components did not reliably hydrate, leaving buttons unresponsive. */
+
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
@@ -119,7 +123,7 @@ export default function WriteExplorePage() {
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        {/* 4-Step Navigation */}
+        {/* 3-Step Navigation */}
         <StudentStepNav currentStep={3} hasSubmitted={hasSubmitted} />
 
         {sessionRestoredNotice && (
@@ -155,19 +159,19 @@ export default function WriteExplorePage() {
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-slate-900">
-                3단계: 아이디어 & 추천 (잠김)
+                아이디어 & 추천 (잠김)
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-md mx-auto leading-relaxed">
                 알고리즘을 먼저 제출해야 다른 학생들의 아이디어와 추천, 새로운 무작위 문제 실습이 열립니다.
               </p>
             </div>
             <div className="pt-2">
-              <Link
+              <a
                 href="/write/algorithm"
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition"
               >
-                <span>2단계: 알고리즘 작성하러 가기 ➔</span>
-              </Link>
+                <span>알고리즘 작성하러 가기 ➔</span>
+              </a>
             </div>
           </section>
         ) : (
@@ -178,12 +182,12 @@ export default function WriteExplorePage() {
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
                   ✓ 내 알고리즘 제출 완료
                 </span>
-                <Link
+                <a
                   href="/write/algorithm"
                   className="rounded-lg border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 transition"
                 >
                   ✏️ 알고리즘 수정하기
-                </Link>
+                </a>
               </div>
               <pre className="whitespace-pre-wrap rounded-xl bg-white p-3 font-mono text-xs leading-relaxed text-slate-800 max-h-32 overflow-y-auto border border-emerald-100">
                 {mySubmission.algorithmText}
@@ -279,7 +283,7 @@ export default function WriteExplorePage() {
                         {entry.algorithmText}
                       </pre>
 
-                      {/* Recommendation Tags + 4. 체험하기 Link */}
+                      {/* Recommendation Tags + 체험하기 링크 */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="추천 태그">
                           {WARMUP_VOTE_TYPES.map((type) => {
@@ -306,12 +310,12 @@ export default function WriteExplorePage() {
                           })}
                         </div>
 
-                        <Link
+                        <a
                           href={`/execute?submissionId=${entry.id}`}
                           className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition shrink-0"
                         >
-                          4. 체험하기 ➔
-                        </Link>
+                          체험하기 ➔
+                        </a>
                       </div>
                     </article>
                   ))}

@@ -1,8 +1,12 @@
 "use client";
 
+/* Native <a> links (and a full page navigation on submit) intentionally
+ * avoid a client-router navigation bug seen in some classroom browsers (see
+ * components/Navbar.tsx for the original fix): after a next/link soft
+ * navigation, the destination page's client components did not reliably
+ * hydrate, leaving buttons unresponsive. */
+
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
@@ -14,7 +18,6 @@ function ensureAtLeastOneStep(steps: string[]): string[] {
 }
 
 export default function AlgorithmWritePage() {
-  const router = useRouter();
   const {
     checkingSession,
     loggedIn,
@@ -151,8 +154,9 @@ export default function AlgorithmWritePage() {
 
       setMySubmission(data.mySubmission);
 
-      // Navigate to explore page
-      router.push("/write/explore");
+      // Full page navigation (not router.push) so /write/explore's client
+      // components hydrate fresh — see the native-navigation note atop this file.
+      window.location.href = "/write/explore";
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "오류가 발생했습니다.");
     } finally {
@@ -201,7 +205,7 @@ export default function AlgorithmWritePage() {
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        {/* 4-Step Navigation */}
+        {/* 3-Step Navigation */}
         <StudentStepNav currentStep={2} hasSubmitted={hasSubmitted} />
 
         {sessionRestoredNotice && (
@@ -246,12 +250,12 @@ export default function AlgorithmWritePage() {
                     {isOpen ? "진행 중" : "종료됨"}
                   </span>
                 </div>
-                <Link
+                <a
                   href="/write"
                   className="text-xs text-blue-600 hover:underline font-semibold"
                 >
-                  ← 1단계 실습 다시 보기
-                </Link>
+                  ← 실습 다시 보기
+                </a>
               </div>
 
               <h1 className="text-base font-bold text-slate-900">{round.title}</h1>
@@ -289,7 +293,7 @@ export default function AlgorithmWritePage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                      2. 단계별 알고리즘 작성
+                      단계별 알고리즘 작성
                     </h2>
                     {hasSubmitted && (
                       <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
@@ -435,17 +439,17 @@ export default function AlgorithmWritePage() {
                       {submitting
                         ? "제출 중..."
                         : hasSubmitted
-                        ? "수정 내용 저장하고 3단계로 이동 ➔"
-                        : "알고리즘 제출하고 3단계로 이동 ➔"}
+                        ? "수정 내용 저장하고 아이디어 보드로 이동 ➔"
+                        : "알고리즘 제출하고 아이디어 보드로 이동 ➔"}
                     </button>
 
                     {hasSubmitted && (
-                      <Link
+                      <a
                         href="/write/explore"
                         className="w-full sm:w-auto rounded-xl border border-slate-300 bg-white py-3 px-4 text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition text-center"
                       >
-                        3단계로 건너뛰기 ➔
-                      </Link>
+                        아이디어 보드로 건너뛰기 ➔
+                      </a>
                     )}
                   </div>
                 ) : (
