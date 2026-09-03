@@ -43,14 +43,18 @@ export const courses = sqliteTable(
  * votes/attempts, so that data is never orphaned or lost (see
  * `lib/roster.ts`'s `deleteRosterStudent`).
  *
- * The (course_id, student_id) and (course_id, student_key) indexes are
- * UNIQUE — across every row, active or deactivated — not just to keep two
- * *active* students from colliding, but to stop a student ID/identity that
- * already has real history from ever being handed to a different row (see
- * `lib/rosterGuards.ts`'s `assertNoDuplicateStudentId`). They also close the
- * concurrent-request race an app-level check alone can't: two simultaneous
- * adds/edits for the same identity now fail at the DB layer, which
- * `lib/roster.ts` normalizes back into the same RosterDuplicateError.
+ * The (course_id, school, student_id) and (course_id, student_key) indexes
+ * are UNIQUE — across every row, active or deactivated — not just to keep
+ * two *active* students from colliding, but to stop a student ID/identity
+ * that already has real history from ever being handed to a different row
+ * (see `lib/rosterGuards.ts`'s `assertNoDuplicateStudentId`). They also
+ * close the concurrent-request race an app-level check alone can't: two
+ * simultaneous adds/edits for the same identity now fail at the DB layer,
+ * which `lib/roster.ts` normalizes back into the same RosterDuplicateError.
+ *
+ * (school, student_id) — not student_id alone — is the actual student login
+ * identifier (see `app/api/student/login/route.ts`): two different schools
+ * may legitimately share a student ID, so uniqueness is scoped per school.
  */
 export const roster = sqliteTable(
   "roster",
@@ -69,7 +73,11 @@ export const roster = sqliteTable(
   (table) => ({
     courseIdx: index("roster_course_idx").on(table.courseId),
     courseStudentKeyIdx: uniqueIndex("roster_course_student_key_unique_idx").on(table.courseId, table.studentKey),
-    courseStudentIdIdx: uniqueIndex("roster_course_student_id_unique_idx").on(table.courseId, table.studentId),
+    courseSchoolStudentIdIdx: uniqueIndex("roster_course_school_student_id_unique_idx").on(
+      table.courseId,
+      table.school,
+      table.studentId
+    ),
   })
 );
 

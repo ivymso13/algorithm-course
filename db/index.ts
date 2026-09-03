@@ -34,12 +34,14 @@ const SCHEMA_STATEMENTS = [
     updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS roster_course_idx ON roster (course_id)`,
-  // Superseded by the two UNIQUE indexes below; dropped by name (idempotent)
-  // in case an earlier bootstrap already created it as a plain, non-unique
-  // index — CREATE INDEX IF NOT EXISTS alone wouldn't upgrade it in place.
+  // Each superseded by the UNIQUE index below it; dropped by name
+  // (idempotent) in case an earlier bootstrap already created it as a
+  // plain, or differently-scoped, index — CREATE INDEX IF NOT EXISTS alone
+  // wouldn't upgrade or rescope it in place.
   `DROP INDEX IF EXISTS roster_course_student_key_idx`,
   `CREATE UNIQUE INDEX IF NOT EXISTS roster_course_student_key_unique_idx ON roster (course_id, student_key)`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS roster_course_student_id_unique_idx ON roster (course_id, student_id)`,
+  `DROP INDEX IF EXISTS roster_course_student_id_unique_idx`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS roster_course_school_student_id_unique_idx ON roster (course_id, school, student_id)`,
   `CREATE TABLE IF NOT EXISTS students (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     course_id integer NOT NULL,

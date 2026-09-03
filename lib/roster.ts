@@ -82,15 +82,23 @@ export async function seedRosterForCourse(courseId: number): Promise<void> {
 
 /**
  * Every roster row in the course — active AND deactivated — for the
- * duplicate-identity check. Deactivated rows must count: their student ID/
- * studentKey may already own real history (submissions/votes/attempts), and
- * handing that identity to a different row would mix the two students'
- * records or collide with the DB's unique index on (course_id, student_key)/
- * (course_id, student_id).
+ * duplicate-identity check. Deactivated rows must count: their (school,
+ * studentId)/studentKey may already own real history (submissions/votes/
+ * attempts), and handing that identity to a different row would mix the two
+ * students' records or collide with the DB's unique index on
+ * (course_id, school, student_id)/(course_id, student_key).
  */
-async function listRosterIdentities(db: Db, courseId: number): Promise<{ id: number; studentId: string; studentKey: string }[]> {
+async function listRosterIdentities(
+  db: Db,
+  courseId: number
+): Promise<{ id: number; school: string; studentId: string; studentKey: string }[]> {
   return db
-    .select({ id: rosterTable.id, studentId: rosterTable.studentId, studentKey: rosterTable.studentKey })
+    .select({
+      id: rosterTable.id,
+      school: rosterTable.school,
+      studentId: rosterTable.studentId,
+      studentKey: rosterTable.studentKey,
+    })
     .from(rosterTable)
     .where(eq(rosterTable.courseId, courseId));
 }
@@ -146,13 +154,40 @@ export async function getAssignment(courseId: number, studentKey: string): Promi
   return row ? toAssignment(row) : undefined;
 }
 
+/**
+ * Student login lookup: school + student ID is the login identifier (see
+ * (course_id, school, student_id) unique index) — the student never types
+ * their name, so it's never trusted from the client. The real name/
+ * studentKey come back from the roster row itself for the caller to use when
+ * creating the session/login record.
+ */
+export async function getAssignmentBySchoolAndStudentId(
+  courseId: number,
+  school: string,
+  studentId: string
+): Promise<Assignment | undefined> {
+  const db = await getDb();
+  const [row] = await db
+    .select()
+    .from(rosterTable)
+    .where(
+      and(
+        eq(rosterTable.courseId, courseId),
+        eq(rosterTable.school, school),
+        eq(rosterTable.studentId, studentId),
+        eq(rosterTable.active, true)
+      )
+    );
+  return row ? toAssignment(row) : undefined;
+}
+
 export type RosterInput = { school: string; studentId: string; name: string };
 
 export async function addRosterStudent(courseId: number, input: RosterInput): Promise<Assignment> {
   const db = await getDb();
   const studentKey = studentKeyOf(input.studentId, input.name);
   const allRows = await listRosterIdentities(db, courseId);
-  assertNoDuplicateStudentId(allRows, { studentId: input.studentId, studentKey });
+  assertNoDuplicateStudentId(allRows, { school: input.school, studentId: input.studentId, studentKey });
 
   const [{ value: maxSortOrder }] = await db
     .select({ value: sql<number>`coalesce(max(${rosterTable.sortOrder}), -1)` })
@@ -193,10 +228,15 @@ export async function updateRosterStudent(courseId: number, id: number, input: R
   const existing = assertRosterEntryExists(existingRow ?? null, courseId);
 
   const identity = planStudentIdentityChange(existing, input);
-  if (identity.changed) {
-    const allRows = await listRosterIdentities(db, courseId);
-    assertNoDuplicateStudentId(allRows, { studentId: input.studentId, studentKey: identity.newStudentKey }, id);
-  }
+  // Always checked, not just when studentKey changes: (school, studentId)
+  // uniqueness can be broken by a school-only edit even when the student ID
+  // and name — and therefore studentKey — stay the same.
+  const allRows = await listRosterIdentities(db, courseId);
+  assertNoDuplicateStudentId(
+    allRows,
+    { school: input.school, studentId: input.studentId, studentKey: identity.newStudentKey },
+    id
+  );
 
   const now = new Date().toISOString();
 

@@ -22,11 +22,20 @@ export function assertRosterEntryExists<T extends { courseId: number }>(row: T |
 }
 
 /**
- * Duplicate check for add/edit: student ID (학번), and separately studentKey,
- * must be unique across *every* roster row in the course — active AND
- * deactivated. Name alone isn't part of the check (two students can never
- * really share one student ID in one class regardless of spelling), but a
- * deactivated row still counts: a student ID/identity that once had real
+ * Duplicate check for add/edit. Two things must each be unique across
+ * *every* roster row in the course — active AND deactivated:
+ *
+ * - (school, studentId): the actual login identifier now that students log
+ *   in with school + student ID only. Two different schools may reuse the
+ *   same student ID — that's expected and allowed — but the same school
+ *   can't have two rows claiming the same student ID.
+ * - studentKey (student ID + name): still the identity key stamped onto
+ *   every submission/vote/attempt/session row, independent of school. Two
+ *   different schools happening to have same-named students who also share
+ *   a student ID would otherwise collide there, so it's checked separately
+ *   and course-wide.
+ *
+ * A deactivated row still counts: a student ID/identity that once had real
  * history (submissions/votes/attempts) must never be handed to a different
  * roster row, or the two would look like the same person — old records would
  * either mix into the new student's, or the update-cascade's rename could
@@ -34,12 +43,15 @@ export function assertRosterEntryExists<T extends { courseId: number }>(row: T |
  * lets an edit compare against every OTHER row without tripping on itself.
  */
 export function assertNoDuplicateStudentId(
-  allRows: { id: number; studentId: string; studentKey: string }[],
-  candidate: { studentId: string; studentKey: string },
+  allRows: { id: number; school: string; studentId: string; studentKey: string }[],
+  candidate: { school: string; studentId: string; studentKey: string },
   excludeId?: number
 ): void {
   const conflict = allRows.find(
-    (row) => row.id !== excludeId && (row.studentId === candidate.studentId || row.studentKey === candidate.studentKey)
+    (row) =>
+      row.id !== excludeId &&
+      ((row.school === candidate.school && row.studentId === candidate.studentId) ||
+        row.studentKey === candidate.studentKey)
   );
   if (conflict) throw new RosterDuplicateError("이미 등록된 학번입니다");
 }
