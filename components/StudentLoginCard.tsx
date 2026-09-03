@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 interface StudentLoginCardProps {
   title: string;
   subtitle: string;
-  stepNumber: "1단계" | "2단계";
+  stepNumber: "1단계" | "2단계" | "3단계" | "4단계";
   onLogin: (school: string, studentId: string) => Promise<void>;
   loading: boolean;
   error: string | null;

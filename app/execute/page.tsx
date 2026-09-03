@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
+import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 
 type SubmissionView = {
@@ -50,6 +51,7 @@ export default function ExecutePage() {
   // Fallback board list if opened without submissionId
   const [boardList, setBoardList] = useState<BoardItem[] | null>(null);
   const [boardLoading, setBoardLoading] = useState(false);
+  const [boardListError, setBoardListError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -117,13 +119,22 @@ export default function ExecutePage() {
         loadSubmissionData(submissionId);
       } else {
         setBoardLoading(true);
+        setBoardListError(null);
         fetch("/api/warmup/board")
-          .then((res) => res.json())
-          .then((data: { entries?: BoardItem[] }) => {
-            if (!ignore) setBoardList(data.entries ?? []);
+          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .then(({ ok, data }: { ok: boolean; data: { entries?: BoardItem[]; error?: string } }) => {
+            if (ignore) return;
+            if (!ok) {
+              // e.g. 403 "먼저 알고리즘을 제출해야 보드를 볼 수 있습니다" — must
+              // surface distinctly, not render as an empty (0-entry) board.
+              setBoardListError(data.error ?? "목록을 불러오지 못했습니다.");
+              setBoardList([]);
+              return;
+            }
+            setBoardList(data.entries ?? []);
           })
           .catch(() => {
-            if (!ignore) setBoardList([]);
+            if (!ignore) setBoardListError("목록을 불러오지 못했습니다.");
           })
           .finally(() => {
             if (!ignore) setBoardLoading(false);
@@ -244,15 +255,17 @@ export default function ExecutePage() {
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+          <StudentStepNav currentStep={4} hasSubmitted={true} />
+
           <header className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
             <div>
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                5단계 · 단계별 체험
+                4. 체험
               </span>
               <h1 className="text-base font-bold text-slate-900 mt-1">체험할 알고리즘 선택</h1>
             </div>
-            <Link href="/write" className="text-xs text-blue-600 hover:underline font-semibold">
-              ← 워밍업 보드로
+            <Link href="/write/explore" className="text-xs text-blue-600 hover:underline font-semibold">
+              ← 3단계 아이디어 보드로
             </Link>
           </header>
 
@@ -260,14 +273,24 @@ export default function ExecutePage() {
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400">
               목록 불러오는 중...
             </div>
-          ) : !boardList || boardList.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center space-y-3 shadow-xs">
-              <p className="text-sm text-slate-600">아직 제출된 알고리즘이 없습니다.</p>
+          ) : boardListError ? (
+            <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-8 text-center space-y-3 shadow-xs">
+              <p className="text-sm font-bold text-amber-800">⚠️ {boardListError}</p>
               <Link
-                href="/write"
+                href="/write/algorithm"
                 className="inline-block rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
               >
-                1단계로 이동해 내 알고리즘 작성하기 ➔
+                2단계로 이동해 내 알고리즘 작성하기 ➔
+              </Link>
+            </div>
+          ) : !boardList || boardList.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center space-y-3 shadow-xs">
+              <p className="text-sm text-slate-600">아직 다른 학생의 제출이 없습니다.</p>
+              <Link
+                href="/write/explore"
+                className="inline-block rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
+              >
+                3단계 아이디어 보드로 이동 ➔
               </Link>
             </div>
           ) : (
@@ -346,49 +369,15 @@ export default function ExecutePage() {
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        {/* 5-Stage Stepper Header */}
-        <nav
-          aria-label="워밍업 진행 순서"
-          className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs"
-        >
-          <div className="flex items-center justify-between gap-1 overflow-x-auto text-[11px] font-medium text-slate-500">
-            <Link href="/write" className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg hover:bg-slate-50">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
-              <span>1. 문제</span>
-            </Link>
-            <span className="text-slate-300">➔</span>
-
-            <Link href="/write" className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg hover:bg-slate-50">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
-              <span>2. 작성</span>
-            </Link>
-            <span className="text-slate-300">➔</span>
-
-            <Link href="/write" className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg hover:bg-slate-50">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
-              <span>3. 아이디어</span>
-            </Link>
-            <span className="text-slate-300">➔</span>
-
-            <Link href="/write" className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg hover:bg-slate-50">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
-              <span>4. 추천</span>
-            </Link>
-            <span className="text-slate-300">➔</span>
-
-            <div className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold ring-1 ring-emerald-300">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">5</span>
-              <span>단계별 체험</span>
-            </div>
-          </div>
-        </nav>
+        {/* 4-Step Navigation */}
+        <StudentStepNav currentStep={4} hasSubmitted={true} />
 
         {/* Algorithm Header */}
         <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                5. 단계별 체험
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                4. 단계별 체험
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -401,10 +390,10 @@ export default function ExecutePage() {
             <h1 className="text-base font-bold text-slate-900 mt-1">{submission.anonLabel}의 알고리즘</h1>
           </div>
           <Link
-            href="/write"
+            href="/write/explore"
             className="text-xs text-blue-600 hover:underline font-semibold shrink-0"
           >
-            ← 보드로
+            ← 3단계 아이디어 보드로
           </Link>
         </header>
 
@@ -464,10 +453,10 @@ export default function ExecutePage() {
             <p className="text-xs text-slate-500">다른 학생의 알고리즘도 이어서 체험해보세요.</p>
             <div className="pt-2">
               <Link
-                href="/write"
+                href="/write/explore"
                 className="inline-block rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition"
               >
-                다른 알고리즘 체험하러 가기 ➔
+                다른 알고리즘 체험하러 가기 (3단계 보드) ➔
               </Link>
             </div>
           </section>

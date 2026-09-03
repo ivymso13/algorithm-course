@@ -44,6 +44,24 @@ test("server-renders the write page", async () => {
   assert.match(html, /워밍업/);
 });
 
+test("server-renders the write algorithm page", async () => {
+  const response = await render("/write/algorithm");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /워밍업/);
+});
+
+test("server-renders the write explore page", async () => {
+  const response = await render("/write/explore");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /워밍업/);
+});
+
 test("server-renders the execute page", async () => {
   const response = await render("/execute");
   assert.equal(response.status, 200);
