@@ -6,12 +6,18 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import type { ProblemType } from "@/lib/assignments";
+import { parseAlgorithmSteps, serializeAlgorithmSteps } from "@/lib/algorithmSteps";
 import {
   WARMUP_VOTE_ICONS,
   WARMUP_VOTE_LABELS,
   WARMUP_VOTE_TYPES,
   type WarmupVoteType,
 } from "@/lib/warmupMeta";
+
+/** The step editor always shows at least one row, even when restored/parsed content is empty. */
+function ensureAtLeastOneStep(steps: string[]): string[] {
+  return steps.length > 0 ? steps : [""];
+}
 
 type RoundInfo = {
   id: number;
@@ -45,7 +51,8 @@ export default function WritePage() {
   const [mySubmission, setMySubmission] = useState<MySubmission | null>(null);
   const [sessionRestoredNotice, setSessionRestoredNotice] = useState(false);
 
-  const [algorithmText, setAlgorithmText] = useState("");
+  const [steps, setSteps] = useState<string[]>([""]);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [draftRestoredNotice, setDraftRestoredNotice] = useState(false);
   const [sandboxCopyNotice, setSandboxCopyNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,11 +79,11 @@ export default function WritePage() {
     if (data.studentKey) setStudentLabel(data.studentKey);
     setRound(data.round);
     setMySubmission(data.mySubmission);
-    if (data.mySubmission && !algorithmText) {
-      setAlgorithmText(data.mySubmission.algorithmText);
+    if (data.mySubmission && steps.every((s) => !s.trim())) {
+      setSteps(ensureAtLeastOneStep(parseAlgorithmSteps(data.mySubmission.algorithmText)));
     }
     return { ok: true, hadSubmission: Boolean(data.mySubmission) };
-  }, [algorithmText]);
+  }, [steps]);
 
   const loadBoard = useCallback(async () => {
     setBoardLoading(true);
@@ -145,8 +152,9 @@ export default function WritePage() {
     const timer = window.setTimeout(() => {
       try {
         const saved = sessionStorage.getItem(draftKey);
-        if (saved && !algorithmText) {
-          setAlgorithmText(saved);
+        const hasContent = steps.some((s) => s.trim().length > 0);
+        if (saved && !hasContent) {
+          setSteps(ensureAtLeastOneStep(parseAlgorithmSteps(saved)));
           setDraftRestoredNotice(true);
           window.setTimeout(() => setDraftRestoredNotice(false), 4000);
         }
@@ -158,12 +166,16 @@ export default function WritePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round?.id, mySubmission]);
 
-  function handleAlgorithmChange(text: string) {
-    setAlgorithmText(text);
+  /** Every step mutation (edit/add/remove/move) routes through here so the
+   * sessionStorage draft — still the same "1. ...\n2. ..." string as before —
+   * always stays in sync with the current step array. */
+  function applyStepsChange(nextSteps: string[]) {
+    setSteps(nextSteps);
     if (round) {
       const draftKey = `algo_warmup_draft_${round.id}`;
+      const serialized = serializeAlgorithmSteps(nextSteps);
       try {
-        if (text.trim()) sessionStorage.setItem(draftKey, text);
+        if (serialized.trim()) sessionStorage.setItem(draftKey, serialized);
         else sessionStorage.removeItem(draftKey);
       } catch {
         // ignore
@@ -171,23 +183,48 @@ export default function WritePage() {
     }
   }
 
+  function handleStepTextChange(index: number, value: string) {
+    const next = [...steps];
+    next[index] = value;
+    applyStepsChange(next);
+  }
+
+  function handleAddStep() {
+    applyStepsChange([...steps, ""]);
+  }
+
+  function handleRemoveStep(index: number) {
+    if (steps.length <= 1) return;
+    applyStepsChange(steps.filter((_, i) => i !== index));
+  }
+
+  function handleMoveStep(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= steps.length) return;
+    const next = [...steps];
+    [next[index], next[target]] = [next[target], next[index]];
+    applyStepsChange(next);
+  }
+
   /**
    * Only ever runs when the student clicks the sandbox's own "기록 복사"
    * button (passed in as `onCopyHistory`) — never automatically. An empty
    * draft is simply filled in; existing content is preserved unless the
    * student explicitly confirms appending, so a practice run can never
-   * silently overwrite algorithm text already written.
+   * silently overwrite algorithm text already written. The sandbox's own
+   * numbered summary is parsed into individual steps before appending.
    */
   function handleCopySandboxHistory(summary: string) {
-    const existing = algorithmText.trim();
-    if (!existing) {
-      handleAlgorithmChange(summary);
+    const parsedFromSandbox = parseAlgorithmSteps(summary);
+    const hasContent = steps.some((s) => s.trim().length > 0);
+    if (!hasContent) {
+      applyStepsChange(ensureAtLeastOneStep(parsedFromSandbox));
     } else {
       const confirmed = window.confirm(
         "이미 작성한 알고리즘 내용이 있습니다. 실습 기록을 뒤에 추가할까요?"
       );
       if (!confirmed) return;
-      handleAlgorithmChange(`${algorithmText}\n\n${summary}`);
+      applyStepsChange([...steps, ...parsedFromSandbox]);
     }
     setSandboxCopyNotice(true);
     window.setTimeout(() => setSandboxCopyNotice(false), 3500);
@@ -218,7 +255,8 @@ export default function WritePage() {
     setRound(null);
     setMySubmission(null);
     setBoard(null);
-    setAlgorithmText("");
+    setSteps([""]);
+    setSubmitAttempted(false);
     try {
       await fetch("/api/student/logout", { method: "POST" });
     } catch {
@@ -230,9 +268,18 @@ export default function WritePage() {
     e.preventDefault();
     if (!round) return;
     setError(null);
+    setSubmitAttempted(true);
 
-    const trimmed = algorithmText.trim();
-    if (trimmed.length < 10) {
+    const emptyStepNumbers = steps
+      .map((step, index) => (step.trim() ? null : index + 1))
+      .filter((n): n is number => n !== null);
+    if (emptyStepNumbers.length > 0) {
+      setError(`단계 ${emptyStepNumbers.join(", ")}의 내용을 입력해주세요.`);
+      return;
+    }
+
+    const serialized = serializeAlgorithmSteps(steps);
+    if (serialized.trim().length < 10) {
       setError("알고리즘을 10자 이상 단계별로 적어주세요.");
       return;
     }
@@ -242,7 +289,7 @@ export default function WritePage() {
       const res = await fetch("/api/warmup/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ algorithmText: trimmed }),
+        body: JSON.stringify({ algorithmText: serialized }),
       });
       const data = (await res.json()) as { mySubmission?: MySubmission; error?: string };
       if (res.status === 401) {
@@ -320,6 +367,7 @@ export default function WritePage() {
 
   const hasSubmitted = Boolean(mySubmission);
   const isOpen = round?.status === "open";
+  const serializedText = serializeAlgorithmSteps(steps);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -467,8 +515,8 @@ export default function WritePage() {
                     </span>
                   )}
                 </div>
-                <span className={`text-xs font-mono ${algorithmText.trim().length >= 10 ? "text-slate-500" : "text-amber-600"}`}>
-                  {algorithmText.length} / 4,000자
+                <span className={`text-xs font-mono ${serializedText.trim().length >= 10 ? "text-slate-500" : "text-amber-600"}`}>
+                  {serializedText.length} / 4,000자
                 </span>
               </div>
 
@@ -487,16 +535,86 @@ export default function WritePage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-3">
-                <textarea
-                  required
-                  rows={6}
-                  disabled={!isOpen}
-                  aria-label="알고리즘 내용"
-                  className="w-full min-h-[140px] rounded-xl border border-slate-300 bg-slate-50/50 p-3 font-mono text-base sm:text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 focus:outline-hidden disabled:opacity-60"
-                  placeholder={`1. 시작 조건 확인\n2. 단계별 구체적 조작\n3. 종료 및 결과 출력`}
-                  value={algorithmText}
-                  onChange={(e) => handleAlgorithmChange(e.target.value)}
-                />
+                <div className="space-y-2.5">
+                  {steps.map((step, index) => {
+                    const stepInvalid = submitAttempted && !step.trim();
+                    return (
+                      <div key={index} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor={`step-${index}`} className="text-xs font-semibold text-slate-700">
+                            단계 {index + 1}
+                          </label>
+                          {steps.length > 1 && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveStep(index, -1)}
+                                disabled={!isOpen || index === 0}
+                                aria-label={`단계 ${index + 1} 위로 이동`}
+                                className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveStep(index, 1)}
+                                disabled={!isOpen || index === steps.length - 1}
+                                aria-label={`단계 ${index + 1} 아래로 이동`}
+                                className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                ▼
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStep(index)}
+                                disabled={!isOpen}
+                                aria-label={`단계 ${index + 1} 삭제`}
+                                className="flex h-6 w-6 items-center justify-center rounded-md border border-rose-200 text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <textarea
+                          id={`step-${index}`}
+                          rows={2}
+                          disabled={!isOpen}
+                          aria-label={`단계 ${index + 1} 내용`}
+                          aria-invalid={stepInvalid}
+                          aria-describedby={stepInvalid ? `step-${index}-error` : undefined}
+                          className={`w-full min-h-[64px] rounded-xl border bg-slate-50/50 p-2.5 font-mono text-base sm:text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:outline-hidden disabled:opacity-60 ${
+                            stepInvalid
+                              ? "border-rose-400 focus:border-rose-500 focus:ring-rose-200"
+                              : "border-slate-300 focus:border-blue-500 focus:ring-blue-200"
+                          }`}
+                          placeholder="이 단계에서 할 일을 적어주세요"
+                          value={step}
+                          onChange={(e) => handleStepTextChange(index, e.target.value)}
+                        />
+                        {stepInvalid && (
+                          <p
+                            id={`step-${index}-error`}
+                            role="alert"
+                            className="text-[11px] font-semibold text-rose-600 flex items-center gap-1"
+                          >
+                            <span aria-hidden="true">⚠️</span>
+                            <span>단계 {index + 1} 내용을 입력해주세요.</span>
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={handleAddStep}
+                    disabled={!isOpen}
+                    className="w-full rounded-xl border border-dashed border-blue-300 bg-blue-50/50 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    + 단계 추가
+                  </button>
+                </div>
 
                 {error && (
                   <div role="alert" aria-live="assertive" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
@@ -507,7 +625,7 @@ export default function WritePage() {
                 {isOpen ? (
                   <button
                     type="submit"
-                    disabled={loading || !algorithmText.trim()}
+                    disabled={loading || !serializedText.trim()}
                     className="w-full rounded-xl bg-blue-600 py-2.5 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
                   >
                     {loading ? "저장 중..." : hasSubmitted ? "수정 내용 저장" : "알고리즘 제출 ➔"}
