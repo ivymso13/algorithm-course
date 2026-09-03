@@ -7,6 +7,18 @@ import {
   WARMUP_VOTE_TYPES,
 } from "../lib/warmupMeta.ts";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "../lib/warmupSteps.ts";
+import { getWarmupProblem, WARMUP_PROBLEMS } from "../lib/warmupProblems.ts";
+
+test("source problem bank exposes unique, complete problems", () => {
+  assert.ok(WARMUP_PROBLEMS.length > 0);
+  assert.equal(new Set(WARMUP_PROBLEMS.map((problem) => problem.id)).size, WARMUP_PROBLEMS.length);
+  for (const problem of WARMUP_PROBLEMS) {
+    assert.ok(problem.title.length >= 2);
+    assert.ok(problem.prompt.length >= 10);
+    assert.equal(getWarmupProblem(problem.id), problem);
+  }
+  assert.equal(getWarmupProblem("unknown"), undefined);
+});
 
 test("WARMUP_VOTE_TYPES: exactly the 4 spec'd recommendation types, each with a short label and icon", () => {
   assert.equal(WARMUP_VOTE_TYPES.length, 4);

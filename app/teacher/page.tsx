@@ -23,6 +23,8 @@ type WarmupRoundSummary = {
   experienceCount: number;
 };
 
+type WarmupProblem = { id: string; title: string; prompt: string };
+
 type WarmupRoundDetail = {
   round: WarmupRoundSummary;
   items: {
@@ -87,10 +89,9 @@ export default function TeacherPage() {
   const [course, setCourse] = useState<{ code: string; name: string; retentionDays: number } | null>(null);
   const [students, setStudents] = useState<DashboardStudent[]>([]);
   const [rounds, setRounds] = useState<WarmupRoundSummary[]>([]);
+  const [warmupProblems, setWarmupProblems] = useState<WarmupProblem[]>([]);
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
-  const [newRoundTitle, setNewRoundTitle] = useState("");
-  const [newRoundPrompt, setNewRoundPrompt] = useState("");
   const [warmupBusy, setWarmupBusy] = useState(false);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
@@ -107,8 +108,15 @@ export default function TeacherPage() {
   const loadWarmupRounds = useCallback(async () => {
     try {
       const res = await fetch("/api/teacher/warmup/rounds", { headers: authHeaders() });
-      const data = (await res.json()) as { rounds?: WarmupRoundSummary[]; error?: string };
-      if (res.ok) setRounds(data.rounds ?? []);
+      const data = (await res.json()) as {
+        rounds?: WarmupRoundSummary[];
+        problems?: WarmupProblem[];
+        error?: string;
+      };
+      if (res.ok) {
+        setRounds(data.rounds ?? []);
+        setWarmupProblems(data.problems ?? []);
+      }
     } catch {
       // ignore — the warmup tab shows its own error state via the create/publish/close actions
     }
@@ -159,20 +167,17 @@ export default function TeacherPage() {
     }
   }, [authHeaders]);
 
-  async function handleCreateRound(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreateRound(problemId: string) {
     setError(null);
     setWarmupBusy(true);
     try {
       const res = await fetch("/api/teacher/warmup/rounds", {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newRoundTitle.trim(), prompt: newRoundPrompt.trim() }),
+        body: JSON.stringify({ problemId }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "라운드 생성에 실패했습니다.");
-      setNewRoundTitle("");
-      setNewRoundPrompt("");
       await loadWarmupRounds();
     } catch (err) {
       setError(err instanceof Error ? err.message : "라운드 생성에 실패했습니다.");
@@ -664,38 +669,28 @@ export default function TeacherPage() {
         {/* TAB 0: Warm-up round management */}
         {tab === "warmup" && (
           <section className="space-y-4">
-            {/* 1. Create Warmup Round */}
+            {/* 1. Source-controlled problem bank */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-              <h2 className="text-sm font-bold text-slate-900">➕ 새 워밍업 문제 만들기</h2>
-              <form onSubmit={handleCreateRound} className="space-y-2.5">
-                <input
-                  type="text"
-                  required
-                  maxLength={60}
-                  placeholder="문제 제목 (예: 오늘의 워밍업 — 최댓값 찾기)"
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
-                  value={newRoundTitle}
-                  onChange={(e) => setNewRoundTitle(e.target.value)}
-                />
-                <textarea
-                  required
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="문제 지시문 (학생 화면에 그대로 표시됩니다)"
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-hidden"
-                  value={newRoundPrompt}
-                  onChange={(e) => setNewRoundPrompt(e.target.value)}
-                />
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={warmupBusy || !newRoundTitle.trim() || !newRoundPrompt.trim()}
-                    className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
-                  >
-                    {warmupBusy ? "저장 중..." : "+ 라운드 만들기"}
-                  </button>
-                </div>
-              </form>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">문제 목록 ({warmupProblems.length})</h2>
+                <p className="mt-1 text-xs text-slate-500">수업에 사용할 문제를 확인하고 라운드로 추가하세요.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {warmupProblems.map((problem) => (
+                  <article key={problem.id} className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-bold text-slate-900">{problem.title}</h3>
+                    <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-600">{problem.prompt}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleCreateRound(problem.id)}
+                      disabled={warmupBusy}
+                      className="mt-4 self-end rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer"
+                    >
+                      라운드로 추가
+                    </button>
+                  </article>
+                ))}
+              </div>
             </div>
 
             {/* 2. Round List & Live Status */}
@@ -713,7 +708,7 @@ export default function TeacherPage() {
 
               {rounds.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-400">
-                  아직 만든 라운드가 없습니다. 위에서 문제를 만들어 공개하세요.
+                  아직 만든 라운드가 없습니다. 위 문제 목록에서 수업에 사용할 문제를 추가하세요.
                 </div>
               ) : (
                 <div className="space-y-3">

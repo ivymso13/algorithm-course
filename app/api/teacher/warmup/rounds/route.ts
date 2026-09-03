@@ -1,6 +1,6 @@
 import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/teacherAuth";
-import { ValidationError, validateRoundPrompt, validateRoundTitle } from "@/lib/validation";
 import { createWarmupRound, listWarmupRoundsForCourse } from "@/lib/warmupStore";
+import { getWarmupProblem, WARMUP_PROBLEMS } from "@/lib/warmupProblems";
 import { getOrCreateDefaultCourse } from "@/lib/store";
 
 export async function GET(request: Request) {
@@ -8,24 +8,17 @@ export async function GET(request: Request) {
 
   const course = await getOrCreateDefaultCourse();
   const rounds = await listWarmupRoundsForCourse(course.id);
-  return Response.json({ rounds });
+  return Response.json({ rounds, problems: WARMUP_PROBLEMS });
 }
 
 export async function POST(request: Request) {
   if (!isAuthorizedRequest(request)) return unauthorizedResponse();
 
-  const body = (await request.json().catch(() => ({}))) as { title?: string; prompt?: string };
-  let title: string;
-  let prompt: string;
-  try {
-    title = validateRoundTitle(body.title);
-    prompt = validateRoundPrompt(body.prompt);
-  } catch (error) {
-    if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });
-    throw error;
-  }
+  const body = (await request.json().catch(() => ({}))) as { problemId?: string };
+  const problem = getWarmupProblem(body.problemId);
+  if (!problem) return Response.json({ error: "등록된 문제를 선택하세요" }, { status: 400 });
 
   const course = await getOrCreateDefaultCourse();
-  const round = await createWarmupRound(course.id, title, prompt);
+  const round = await createWarmupRound(course.id, problem.title, problem.prompt);
   return Response.json({ round });
 }
