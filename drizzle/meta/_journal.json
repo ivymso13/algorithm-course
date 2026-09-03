@@ -57,6 +57,13 @@
       "when": 1788418121892,
       "tag": "0007_rare_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788440320418,
+      "tag": "0008_new_war_machine",
+      "breakpoints": true
     }
   ]
 }

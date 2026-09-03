@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
+import { ensureDemoSubmissionsForRound } from "@/lib/warmupDemoSubmissions";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 import {
@@ -23,6 +24,7 @@ export async function createWarmupRound(courseId: number, title: string, prompt:
     .insert(warmupRounds)
     .values({ courseId, title, prompt, problemId, status: "draft", createdAt: new Date().toISOString() })
     .returning();
+  await ensureDemoSubmissionsForRound(row);
   return row;
 }
 
@@ -57,7 +59,7 @@ export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
   const rows = await db
     .select({ studentKey: warmupSubmissions.studentKey })
     .from(warmupSubmissions)
-    .where(eq(warmupSubmissions.roundId, round.id));
+    .where(and(eq(warmupSubmissions.roundId, round.id), eq(warmupSubmissions.isDemo, false)));
 
   return { id: round.id, title: round.title, submittedStudentKeys: rows.map((r) => r.studentKey) };
 }
@@ -79,10 +81,14 @@ export async function listWarmupRoundsForCourse(courseId: number) {
 
   const ids = rounds.map((r) => r.id);
   const [submissionRows, voteRows, experienceRows] = await Promise.all([
+    // Demo example cards aren't real student submissions — excluded here so
+    // this count keeps meaning "how many students wrote their own algorithm".
+    // Votes/experiences a real student casts on a demo card ARE real
+    // engagement, so those two counts below are not filtered.
     db
       .select({ roundId: warmupSubmissions.roundId })
       .from(warmupSubmissions)
-      .where(inArray(warmupSubmissions.roundId, ids)),
+      .where(and(inArray(warmupSubmissions.roundId, ids), eq(warmupSubmissions.isDemo, false))),
     db.select({ roundId: warmupVotes.roundId }).from(warmupVotes).where(inArray(warmupVotes.roundId, ids)),
     db
       .select({ roundId: warmupExperiences.roundId })
@@ -117,6 +123,7 @@ export async function publishWarmupRound(id: number, courseId: number) {
     .set({ status: "open", publishedAt: new Date().toISOString() })
     .where(eq(warmupRounds.id, id))
     .returning();
+  await ensureDemoSubmissionsForRound(updated);
   return updated;
 }
 
@@ -227,10 +234,12 @@ export async function upsertWarmupSubmission(input: {
     return updated;
   }
 
+  // Demo example cards are excluded so real participants are still numbered
+  // "참가자 1", "참가자 2", ... regardless of how many demo cards exist.
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)` })
     .from(warmupSubmissions)
-    .where(eq(warmupSubmissions.roundId, input.roundId));
+    .where(and(eq(warmupSubmissions.roundId, input.roundId), eq(warmupSubmissions.isDemo, false)));
   const anonLabel = `참가자 ${count + 1}`;
 
   const [created] = await db

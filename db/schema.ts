@@ -249,6 +249,15 @@ export const warmupRounds = sqliteTable(
  * One student's algorithm for one round. `anonLabel` (e.g. "참가자 3") is
  * the only identity shown to peers on the board — `studentId`/`studentName`
  * stay in the row for the teacher-only detail view.
+ *
+ * `isDemo` marks a source-controlled example submission seeded by
+ * `lib/warmupDemoSubmissions.ts` so the vote/experience flow can be tried
+ * with a full board even before any real student has submitted. It's a
+ * regular row in this same table (so voting/experience code needs no
+ * special-casing and round deletion's existing cascade covers it for free)
+ * — the flag exists purely so roster/participation-facing queries
+ * (submitted-student-key lists, submission counts, anon-label numbering)
+ * can exclude it and never mistake a demo card for a real student's work.
  */
 export const warmupSubmissions = sqliteTable(
   "warmup_submissions",
@@ -260,6 +269,7 @@ export const warmupSubmissions = sqliteTable(
     studentName: text("student_name").notNull(),
     anonLabel: text("anon_label").notNull(),
     algorithmText: text("algorithm_text").notNull(),
+    isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

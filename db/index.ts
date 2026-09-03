@@ -124,6 +124,7 @@ const SCHEMA_STATEMENTS = [
     student_name text NOT NULL,
     anon_label text NOT NULL,
     algorithm_text text NOT NULL,
+    is_demo integer DEFAULT false NOT NULL,
     created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
   )`,
@@ -174,6 +175,7 @@ async function ensureColumn(d1: D1Database, table: string, column: string, sqlTy
 async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
   await ensureColumn(d1, "courses", "roster_seeded_at", "text");
   await ensureColumn(d1, "warmup_rounds", "problem_id", "text");
+  await ensureColumn(d1, "warmup_submissions", "is_demo", "integer DEFAULT false NOT NULL");
 }
 
 let schemaReady: Promise<void> | null = null;

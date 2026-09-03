@@ -28,7 +28,14 @@ type WarmupProblem = { id: string; title: string; prompt: string };
 type WarmupRoundDetail = {
   round: WarmupRoundSummary;
   items: {
-    submission: { id: number; studentId: string; studentName: string; anonLabel: string; algorithmText: string };
+    submission: {
+      id: number;
+      studentId: string;
+      studentName: string;
+      anonLabel: string;
+      algorithmText: string;
+      isDemo: boolean;
+    };
     voteCounts: Record<WarmupVoteType, number>;
     experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
   }[];
@@ -1028,8 +1035,13 @@ export default function TeacherPage() {
                             roundDetail.items.map((item) => (
                               <div key={item.submission.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-bold text-slate-800">
+                                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
                                     {item.submission.anonLabel} · {item.submission.studentId} {item.submission.studentName}
+                                    {item.submission.isDemo && (
+                                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                        예시
+                                      </span>
+                                    )}
                                   </span>
                                   <div className="flex items-center gap-1">
                                     {WARMUP_VOTE_TYPES.map((type) => (
