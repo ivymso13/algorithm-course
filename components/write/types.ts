@@ -6,6 +6,7 @@ export type RoundInfo = {
   title: string;
   prompt: string;
   status: "draft" | "open" | "closed";
+  reviewOpenedAt: string | null;
   problemType: ProblemType | null;
 };
 

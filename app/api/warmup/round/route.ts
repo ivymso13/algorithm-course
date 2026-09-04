@@ -18,6 +18,7 @@ export async function GET(request: Request) {
       title: round.title,
       prompt: round.prompt,
       status: round.status,
+      reviewOpenedAt: round.reviewOpenedAt,
       problemType: resolveWarmupSandboxProblemType(round),
     },
     mySubmission: mySubmission

@@ -175,6 +175,7 @@ async function ensureColumn(d1: D1Database, table: string, column: string, sqlTy
 async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
   await ensureColumn(d1, "courses", "roster_seeded_at", "text");
   await ensureColumn(d1, "warmup_rounds", "problem_id", "text");
+  await ensureColumn(d1, "warmup_rounds", "review_opened_at", "text");
   await ensureColumn(d1, "warmup_submissions", "is_demo", "integer DEFAULT false NOT NULL");
 }
 

@@ -226,6 +226,15 @@ export const attempts = sqliteTable(
  * title/prompt against the problem bank (see
  * `resolveWarmupSandboxProblemType`), and if that also fails the sandbox is
  * simply hidden — writing an algorithm never depends on this column.
+ *
+ * `reviewOpenedAt` is a second gate layered on top of `status === "open"`:
+ * students can submit their own algorithm as soon as the round opens, but
+ * the peer-review board (/write/explore) stays locked — showing a "waiting
+ * for everyone" screen — until this is set. It's a manual teacher action
+ * (see `openWarmupReview`), not automatic on "everyone submitted", so the
+ * teacher can eyeball the roster's submission status first. Null while
+ * waiting; once set it never reverts to null (closing the round via
+ * `status` is what actually stops review activity).
  */
 export const warmupRounds = sqliteTable(
   "warmup_rounds",
@@ -239,6 +248,7 @@ export const warmupRounds = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     publishedAt: text("published_at"),
     closedAt: text("closed_at"),
+    reviewOpenedAt: text("review_opened_at"),
   },
   (table) => ({
     courseIdx: index("warmup_rounds_course_idx").on(table.courseId),

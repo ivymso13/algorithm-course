@@ -66,14 +66,27 @@ export function useWarmupSession() {
     };
   }, [loadRound]);
 
-  // Poll while waiting for teacher to publish round
+  // Poll while waiting on a teacher action: either no round has been
+  // published yet, or one has and this student has submitted but the
+  // teacher hasn't opened the review phase yet (see round.reviewOpenedAt —
+  // /write/explore shows a "waiting for everyone" screen for that case).
+  // Keyed off primitive values, not `round`/`mySubmission` themselves, so a
+  // poll tick that changes nothing meaningful doesn't tear down and restart
+  // the interval every 3.5s.
+  const roundId = round?.id ?? null;
+  const roundStatus = round?.status ?? null;
+  const reviewOpenedAt = round?.reviewOpenedAt ?? null;
+  const hasSubmission = Boolean(mySubmission);
   useEffect(() => {
-    if (checkingSession || !loggedIn || round) return;
+    if (checkingSession || !loggedIn) return;
+    const waitingForRound = roundId === null;
+    const waitingForReview = roundStatus === "open" && hasSubmission && !reviewOpenedAt;
+    if (!waitingForRound && !waitingForReview) return;
     const interval = window.setInterval(() => {
       loadRound().catch(() => {});
     }, 3500);
     return () => window.clearInterval(interval);
-  }, [checkingSession, loggedIn, round, loadRound]);
+  }, [checkingSession, loggedIn, roundId, roundStatus, reviewOpenedAt, hasSubmission, loadRound]);
 
   async function handleLogin(school: string, studentId: string) {
     setError(null);

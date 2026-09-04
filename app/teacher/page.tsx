@@ -18,9 +18,11 @@ type WarmupRoundSummary = {
   title: string;
   prompt: string;
   status: WarmupRoundStatus;
+  reviewOpenedAt: string | null;
   submissionCount: number;
   voteCount: number;
   experienceCount: number;
+  evaluatedCount: number;
 };
 
 type WarmupProblem = { id: string; title: string; prompt: string };
@@ -52,7 +54,13 @@ type DashboardStudent = {
   writeComplete: boolean;
 };
 
-type OpenWarmupRoundInfo = { id: number; title: string; submittedStudentKeys: string[] } | null;
+type OpenWarmupRoundInfo = {
+  id: number;
+  title: string;
+  reviewOpenedAt: string | null;
+  submittedStudentKeys: string[];
+  evaluatedStudentKeys: string[];
+} | null;
 
 type DashboardResponse = {
   students?: DashboardStudent[];
@@ -254,6 +262,26 @@ export default function TeacherPage() {
       if (!res.ok) throw new Error(data.error ?? "공개에 실패했습니다.");
       await loadWarmupRounds();
     }, "공개에 실패했습니다.");
+  }
+
+  async function handleOpenReview(round: WarmupRoundSummary) {
+    if (
+      !confirm(
+        `현재 ${round.submissionCount}명이 제출했습니다.\n평가 단계를 시작하면 학생들이 서로의 알고리즘을 평가할 수 있습니다. 계속할까요?`
+      )
+    )
+      return;
+    await runWarmupAction(async () => {
+      const res = await fetch("/api/teacher/warmup/review-open", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ roundId: round.id }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "평가 단계 시작에 실패했습니다.");
+      await loadWarmupRounds();
+      await loadDashboard();
+    }, "평가 단계 시작에 실패했습니다.");
   }
 
   async function handleCloseRound(roundId: number) {
@@ -716,7 +744,7 @@ export default function TeacherPage() {
             </div>
           </section>
         ) : tab === "roster" ? (
-          <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
               <span className="text-[11px] font-semibold text-slate-500 block">
                 등록 학생 수
@@ -749,6 +777,30 @@ export default function TeacherPage() {
               </span>
               <span className="text-xl sm:text-2xl font-black text-amber-600">
                 {openWarmupRound ? totalStudents - openWarmupRound.submittedStudentKeys.length : "-"}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                평가 완료
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-indigo-600">
+                {openWarmupRound?.reviewOpenedAt ? openWarmupRound.evaluatedStudentKeys.length : "-"}
+                {openWarmupRound?.reviewOpenedAt && (
+                  <span className="text-xs text-slate-400 font-medium">
+                    {" "}
+                    / {openWarmupRound.submittedStudentKeys.length}명
+                  </span>
+                )}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                평가 단계
+              </span>
+              <span className="text-sm sm:text-base font-bold text-slate-900 block">
+                {!openWarmupRound ? "-" : openWarmupRound.reviewOpenedAt ? "진행 중" : "시작 전"}
               </span>
             </div>
           </section>
@@ -979,6 +1031,21 @@ export default function TeacherPage() {
                               🚀 공개하기
                             </button>
                           )}
+                          {round.status === "open" && !round.reviewOpenedAt && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenReview(round)}
+                              disabled={warmupBusy}
+                              className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              📝 평가 단계 시작
+                            </button>
+                          )}
+                          {round.status === "open" && round.reviewOpenedAt && (
+                            <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                              🔎 평가 진행 중 {round.evaluatedCount}/{round.submissionCount}명
+                            </span>
+                          )}
                           {round.status === "open" && (
                             <button
                               type="button"
@@ -1204,12 +1271,14 @@ export default function TeacherPage() {
                     <th className="p-3 w-20">학번</th>
                     <th className="p-3 w-24">이름</th>
                     {openWarmupRound && <th className="p-3 w-20 text-center">제출</th>}
+                    {openWarmupRound?.reviewOpenedAt && <th className="p-3 w-20 text-center">평가</th>}
                     <th className="p-3 w-28 text-right">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRoster.map((s) => {
                     const submitted = openWarmupRound?.submittedStudentKeys.includes(s.studentKey) ?? false;
+                    const evaluated = openWarmupRound?.evaluatedStudentKeys.includes(s.studentKey) ?? false;
                     const isEditing = editingId === s.id;
                     return (
                       <tr key={s.studentKey} className="hover:bg-slate-50/80 transition">
@@ -1249,6 +1318,7 @@ export default function TeacherPage() {
                               />
                             </td>
                             {openWarmupRound && <td className="p-2" />}
+                            {openWarmupRound?.reviewOpenedAt && <td className="p-2" />}
                             <td className="p-2 text-right whitespace-nowrap">
                               <button
                                 type="button"
@@ -1284,6 +1354,17 @@ export default function TeacherPage() {
                                 </span>
                               </td>
                             )}
+                            {openWarmupRound?.reviewOpenedAt && (
+                              <td className="p-3 text-center">
+                                <span
+                                  className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                    evaluated ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  {evaluated ? "✓ 완료" : "대기"}
+                                </span>
+                              </td>
+                            )}
                             <td className="p-3 text-right whitespace-nowrap">
                               <button
                                 type="button"
@@ -1309,7 +1390,10 @@ export default function TeacherPage() {
                   })}
                   {filteredRoster.length === 0 && (
                     <tr>
-                      <td colSpan={openWarmupRound ? 5 : 4} className="p-6 text-center text-slate-400">
+                      <td
+                        colSpan={openWarmupRound ? (openWarmupRound.reviewOpenedAt ? 6 : 5) : 4}
+                        className="p-6 text-center text-slate-400"
+                      >
                         검색 결과가 없습니다.
                       </td>
                     </tr>

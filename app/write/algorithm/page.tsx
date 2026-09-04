@@ -442,15 +442,6 @@ export default function AlgorithmWritePage() {
                         ? "수정 내용 저장하고 아이디어 보드로 이동 ➔"
                         : "알고리즘 제출하고 아이디어 보드로 이동 ➔"}
                     </button>
-
-                    {hasSubmitted && (
-                      <a
-                        href="/write/explore"
-                        className="w-full sm:w-auto rounded-xl border border-slate-300 bg-white py-3 px-4 text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition text-center"
-                      >
-                        아이디어 보드로 건너뛰기 ➔
-                      </a>
-                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 text-center py-2">

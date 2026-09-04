@@ -4,6 +4,7 @@ import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from 
 import { ensureDemoSubmissionsForRound } from "@/lib/warmupDemoSubmissions";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
+import { fullyEvaluatedStudentKeys } from "@/lib/warmupEvaluation";
 import {
   assertWarmupRoundDeletable,
   assertWarmupRoundExists,
@@ -46,22 +47,43 @@ export async function getOpenWarmupRound(courseId: number) {
 
 /**
  * The currently open round (if any) plus which students have already
- * submitted to it — the roster tab's only need from the warm-up domain, kept
- * separate from `teacherWarmupRoundDetail` (which also loads votes/
- * experiences/full algorithm text, unnecessary for a submitted/not-submitted
- * column).
+ * submitted to it, and which have fully evaluated the peer-review board
+ * (see `fullyEvaluatedStudentKeys`) — the roster tab's only need from the
+ * warm-up domain, kept separate from `teacherWarmupRoundDetail` (which also
+ * loads full algorithm text/per-submission feedback, unnecessary for a
+ * submitted/evaluated status column).
  */
 export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
   const round = await getOpenWarmupRound(courseId);
   if (!round) return null;
 
   const db = await getDb();
-  const rows = await db
-    .select({ studentKey: warmupSubmissions.studentKey })
-    .from(warmupSubmissions)
-    .where(and(eq(warmupSubmissions.roundId, round.id), eq(warmupSubmissions.isDemo, false)));
+  const [submissionRows, voteRows] = await Promise.all([
+    // Demo cards are included here (unlike the filtered `submittedStudentKeys`
+    // below) because evaluation completeness needs the full peer set — a real
+    // student's board includes demo cards too, so those count as peers they
+    // must evaluate.
+    db
+      .select({
+        id: warmupSubmissions.id,
+        studentKey: warmupSubmissions.studentKey,
+        isDemo: warmupSubmissions.isDemo,
+      })
+      .from(warmupSubmissions)
+      .where(eq(warmupSubmissions.roundId, round.id)),
+    db
+      .select({ submissionId: warmupVotes.submissionId, voterStudentKey: warmupVotes.voterStudentKey })
+      .from(warmupVotes)
+      .where(eq(warmupVotes.roundId, round.id)),
+  ]);
 
-  return { id: round.id, title: round.title, submittedStudentKeys: rows.map((r) => r.studentKey) };
+  return {
+    id: round.id,
+    title: round.title,
+    reviewOpenedAt: round.reviewOpenedAt,
+    submittedStudentKeys: submissionRows.filter((r) => !r.isDemo).map((r) => r.studentKey),
+    evaluatedStudentKeys: fullyEvaluatedStudentKeys(submissionRows, voteRows),
+  };
 }
 
 function countByRound<T extends { roundId: number }>(rows: T[]): Map<number, number> {
@@ -81,30 +103,50 @@ export async function listWarmupRoundsForCourse(courseId: number) {
 
   const ids = rounds.map((r) => r.id);
   const [submissionRows, voteRows, experienceRows] = await Promise.all([
-    // Demo example cards aren't real student submissions — excluded here so
-    // this count keeps meaning "how many students wrote their own algorithm".
-    // Votes/experiences a real student casts on a demo card ARE real
-    // engagement, so those two counts below are not filtered.
+    // Demo example cards aren't real student submissions — excluded from
+    // `submissionCounts` below so that count keeps meaning "how many
+    // students wrote their own algorithm". They're still real peers a
+    // student must evaluate though, so the full (unfiltered) rows are kept
+    // around for `fullyEvaluatedStudentKeys`. Votes/experiences a real
+    // student casts on a demo card ARE real engagement, so those two counts
+    // are not filtered either.
     db
-      .select({ roundId: warmupSubmissions.roundId })
+      .select({
+        roundId: warmupSubmissions.roundId,
+        id: warmupSubmissions.id,
+        studentKey: warmupSubmissions.studentKey,
+        isDemo: warmupSubmissions.isDemo,
+      })
       .from(warmupSubmissions)
-      .where(and(inArray(warmupSubmissions.roundId, ids), eq(warmupSubmissions.isDemo, false))),
-    db.select({ roundId: warmupVotes.roundId }).from(warmupVotes).where(inArray(warmupVotes.roundId, ids)),
+      .where(inArray(warmupSubmissions.roundId, ids)),
+    db
+      .select({
+        roundId: warmupVotes.roundId,
+        submissionId: warmupVotes.submissionId,
+        voterStudentKey: warmupVotes.voterStudentKey,
+      })
+      .from(warmupVotes)
+      .where(inArray(warmupVotes.roundId, ids)),
     db
       .select({ roundId: warmupExperiences.roundId })
       .from(warmupExperiences)
       .where(inArray(warmupExperiences.roundId, ids)),
   ]);
-  const submissionCounts = countByRound(submissionRows);
+  const submissionCounts = countByRound(submissionRows.filter((r) => !r.isDemo));
   const voteCounts = countByRound(voteRows);
   const experienceCounts = countByRound(experienceRows);
 
-  return rounds.map((round) => ({
-    ...round,
-    submissionCount: submissionCounts.get(round.id) ?? 0,
-    voteCount: voteCounts.get(round.id) ?? 0,
-    experienceCount: experienceCounts.get(round.id) ?? 0,
-  }));
+  return rounds.map((round) => {
+    const roundSubmissions = submissionRows.filter((r) => r.roundId === round.id);
+    const roundVotes = voteRows.filter((v) => v.roundId === round.id);
+    return {
+      ...round,
+      submissionCount: submissionCounts.get(round.id) ?? 0,
+      voteCount: voteCounts.get(round.id) ?? 0,
+      experienceCount: experienceCounts.get(round.id) ?? 0,
+      evaluatedCount: fullyEvaluatedStudentKeys(roundSubmissions, roundVotes).length,
+    };
+  });
 }
 
 export async function publishWarmupRound(id: number, courseId: number) {
@@ -135,6 +177,27 @@ export async function closeWarmupRound(id: number, courseId: number) {
   const [updated] = await db
     .update(warmupRounds)
     .set({ status: "closed", closedAt: new Date().toISOString() })
+    .where(eq(warmupRounds.id, id))
+    .returning();
+  return updated;
+}
+
+/**
+ * Manually opens the round's peer-review board for everyone who's
+ * submitted — a teacher action taken after eyeballing the roster's
+ * submission status, not an automatic "everyone submitted" trigger. Once
+ * open it stays open (idempotent: a second call is a no-op) until the round
+ * itself closes.
+ */
+export async function openWarmupReview(id: number, courseId: number) {
+  const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
+  if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드만 평가 단계를 열 수 있습니다");
+  if (round.reviewOpenedAt) return round;
+
+  const db = await getDb();
+  const [updated] = await db
+    .update(warmupRounds)
+    .set({ reviewOpenedAt: new Date().toISOString() })
     .where(eq(warmupRounds.id, id))
     .returning();
   return updated;
@@ -332,6 +395,7 @@ export async function toggleWarmupVote(input: {
   const round = await getWarmupRound(submission.roundId);
   if (!round || round.courseId !== input.voterCourseId) throw new Error("제출을 찾을 수 없습니다");
   if (round.status !== "open") throw new WarmupStateError("현재 진행 중인 라운드가 아닙니다");
+  if (!round.reviewOpenedAt) throw new WarmupStateError("아직 평가 단계가 시작되지 않았습니다");
 
   const [existing] = await db
     .select()
@@ -410,6 +474,7 @@ export async function upsertWarmupExperience(input: {
   const round = await getWarmupRound(submission.roundId);
   if (!round || round.courseId !== input.executorCourseId) throw new Error("제출을 찾을 수 없습니다");
   if (round.status !== "open") throw new WarmupStateError("현재 진행 중인 라운드가 아닙니다");
+  if (!round.reviewOpenedAt) throw new WarmupStateError("아직 평가 단계가 시작되지 않았습니다");
 
   const totalSteps = splitAlgorithmIntoSteps(submission.algorithmText).length;
   const checkedSteps = sanitizeCheckedSteps(input.checkedSteps, totalSteps);
