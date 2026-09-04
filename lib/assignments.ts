@@ -1,10 +1,13 @@
 /**
- * Hardcoded student -> problem-type assignment, per spec section 1.
+ * Pure problem-type-assignment logic + the one-time seed data for the class
+ * roster, per spec section 1.
  *
- * Edit ROSTER below with the real class list before a session. Everything
- * else (the write/execute pairing) is derived automatically so the
- * "write 2 types" / "execute the complementary 2 types" guarantee always
- * holds, no matter how many students are on the roster.
+ * The roster itself now lives in the `roster` D1 table (see `lib/roster.ts`)
+ * so a teacher can add/edit/remove students at runtime — `DEFAULT_ROSTER`
+ * below is only the seed used to populate that table the first time a course
+ * is used, so existing deployments keep their current class list unchanged.
+ * Everything here has no DB dependency, so it stays synchronous and directly
+ * unit-testable.
  */
 
 export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake"] as const;
@@ -13,8 +16,10 @@ export type ProblemType = (typeof PROBLEM_TYPES)[number];
 export type Roster = { school: string; studentId: string; name: string }[];
 
 export type Assignment = {
+  id: number;
   studentId: string;
   name: string;
+  school: string;
   studentKey: string;
   write: [ProblemType, ProblemType];
   execute: [ProblemType, ProblemType];
@@ -33,8 +38,25 @@ const COMBOS: [[ProblemType, ProblemType], [ProblemType, ProblemType]][] = [
   [["josephus", "pancake"], ["12coins", "card"]],
 ];
 
-/** Class roster. Names are masked for privacy; phone numbers are never stored. */
-export const ROSTER: Roster = [
+/**
+ * Every roster row gets a permanent `sortOrder` the moment it's created
+ * (see `lib/roster.ts`), and a student's write/execute pair is derived only
+ * from their own `sortOrder` — never from their position among currently
+ * active students. That's what makes assignment stable: adding, editing, or
+ * removing *other* students can never reshuffle a student's own pairing.
+ * Pairs of two consecutive sortOrders share a combo (matching the spec's
+ * example table: students 1-2 share a combo, 3-4 share the next, ...).
+ */
+export function comboForSortOrder(sortOrder: number): {
+  write: [ProblemType, ProblemType];
+  execute: [ProblemType, ProblemType];
+} {
+  const combo = COMBOS[Math.floor(sortOrder / 2) % COMBOS.length];
+  return { write: combo[0], execute: combo[1] };
+}
+
+/** Seed roster, applied once per course. Names are masked for privacy; phone numbers are never stored. */
+export const DEFAULT_ROSTER: Roster = [
   { school: "경기스마트고", studentId: "10118", name: "전OO" },
   { school: "서해고", studentId: "10401", name: "강OO" },
   { school: "서해고", studentId: "10403", name: "김OO" },
@@ -55,33 +77,4 @@ export const ROSTER: Roster = [
 
 export function studentKeyOf(studentId: string, name: string): string {
   return `${studentId.trim()} ${name.trim()}`;
-}
-
-function buildAssignments(roster: Roster): Map<string, Assignment> {
-  const map = new Map<string, Assignment>();
-  roster.forEach((student, index) => {
-    // Pair students up 2-by-2 onto each combo (matching the spec's example
-    // table: students 1-2 share a combo, 3-4 share the next, ...), instead
-    // of cycling combos one student at a time.
-    const combo = COMBOS[Math.floor(index / 2) % COMBOS.length];
-    const studentKey = studentKeyOf(student.studentId, student.name);
-    map.set(studentKey, {
-      studentId: student.studentId,
-      name: student.name,
-      studentKey,
-      write: combo[0],
-      execute: combo[1],
-    });
-  });
-  return map;
-}
-
-export const ASSIGNMENTS = buildAssignments(ROSTER);
-
-export function getAssignment(studentKey: string): Assignment | undefined {
-  return ASSIGNMENTS.get(studentKey);
-}
-
-export function listAssignments(): Assignment[] {
-  return Array.from(ASSIGNMENTS.values());
 }

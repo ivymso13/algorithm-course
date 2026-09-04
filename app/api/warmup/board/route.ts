@@ -1,4 +1,5 @@
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { ensureDemoSubmissionsForRound } from "@/lib/warmupDemoSubmissions";
 import { getMyWarmupSubmission, getOpenWarmupRound, listBoardSubmissions } from "@/lib/warmupStore";
 
 /** The anonymous board — unlocked only once the caller has submitted to the open round. */
@@ -13,6 +14,13 @@ export async function GET(request: Request) {
   if (!mySubmission) {
     return Response.json({ error: "먼저 알고리즘을 제출해야 보드를 볼 수 있습니다" }, { status: 403 });
   }
+  if (!round.reviewOpenedAt) {
+    return Response.json({ error: "아직 평가 단계가 시작되지 않았습니다" }, { status: 403 });
+  }
+
+  // Safety net for a round that was published before this feature existed —
+  // idempotent, so this is a no-op once the round already has its examples.
+  await ensureDemoSubmissionsForRound(round);
 
   const entries = await listBoardSubmissions(round.id, session.studentKey);
   return Response.json({ entries });

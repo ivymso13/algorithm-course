@@ -1,0 +1,1 @@
+ALTER TABLE `warmup_submissions` ADD `is_demo` integer DEFAULT false NOT NULL;

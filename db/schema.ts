@@ -18,6 +18,11 @@ export const courses = sqliteTable(
     activatedAt: text("activated_at"),
     retentionDays: integer("retention_days").notNull().default(90),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    // Set once, the first time this course's roster is seeded from
+    // DEFAULT_ROSTER (see lib/roster.ts). Deliberately independent of the
+    // roster table's current row count — a teacher emptying the roster later
+    // must never cause it to silently reseed the old default students.
+    rosterSeededAt: text("roster_seeded_at"),
   },
   (table) => ({
     codeIdx: uniqueIndex("courses_code_idx").on(table.code),
@@ -25,12 +30,63 @@ export const courses = sqliteTable(
 );
 
 /**
+ * The teacher-editable class roster (school/student ID/name) — the source of
+ * truth for problem-type assignment (see `lib/roster.ts`). Seeded once per
+ * course from `lib/assignments.ts`'s `DEFAULT_ROSTER` so existing deployments
+ * keep their roster unchanged after this table was introduced.
+ *
+ * `sortOrder` is assigned once at creation and never reused or renumbered —
+ * write/execute problem-type pairing is derived from it (see
+ * `comboForSortOrder`), so editing or deleting *other* students can never
+ * reshuffle a student's own assignment. `active=false` is a soft delete: used
+ * instead of a hard delete whenever the student already has submissions/
+ * votes/attempts, so that data is never orphaned or lost (see
+ * `lib/roster.ts`'s `deleteRosterStudent`).
+ *
+ * The (course_id, school, student_id) and (course_id, student_key) indexes
+ * are UNIQUE — across every row, active or deactivated — not just to keep
+ * two *active* students from colliding, but to stop a student ID/identity
+ * that already has real history from ever being handed to a different row
+ * (see `lib/rosterGuards.ts`'s `assertNoDuplicateStudentId`). They also
+ * close the concurrent-request race an app-level check alone can't: two
+ * simultaneous adds/edits for the same identity now fail at the DB layer,
+ * which `lib/roster.ts` normalizes back into the same RosterDuplicateError.
+ *
+ * (school, student_id) — not student_id alone — is the actual student login
+ * identifier (see `app/api/student/login/route.ts`): two different schools
+ * may legitimately share a student ID, so uniqueness is scoped per school.
+ */
+export const roster = sqliteTable(
+  "roster",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    courseId: integer("course_id").notNull(),
+    school: text("school").notNull(),
+    studentId: text("student_id").notNull(),
+    name: text("name").notNull(),
+    studentKey: text("student_key").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    courseIdx: index("roster_course_idx").on(table.courseId),
+    courseStudentKeyIdx: uniqueIndex("roster_course_student_key_unique_idx").on(table.courseId, table.studentKey),
+    courseSchoolStudentIdIdx: uniqueIndex("roster_course_school_student_id_unique_idx").on(
+      table.courseId,
+      table.school,
+      table.studentId
+    ),
+  })
+);
+
+/**
  * A student who has actually logged into a course (course code + student ID
- * + name, all matched against `lib/assignments.ts`'s hardcoded roster/
- * assignment table). This is a login/consent record, not the source of
- * truth for problem-type assignment — `lib/assignments.ts` keeps that role
- * unchanged. `studentKey` mirrors the `"{studentId} {name}"` format already
- * used as the foreign key on submissions/attempts.
+ * + name, matched against the `roster` table). This is a login/consent
+ * record, not the source of truth for problem-type assignment — `roster`
+ * keeps that role. `studentKey` mirrors the `"{studentId} {name}"` format
+ * already used as the foreign key on submissions/attempts.
  */
 export const students = sqliteTable(
   "students",
@@ -159,7 +215,27 @@ export const attempts = sqliteTable(
 // a time (§courses no longer needs a stage2 gate for this flow).
 // ---------------------------------------------------------------------------
 
-/** One teacher-authored warm-up problem. `status`: draft -> open -> closed. */
+/**
+ * One teacher-authored warm-up problem. `status`: draft -> open -> closed.
+ *
+ * `problemId` is the source `WARMUP_PROBLEMS` entry (see
+ * lib/warmupProblems.ts) this round was created from — nullable because
+ * rounds created before this column existed have none. It's how the student
+ * write page safely knows which interactive sandbox (if any) matches the
+ * currently open round; a null value falls back to matching the round's
+ * title/prompt against the problem bank (see
+ * `resolveWarmupSandboxProblemType`), and if that also fails the sandbox is
+ * simply hidden — writing an algorithm never depends on this column.
+ *
+ * `reviewOpenedAt` is a second gate layered on top of `status === "open"`:
+ * students can submit their own algorithm as soon as the round opens, but
+ * the peer-review board (/write/explore) stays locked — showing a "waiting
+ * for everyone" screen — until this is set. It's a manual teacher action
+ * (see `openWarmupReview`), not automatic on "everyone submitted", so the
+ * teacher can eyeball the roster's submission status first. Null while
+ * waiting; once set it never reverts to null (closing the round via
+ * `status` is what actually stops review activity).
+ */
 export const warmupRounds = sqliteTable(
   "warmup_rounds",
   {
@@ -167,10 +243,12 @@ export const warmupRounds = sqliteTable(
     courseId: integer("course_id").notNull(),
     title: text("title").notNull(),
     prompt: text("prompt").notNull(),
+    problemId: text("problem_id"),
     status: text("status").notNull().default("draft"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     publishedAt: text("published_at"),
     closedAt: text("closed_at"),
+    reviewOpenedAt: text("review_opened_at"),
   },
   (table) => ({
     courseIdx: index("warmup_rounds_course_idx").on(table.courseId),
@@ -181,6 +259,15 @@ export const warmupRounds = sqliteTable(
  * One student's algorithm for one round. `anonLabel` (e.g. "참가자 3") is
  * the only identity shown to peers on the board — `studentId`/`studentName`
  * stay in the row for the teacher-only detail view.
+ *
+ * `isDemo` marks a source-controlled example submission seeded by
+ * `lib/warmupDemoSubmissions.ts` so the vote/experience flow can be tried
+ * with a full board even before any real student has submitted. It's a
+ * regular row in this same table (so voting/experience code needs no
+ * special-casing and round deletion's existing cascade covers it for free)
+ * — the flag exists purely so roster/participation-facing queries
+ * (submitted-student-key lists, submission counts, anon-label numbering)
+ * can exclude it and never mistake a demo card for a real student's work.
  */
 export const warmupSubmissions = sqliteTable(
   "warmup_submissions",
@@ -192,6 +279,7 @@ export const warmupSubmissions = sqliteTable(
     studentName: text("student_name").notNull(),
     anonLabel: text("anon_label").notNull(),
     algorithmText: text("algorithm_text").notNull(),
+    isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

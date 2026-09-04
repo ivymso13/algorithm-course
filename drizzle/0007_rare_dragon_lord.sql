@@ -1,0 +1,1 @@
+ALTER TABLE `warmup_rounds` ADD `problem_id` text;

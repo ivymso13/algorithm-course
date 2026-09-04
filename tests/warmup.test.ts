@@ -7,6 +7,65 @@ import {
   WARMUP_VOTE_TYPES,
 } from "../lib/warmupMeta.ts";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "../lib/warmupSteps.ts";
+import {
+  getWarmupProblem,
+  resolveWarmupSandboxProblemType,
+  WARMUP_PROBLEM_SANDBOX_TYPES,
+  WARMUP_PROBLEMS,
+} from "../lib/warmupProblems.ts";
+import {
+  assertWarmupRoundDeletable,
+  assertWarmupRoundExists,
+  WarmupNotFoundError,
+  WarmupStateError,
+} from "../lib/warmupRoundGuards.ts";
+
+test("source problem bank exposes unique, complete problems", () => {
+  assert.ok(WARMUP_PROBLEMS.length > 0);
+  assert.equal(new Set(WARMUP_PROBLEMS.map((problem) => problem.id)).size, WARMUP_PROBLEMS.length);
+  for (const problem of WARMUP_PROBLEMS) {
+    assert.ok(problem.title.length >= 2);
+    assert.ok(problem.prompt.length >= 10);
+    assert.equal(getWarmupProblem(problem.id), problem);
+  }
+  assert.equal(getWarmupProblem("unknown"), undefined);
+});
+
+test("WARMUP_PROBLEM_SANDBOX_TYPES: every problem bank entry maps to exactly the intended sandbox", () => {
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["fake-coin"], "12coins");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["hidden-card"], "card");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["josephus"], "josephus");
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["pancake-sort"], "pancake");
+  // Every bank entry must have a mapping — a future problem added without
+  // one would otherwise blow up resolveWarmupSandboxProblemType silently.
+  for (const problem of WARMUP_PROBLEMS) {
+    assert.ok(WARMUP_PROBLEM_SANDBOX_TYPES[problem.id], `missing sandbox mapping for ${problem.id}`);
+  }
+});
+
+test("resolveWarmupSandboxProblemType: resolves by problemId when present", () => {
+  const round = { problemId: "josephus", title: "다른 제목", prompt: "다른 설명" };
+  assert.equal(resolveWarmupSandboxProblemType(round), "josephus");
+});
+
+test("resolveWarmupSandboxProblemType: falls back to matching title/prompt when problemId is null (legacy rounds)", () => {
+  const bank = WARMUP_PROBLEMS.find((p) => p.id === "pancake-sort")!;
+  const byTitle = { problemId: null, title: bank.title, prompt: "수정된 설명" };
+  const byPrompt = { problemId: null, title: "수정된 제목", prompt: bank.prompt };
+  assert.equal(resolveWarmupSandboxProblemType(byTitle), "pancake");
+  assert.equal(resolveWarmupSandboxProblemType(byPrompt), "pancake");
+});
+
+test("resolveWarmupSandboxProblemType: returns null when nothing matches — sandbox hidden, writing unaffected", () => {
+  const round = { problemId: null, title: "완전히 새로운 자유 문제", prompt: "교사가 직접 지어낸 설명" };
+  assert.equal(resolveWarmupSandboxProblemType(round), null);
+});
+
+test("resolveWarmupSandboxProblemType: an unknown problemId still falls back to title/prompt matching", () => {
+  const bank = WARMUP_PROBLEMS.find((p) => p.id === "hidden-card")!;
+  const round = { problemId: "deleted-from-bank", title: bank.title, prompt: bank.prompt };
+  assert.equal(resolveWarmupSandboxProblemType(round), "card");
+});
 
 test("WARMUP_VOTE_TYPES: exactly the 4 spec'd recommendation types, each with a short label and icon", () => {
   assert.equal(WARMUP_VOTE_TYPES.length, 4);
@@ -42,4 +101,48 @@ test("sanitizeCheckedSteps: drops out-of-range, non-integer, and non-array input
   assert.deepEqual(sanitizeCheckedSteps([-1, 3, 1.5, "1", null, 1], 3), [1]);
   assert.deepEqual(sanitizeCheckedSteps("not-an-array", 3), []);
   assert.deepEqual(sanitizeCheckedSteps(undefined, 3), []);
+});
+
+test("assertWarmupRoundDeletable: blocks open rounds (must close before deleting)", () => {
+  assert.throws(
+    () => assertWarmupRoundDeletable({ courseId: 1, status: "open" }, 1),
+    WarmupStateError
+  );
+});
+
+test("assertWarmupRoundDeletable: allows draft and closed rounds", () => {
+  assert.doesNotThrow(() => assertWarmupRoundDeletable({ courseId: 1, status: "draft" }, 1));
+  assert.doesNotThrow(() => assertWarmupRoundDeletable({ courseId: 1, status: "closed" }, 1));
+});
+
+test("assertWarmupRoundDeletable: rejects a round belonging to a different course (ownership)", () => {
+  assert.throws(() => assertWarmupRoundDeletable({ courseId: 2, status: "draft" }, 1), WarmupNotFoundError);
+  assert.throws(() => assertWarmupRoundDeletable({ courseId: 2, status: "closed" }, 1), WarmupNotFoundError);
+});
+
+test("assertWarmupRoundDeletable: rejects a missing round the same way as an ownership mismatch", () => {
+  assert.throws(() => assertWarmupRoundDeletable(null, 1), WarmupNotFoundError);
+});
+
+test("assertWarmupRoundDeletable: an open round owned by someone else still reports 'not found', not the open-state message", () => {
+  // Ownership must be checked before/independent of state, so a cross-course
+  // probe against an open round can't be used to fingerprint its status: it
+  // must throw WarmupNotFoundError, never WarmupStateError.
+  assert.throws(() => assertWarmupRoundDeletable({ courseId: 2, status: "open" }, 1), WarmupNotFoundError);
+});
+
+// assertWarmupRoundExists backs publish/close/delete alike, so publish and
+// close inherit the same not-found/ownership behavior tested here without
+// needing a live round-lifecycle DB test.
+test("assertWarmupRoundExists: returns the round when it exists and is owned by the course", () => {
+  const round = { courseId: 1, status: "draft", title: "t" };
+  assert.equal(assertWarmupRoundExists(round, 1), round);
+});
+
+test("assertWarmupRoundExists: rejects a missing round", () => {
+  assert.throws(() => assertWarmupRoundExists(null, 1), WarmupNotFoundError);
+});
+
+test("assertWarmupRoundExists: rejects a round belonging to a different course (ownership)", () => {
+  assert.throws(() => assertWarmupRoundExists({ courseId: 2, status: "open" }, 1), WarmupNotFoundError);
 });

@@ -14,6 +14,7 @@ const STUDENT_ID_PATTERN = /^[A-Za-z0-9]{1,20}$/;
 // transliterated names) — long enough for real names, short enough to block
 // pasted-in essays.
 const NAME_PATTERN = /^[A-Za-zㄱ-ㆎ가-힣·\s]{1,20}$/;
+const SCHOOL_PATTERN = /^[A-Za-zㄱ-ㆎ가-힣0-9·\s-]{1,40}$/;
 
 export const ALGORITHM_TEXT_MIN_LENGTH = 10;
 export const ALGORITHM_TEXT_MAX_LENGTH = 4000;
@@ -40,6 +41,14 @@ export function validateName(value: unknown): string {
   const trimmed = requireString(value, "이름");
   if (!NAME_PATTERN.test(trimmed)) {
     throw new ValidationError("이름 형식이 올바르지 않습니다 (한글/영문 1~20자)");
+  }
+  return trimmed;
+}
+
+export function validateSchool(value: unknown): string {
+  const trimmed = requireString(value, "학교");
+  if (!SCHOOL_PATTERN.test(trimmed)) {
+    throw new ValidationError("학교 형식이 올바르지 않습니다 (한글/영문/숫자 1~40자)");
   }
   return trimmed;
 }

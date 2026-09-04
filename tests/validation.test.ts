@@ -14,6 +14,7 @@ import {
   validateName,
   validateRoundPrompt,
   validateRoundTitle,
+  validateSchool,
   validateStudentId,
   validateUnexecutableReason,
   validateWarmupFeedback,
@@ -46,6 +47,14 @@ test("validateName: accepts Korean/Latin names, rejects overlong or symbol-laden
   assert.throws(() => validateName("a".repeat(21)), ValidationError);
   assert.throws(() => validateName("<script>"), ValidationError);
   assert.throws(() => validateName("홍길동1"), ValidationError);
+});
+
+test("validateSchool: accepts Korean/Latin school names, rejects overlong or symbol-laden input", () => {
+  assert.equal(validateSchool(" 정왕고 "), "정왕고");
+  assert.equal(validateSchool("Seoul High School"), "Seoul High School");
+  assert.throws(() => validateSchool("a".repeat(41)), ValidationError);
+  assert.throws(() => validateSchool("<script>"), ValidationError);
+  assert.throws(() => validateSchool(""), ValidationError);
 });
 
 test("validateAlgorithmText: enforces the min/max length window", () => {

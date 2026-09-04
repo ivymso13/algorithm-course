@@ -14,20 +14,27 @@ interface ProblemSandboxContainerProps {
   /** Larger text/buttons for projecting to a whole classroom, and skips the
    * write-page-oriented header chrome (the caller supplies its own). */
   presentationMode?: boolean;
+  /** Initial collapsed/expanded state (non-presentation mode only). Defaults
+   * to open; the write page starts it collapsed so the extra practice step
+   * doesn't push the algorithm textarea too far down on mobile. */
+  defaultOpen?: boolean;
+  className?: string;
 }
 
 export function ProblemSandboxContainer({
   problemType,
   onCopyHistory,
   presentationMode = false,
+  defaultOpen = true,
+  className,
 }: ProblemSandboxContainerProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   const label = PROBLEM_LABELS[problemType];
   const icon = PROBLEM_ICONS[problemType];
 
   const body = (
-    <div className={presentationMode ? "p-2 sm:p-3" : "p-4 sm:p-5"}>
+    <div className={`overflow-y-auto ${presentationMode ? "p-2 sm:p-3" : "p-3.5 sm:p-4"} ${className ? "flex-1 min-h-0" : ""}`}>
       {problemType === "12coins" && (
         <CoinsSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
@@ -49,13 +56,13 @@ export function ProblemSandboxContainer({
   if (presentationMode) {
     // No collapsible/write-page header here — the teacher page already
     // renders its own heading and description above this component.
-    return <section className="rounded-2xl border border-blue-200 bg-white shadow-xs">{body}</section>;
+    return <section className={`rounded-2xl border border-blue-200 bg-white shadow-xs ${className ?? ""}`}>{body}</section>;
   }
 
   return (
-    <section className="rounded-2xl border border-blue-200 bg-white shadow-xs overflow-hidden">
+    <section className={`rounded-2xl border border-blue-200 bg-white shadow-xs overflow-hidden ${className ?? ""}`}>
       {/* Container Header */}
-      <div className="flex flex-wrap items-center justify-between border-b border-blue-100 bg-linear-to-r from-blue-50/70 via-indigo-50/50 to-white px-4 py-3 gap-2">
+      <div className="flex flex-wrap items-center justify-between border-b border-blue-100 bg-linear-to-r from-blue-50/70 via-indigo-50/50 to-white px-4 py-3 gap-2 shrink-0">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-sm text-white shadow-2xs">
             {icon}

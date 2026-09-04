@@ -1,6 +1,6 @@
-import { getAssignment } from "@/lib/assignments";
 import { generateInstance } from "@/lib/problems";
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { getAssignment } from "@/lib/roster";
 import { upsertSubmission, writePhaseSnapshot } from "@/lib/store";
 import { ValidationError, validateAlgorithmText } from "@/lib/validation";
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "problemType이 필요합니다" }, { status: 400 });
   }
 
-  const assignment = getAssignment(session.studentKey);
+  const assignment = await getAssignment(session.courseId, session.studentKey);
   if (!assignment) {
     return Response.json({ error: "알 수 없는 학생입니다" }, { status: 404 });
   }
@@ -52,6 +52,6 @@ export async function POST(request: Request) {
     exampleInput,
   });
 
-  const snapshot = await writePhaseSnapshot(session.studentKey);
+  const snapshot = await writePhaseSnapshot(session.studentKey, session.courseId);
   return Response.json({ ok: true, studentKey: session.studentKey, ...snapshot });
 }

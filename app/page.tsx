@@ -27,16 +27,6 @@ const mainCards = [
     actionText: "체험하러 가기 ➔",
     buttonClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
   },
-  {
-    href: "/teacher",
-    badge: "교사용",
-    badgeColor: "bg-slate-800 text-white border-slate-700",
-    title: "교사용 관리 대시보드",
-    subtitle: "워밍업 문제 생성·공개·종료",
-    icon: "📊",
-    actionText: "교사용 화면 입장 ➔",
-    buttonClass: "bg-slate-900 hover:bg-slate-800 text-white",
-  },
 ];
 
 export default function Home() {
@@ -61,8 +51,8 @@ export default function Home() {
           </p>
         </section>
 
-        {/* 3 Core Workflow Cards */}
-        <section className="grid gap-6 md:grid-cols-3">
+        {/* Student workflow cards */}
+        <section className="grid gap-6 sm:grid-cols-2">
           {mainCards.map((card) => (
             <div
               key={card.href}

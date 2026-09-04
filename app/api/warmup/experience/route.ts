@@ -1,5 +1,5 @@
-import { getAssignment } from "@/lib/assignments";
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { getAssignment } from "@/lib/roster";
 import { ValidationError, validateWarmupFeedback } from "@/lib/validation";
 import {
   getBoardSubmissionForViewer,
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  const assignment = getAssignment(session.studentKey);
+  const assignment = await getAssignment(session.courseId, session.studentKey);
   if (!assignment) return Response.json({ error: "알 수 없는 학생입니다" }, { status: 404 });
 
   try {

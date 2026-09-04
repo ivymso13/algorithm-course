@@ -100,13 +100,13 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
             <a
               href="/teacher"
               aria-current={pathname.startsWith("/teacher") ? "page" : undefined}
-              className={`rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:outline-hidden ${
+              className={`rounded-md px-1.5 py-1 text-[10px] font-medium transition focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:outline-hidden ${
                 pathname.startsWith("/teacher")
                   ? "bg-slate-900 text-white font-bold shadow-2xs"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               }`}
             >
-              교사용
+              교사
             </a>
 
             {/* Desktop Student Session Badge & Logout */}

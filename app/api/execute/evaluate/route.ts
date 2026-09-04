@@ -1,10 +1,10 @@
-import { getAssignment } from "@/lib/assignments";
 import {
   EvaluationValidationError,
   parseOptionalRating,
   parseOptionalSubjectiveFeedback,
 } from "@/lib/evaluationValidation";
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { getAssignment } from "@/lib/roster";
 import {
   getAttemptAlgorithmText,
   getOwnedAttempt,
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const attempt = await submitEvaluation(attemptId, session.studentKey, evaluation);
     const algorithmText = await getAttemptAlgorithmText(attempt);
 
-    const assignment = getAssignment(session.studentKey);
+    const assignment = await getAssignment(session.courseId, session.studentKey);
     const remaining = assignment
       ? assignment.execute.filter((t) => t !== attempt.problemType)
       : [];

@@ -1,6 +1,6 @@
 import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/teacherAuth";
 import { getOrCreateDefaultCourse } from "@/lib/store";
-import { closeWarmupRound, WarmupStateError } from "@/lib/warmupStore";
+import { closeWarmupRound, WarmupNotFoundError, WarmupStateError } from "@/lib/warmupStore";
 
 export async function POST(request: Request) {
   if (!isAuthorizedRequest(request)) return unauthorizedResponse();
@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     const round = await closeWarmupRound(roundId, course.id);
     return Response.json({ round });
   } catch (error) {
-    if (error instanceof WarmupStateError) return Response.json({ error: error.message }, { status: 400 });
-    return Response.json({ error: "라운드를 찾을 수 없습니다" }, { status: 404 });
+    if (error instanceof WarmupNotFoundError) return Response.json({ error: error.message }, { status: 404 });
+    if (error instanceof WarmupStateError) return Response.json({ error: error.message }, { status: 409 });
+    throw error;
   }
 }

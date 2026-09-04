@@ -5,6 +5,9 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  TEACHER_PASSWORD?: string;
+  COURSE_CODE?: string;
+  SESSION_TTL_SECONDS?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -12,6 +15,16 @@ interface Env {
       };
     };
   };
+}
+
+const RUNTIME_ENV_KEYS = ["TEACHER_PASSWORD", "COURSE_CODE", "SESSION_TTL_SECONDS"] as const;
+
+function syncRuntimeEnvironment(env: Env): void {
+  for (const key of RUNTIME_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string") process.env[key] = value;
+    else delete process.env[key];
+  }
 }
 
 interface ExecutionContext {
@@ -27,6 +40,7 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    syncRuntimeEnvironment(env);
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {

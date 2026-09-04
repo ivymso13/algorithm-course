@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { getDb } from "@/db";
 import { attempts, submissions } from "@/db/schema";
-import { listAssignments } from "@/lib/assignments";
+import { listAssignments } from "@/lib/roster";
 import { getOrCreateDefaultCourse } from "@/lib/store";
 import type { EvaluationResponses } from "@/lib/store";
 
@@ -11,10 +11,11 @@ function json(value: unknown): string {
 
 export async function buildExportWorkbook(): Promise<Uint8Array> {
   const db = await getDb();
-  const [allSubmissions, allAttempts, stage] = await Promise.all([
+  const stage = await getOrCreateDefaultCourse();
+  const [allSubmissions, allAttempts, assignments] = await Promise.all([
     db.select().from(submissions),
     db.select().from(attempts),
-    getOrCreateDefaultCourse(),
+    listAssignments(stage.id),
   ]);
   const submissionById = new Map(allSubmissions.map((s) => [s.id, s]));
 
@@ -77,7 +78,8 @@ export async function buildExportWorkbook(): Promise<Uint8Array> {
     "실행_기록"
   );
 
-  const assignmentRows = listAssignments().map((a) => ({
+  const assignmentRows = assignments.map((a) => ({
+    학교: a.school,
     학번: a.studentId,
     이름: a.name,
     작성_유형1: a.write[0],
