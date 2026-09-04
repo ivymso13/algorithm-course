@@ -285,10 +285,10 @@ export default function WriteExplorePage() {
             ) : currentEntry ? (
               <>
                 {/* 2-Column Responsive Workspace: Left = Current Algorithm, Right = Practice Sandbox */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch lg:h-[calc(100vh-22rem)] lg:min-h-[580px] lg:max-h-[720px]">
                   {/* Left Column: The one algorithm currently being reviewed */}
-                  <section className="space-y-2">
-                    <div className="flex items-center justify-between gap-2 px-1">
+                  <section className="flex flex-col lg:h-full space-y-2">
+                    <div className="min-h-[36px] flex items-center justify-between gap-2 px-1 shrink-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <h2 className="text-sm sm:text-base font-bold text-slate-900 shrink-0">다른 학생의 알고리즘</h2>
                         <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-800 truncate">
@@ -312,12 +312,12 @@ export default function WriteExplorePage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-                      <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3.5 sm:p-4 font-mono text-xs sm:text-sm leading-relaxed text-slate-800 max-h-[30rem] overflow-y-auto border border-slate-100">
+                    <div className="lg:flex-1 lg:min-h-0 flex flex-col rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+                      <pre className="max-h-72 lg:max-h-none lg:flex-1 lg:min-h-0 whitespace-pre-wrap rounded-xl bg-slate-50 p-3.5 sm:p-4 font-mono text-xs sm:text-sm leading-relaxed text-slate-800 overflow-y-auto border border-slate-100">
                         {currentEntry.algorithmText}
                       </pre>
 
-                      <div className="flex items-center justify-between pt-0.5 text-xs">
+                      <div className="flex items-center justify-between pt-0.5 text-xs shrink-0">
                         <a
                           href={`/execute?submissionId=${currentEntry.id}`}
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-blue-600 transition"
@@ -338,8 +338,8 @@ export default function WriteExplorePage() {
                   </section>
 
                   {/* Right Column: Repeatable Practice on Fresh Random Instance */}
-                  <section className="space-y-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-                    <div className="px-1 space-y-0.5">
+                  <section className="flex flex-col lg:h-full space-y-2">
+                    <div className="min-h-[36px] flex flex-col justify-center px-1 space-y-0.5 shrink-0">
                       <h2 className="text-sm sm:text-base font-bold text-slate-900">🧪 새로운 문제로 실습하기</h2>
                       <p className="text-[11px] text-slate-500">
                         왼쪽 알고리즘을 보면서, 같은 유형의 새 무작위 문제로 직접 검증해보세요.
@@ -347,9 +347,13 @@ export default function WriteExplorePage() {
                     </div>
 
                     {round.problemType ? (
-                      <ProblemSandboxContainer problemType={round.problemType} defaultOpen={true} />
+                      <ProblemSandboxContainer
+                        problemType={round.problemType}
+                        defaultOpen={true}
+                        className="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col"
+                      />
                     ) : (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xs space-y-1">
+                      <div className="lg:flex-1 lg:min-h-0 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xs flex flex-col items-center justify-center space-y-1">
                         <p className="text-xs font-bold text-slate-700">이 문제는 별도 실습 도구가 준비되어 있지 않습니다</p>
                         <p className="text-[11px] text-slate-500">
                           왼쪽 알고리즘을 읽고 추천 여부를 판단해보세요.
