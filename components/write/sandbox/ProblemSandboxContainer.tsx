@@ -34,7 +34,7 @@ export function ProblemSandboxContainer({
   const icon = PROBLEM_ICONS[problemType];
 
   const body = (
-    <div className={`overflow-y-auto ${presentationMode ? "p-2 sm:p-3" : "p-4 sm:p-5"} ${className ? "flex-1 min-h-0" : ""}`}>
+    <div className={`overflow-y-auto ${presentationMode ? "p-2 sm:p-3" : "p-3.5 sm:p-4"} ${className ? "flex-1 min-h-0" : ""}`}>
       {problemType === "12coins" && (
         <CoinsSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
