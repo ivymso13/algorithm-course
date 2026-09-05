@@ -320,6 +320,21 @@ export default function TeacherPage() {
     }, "삭제에 실패했습니다.");
   }
 
+  async function handleDeleteSubmission(submission: WarmupRoundDetail["items"][number]["submission"]) {
+    const who = submission.isDemo ? submission.anonLabel : `${submission.anonLabel} · ${submission.studentId} ${submission.studentName}`;
+    if (!confirm(`"${who}" 제출을 삭제하시겠습니까?\n투표/체험 피드백도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.`)) return;
+    await runWarmupAction(async () => {
+      const res = await fetch(`/api/teacher/warmup/submission?id=${submission.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "삭제에 실패했습니다.");
+      await loadWarmupRounds();
+      if (roundDetailId) await loadRoundDetail(roundDetailId);
+    }, "삭제에 실패했습니다.");
+  }
+
   /** Same busy-guard pattern as `runWarmupAction`, scoped to roster add/edit/delete. */
   async function runRosterAction(action: () => Promise<void>, fallbackErrorMessage: string) {
     if (rosterBusyRef.current) return;
@@ -1110,7 +1125,7 @@ export default function TeacherPage() {
                                       </span>
                                     )}
                                   </span>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1.5">
                                     {WARMUP_VOTE_TYPES.map((type) => (
                                       <span
                                         key={type}
@@ -1120,6 +1135,15 @@ export default function TeacherPage() {
                                         {WARMUP_VOTE_ICONS[type]} {item.voteCounts[type]}
                                       </span>
                                     ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSubmission(item.submission)}
+                                      disabled={warmupBusy}
+                                      title="이 제출을 삭제합니다"
+                                      className="rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer"
+                                    >
+                                      🗑️ 삭제
+                                    </button>
                                   </div>
                                 </div>
                                 <pre className="whitespace-pre-wrap rounded-lg bg-white p-2.5 font-mono text-[11px] leading-relaxed text-slate-800 max-h-36 overflow-y-auto border border-slate-200">
