@@ -74,18 +74,6 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
           {/* Navigation Links & Desktop Student Status */}
           <nav aria-label="메인 네비게이션" className="flex items-center gap-1 sm:gap-2">
             <a
-              href="/write"
-              aria-current={pathname.startsWith("/write") ? "page" : undefined}
-              className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-hidden ${
-                pathname.startsWith("/write")
-                  ? "bg-blue-50 text-blue-700 font-bold shadow-2xs"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-            >
-              워밍업
-            </a>
-
-            <a
               href="/execute"
               aria-current={pathname.startsWith("/execute") ? "page" : undefined}
               className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
