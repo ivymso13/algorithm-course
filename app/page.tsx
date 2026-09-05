@@ -31,7 +31,7 @@ export default function Home() {
           </p>
 
           {/* Direct Hero CTA Button */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 sm:pt-3">
             <a
               href="/write"
               className="inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-2xl bg-blue-600 px-8 py-3.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/30 transition-all cursor-pointer"
@@ -39,19 +39,6 @@ export default function Home() {
               <span>워밍업 바로 시작하기</span>
               <span aria-hidden="true">➔</span>
             </a>
-          </div>
-
-          {/* Quick value props / reassurance badges */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs font-medium text-slate-600">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-slate-700 shadow-2xs">
-              <span className="text-blue-600 font-bold" aria-hidden="true">✓</span> 학교 · 학번으로 간편 입장
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-slate-700 shadow-2xs">
-              <span className="text-indigo-600 font-bold" aria-hidden="true">✓</span> 실시간 익명 상호 추천
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-slate-700 shadow-2xs">
-              <span className="text-emerald-600 font-bold" aria-hidden="true">✓</span> 인터랙티브 샌드박스 실습
-            </span>
           </div>
         </section>
 
