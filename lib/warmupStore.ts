@@ -203,6 +203,29 @@ export async function deleteWarmupRound(id: number, courseId: number) {
   ]);
 }
 
+/**
+ * Deletes one student's (or demo's) submission and everything that hangs off
+ * it (votes, experiences) — the teacher's tool for pulling a stray or wrong
+ * entry off a round's board without deleting the whole round. Works
+ * regardless of round status (unlike `deleteWarmupRound`, which requires the
+ * round to be closed first): a single-row cleanup like this doesn't carry
+ * the same "students lose everything" risk.
+ */
+export async function deleteWarmupSubmission(submissionId: number, courseId: number): Promise<void> {
+  const db = await getDb();
+  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId));
+  if (!submission) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
+
+  const round = await getWarmupRound(submission.roundId);
+  if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
+
+  await db.batch([
+    db.delete(warmupVotes).where(eq(warmupVotes.submissionId, submissionId)),
+    db.delete(warmupExperiences).where(eq(warmupExperiences.submissionId, submissionId)),
+    db.delete(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId)),
+  ]);
+}
+
 export async function teacherWarmupRoundDetail(id: number, courseId: number) {
   const round = await getWarmupRound(id);
   if (!round || round.courseId !== courseId) return null;
