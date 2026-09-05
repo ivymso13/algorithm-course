@@ -260,14 +260,14 @@ export const warmupRounds = sqliteTable(
  * the only identity shown to peers on the board — `studentId`/`studentName`
  * stay in the row for the teacher-only detail view.
  *
- * `isDemo` marks a source-controlled example submission seeded by
- * `lib/warmupDemoSubmissions.ts` so the vote/experience flow can be tried
- * with a full board even before any real student has submitted. It's a
- * regular row in this same table (so voting/experience code needs no
- * special-casing and round deletion's existing cascade covers it for free)
- * — the flag exists purely so roster/participation-facing queries
- * (submitted-student-key lists, submission counts, anon-label numbering)
- * can exclude it and never mistake a demo card for a real student's work.
+ * `isDemo` marked a source-controlled example submission auto-seeded so the
+ * vote/experience flow could be tried with a full board even before any real
+ * student had submitted. That seeding was removed (it confused students, who
+ * can't tell a demo card from a real one) — `lib/warmupStore.ts` now filters
+ * `isDemo = false` everywhere a student or the roster/participation views
+ * touch this table, so no new demo rows are created and any that already
+ * exist from before stay invisible. The column stays only so those old rows
+ * keep meaning what they meant; nothing writes `true` to it anymore.
  */
 export const warmupSubmissions = sqliteTable(
   "warmup_submissions",

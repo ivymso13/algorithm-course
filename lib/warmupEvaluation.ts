@@ -6,17 +6,15 @@
  * and app/write/explore/page.tsx). No `@/db` import, so — like
  * lib/warmupRoundGuards.ts — this is unit-tested directly, without a D1
  * runtime.
+ *
+ * Callers pass only real submissions (see lib/warmupStore.ts's isDemo
+ * filters) — there's no seeded demo content on the board anymore.
  */
 
-export type EvaluationSubmissionLike = { id: number; studentKey: string; isDemo: boolean };
+export type EvaluationSubmissionLike = { id: number; studentKey: string };
 export type EvaluationVoteLike = { submissionId: number; voterStudentKey: string };
 
-/**
- * Student keys of real (non-demo) submitters who have voted on every other
- * submission in the round. Demo cards count as peers to evaluate too —
- * students can't tell a demo submission from a real one on the board, so
- * they're expected to evaluate everything they see there.
- */
+/** Student keys of submitters who have voted on every other submission in the round. */
 export function fullyEvaluatedStudentKeys(
   submissions: readonly EvaluationSubmissionLike[],
   votes: readonly EvaluationVoteLike[]
@@ -34,7 +32,6 @@ export function fullyEvaluatedStudentKeys(
   }
 
   return submissions
-    .filter((s) => !s.isDemo)
     .filter((submitter) => {
       const peerIds = allIds.filter((id) => id !== submitter.id);
       if (peerIds.length === 0) return false; // nothing to evaluate yet — not "complete"
