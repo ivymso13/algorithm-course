@@ -23,7 +23,7 @@ export const cardsProblem: ProblemModule<CardsInput> = {
   },
 
   generate(): GeneratedInstance<CardsInput> {
-    const n = randInt(12, 18);
+    const n = randInt(6, 30);
     const pool = shuffle(Array.from({ length: 60 }, (_, i) => i + 1)).slice(0, n);
     const array = pool.sort((a, b) => a - b);
 
