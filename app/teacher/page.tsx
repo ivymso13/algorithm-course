@@ -456,19 +456,25 @@ export default function TeacherPage() {
   }, [students, rosterSearch, rosterFilter, openWarmupRound]);
 
   const loadRoundDetail = useCallback(
-    async (roundId: number) => {
+    async (roundId: number, resetView = false) => {
       setRoundDetailId(roundId);
-      setRoundStudentFilter("all");
+      if (resetView) setRoundStudentFilter("all");
       try {
-        const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, { headers: authHeaders() });
+        const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, {
+          headers: authHeaders(),
+          cache: "no-store",
+        });
         const data = (await res.json()) as WarmupRoundDetail & { error?: string };
         if (res.ok) {
           setRoundDetail(data);
-          setSelectedRoundStudentKey(
-            data.participants.find((participant) => participant.submissionId !== null)?.studentKey
+          setSelectedRoundStudentKey((current) => {
+            if (!resetView && current && data.participants.some((participant) => participant.studentKey === current)) {
+              return current;
+            }
+            return data.participants.find((participant) => participant.submissionId !== null)?.studentKey
               ?? data.participants[0]?.studentKey
-              ?? null
-          );
+              ?? null;
+          });
         }
       } catch {
         // ignore
@@ -1111,12 +1117,12 @@ export default function TeacherPage() {
                               if (roundDetailId === round.id) {
                                 setRoundDetailId(null);
                               } else {
-                                loadRoundDetail(round.id);
+                                loadRoundDetail(round.id, true);
                               }
                             }}
                             className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
-                            {roundDetailId === round.id ? "현황 닫기" : `큰 화면으로 현황 보기 (${round.submissionCount}명)`}
+                            {roundDetailId === round.id ? "현황 닫기" : `현황판 (${round.submissionCount}명)`}
                           </button>
                         </div>
                       </div>
