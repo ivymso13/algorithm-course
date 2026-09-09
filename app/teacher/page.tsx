@@ -29,6 +29,14 @@ type WarmupProblem = { id: string; title: string; prompt: string };
 
 type WarmupRoundDetail = {
   round: WarmupRoundSummary;
+  participants: {
+    studentKey: string;
+    studentId: string;
+    studentName: string;
+    school: string;
+    submissionId: number | null;
+    evaluated: boolean;
+  }[];
   items: {
     submission: {
       id: number;
@@ -39,6 +47,12 @@ type WarmupRoundDetail = {
       isDemo: boolean;
     };
     voteCounts: Record<WarmupVoteType, number>;
+    votes: {
+      voterStudentKey: string;
+      voterStudentId: string;
+      voterStudentName: string;
+      voteType: WarmupVoteType;
+    }[];
     experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
   }[];
 };
@@ -142,6 +156,7 @@ export default function TeacherPage() {
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
   const [previewRoundId, setPreviewRoundId] = useState<number | null>(null);
+  const [roundStudentFilter, setRoundStudentFilter] = useState<"all" | "missing" | "submitted" | "evaluated">("all");
   const [warmupBusy, setWarmupBusy] = useState(false);
   // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
   // (used to disable buttons) only takes effect on the next render, so a very
@@ -442,6 +457,7 @@ export default function TeacherPage() {
   const loadRoundDetail = useCallback(
     async (roundId: number) => {
       setRoundDetailId(roundId);
+      setRoundStudentFilter("all");
       try {
         const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, { headers: authHeaders() });
         const data = (await res.json()) as WarmupRoundDetail & { error?: string };
@@ -1149,64 +1165,163 @@ export default function TeacherPage() {
                       </div>
 
                       {roundDetailId === round.id && roundDetail && (
-                        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-                          <h3 className="text-xs font-bold text-slate-800">
-                            제출 목록 및 동료 피드백 ({roundDetail.items.length}명)
-                          </h3>
-                          {roundDetail.items.length === 0 ? (
-                            <p className="text-xs text-slate-400 py-2">아직 제출이 없습니다.</p>
-                          ) : (
-                            roundDetail.items.map((item) => (
-                              <div key={item.submission.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                                    {item.submission.anonLabel} · {item.submission.studentId} {item.submission.studentName}
-                                    {item.submission.isDemo && (
-                                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                                        예시
-                                      </span>
-                                    )}
-                                  </span>
-                                  <div className="flex items-center gap-1.5">
-                                    {WARMUP_VOTE_TYPES.map((type) => (
-                                      <span
-                                        key={type}
-                                        title={WARMUP_VOTE_LABELS[type]}
-                                        className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
-                                      >
-                                        {WARMUP_VOTE_ICONS[type]} {item.voteCounts[type]}
-                                      </span>
-                                    ))}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSubmission(item.submission)}
-                                      disabled={warmupBusy}
-                                      title="이 제출을 삭제합니다"
-                                      className="rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer"
-                                    >
-                                      🗑️ 삭제
-                                    </button>
+                        (() => {
+                          const submittedCount = roundDetail.participants.filter((p) => p.submissionId !== null).length;
+                          const missingCount = roundDetail.participants.length - submittedCount;
+                          const evaluatedCount = roundDetail.participants.filter((p) => p.evaluated).length;
+                          const filtered = roundDetail.participants.filter((participant) => {
+                            if (roundStudentFilter === "missing") return participant.submissionId === null;
+                            if (roundStudentFilter === "submitted") return participant.submissionId !== null;
+                            if (roundStudentFilter === "evaluated") return participant.evaluated;
+                            return true;
+                          });
+
+                          return (
+                            <div className="mt-3 space-y-4 border-t border-slate-100 pt-4">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {[
+                                  ["전체", roundDetail.participants.length, "text-slate-900"],
+                                  ["제출", submittedCount, "text-emerald-700"],
+                                  ["미제출", missingCount, "text-rose-700"],
+                                  ["평가 완료", evaluatedCount, "text-indigo-700"],
+                                ].map(([label, value, color]) => (
+                                  <div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                    <p className="text-[10px] font-bold text-slate-500">{label}</p>
+                                    <p className={`mt-0.5 text-xl font-black ${color}`}>{value}명</p>
                                   </div>
-                                </div>
-                                <pre className="whitespace-pre-wrap rounded-lg bg-white p-2.5 font-mono text-[11px] leading-relaxed text-slate-800 max-h-36 overflow-y-auto border border-slate-200">
-                                  {item.submission.algorithmText}
-                                </pre>
-                                {item.experiences.length > 0 ? (
-                                  <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <span className="text-[10px] font-bold text-slate-400 block mb-0.5">동료 체험 피드백:</span>
-                                    {item.experiences.map((exp, idx) => (
-                                      <p key={idx} className="text-[11px] text-slate-700">
-                                        <span className="font-bold">{exp.executable ? "✅" : "❌"} {exp.executorName} ({exp.executorId}):</span> “{exp.feedback}”
-                                      </p>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-[10px] text-slate-400">아직 동료 체험 피드백이 없습니다.</p>
+                                ))}
+                              </div>
+
+                              <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`제출률 ${submittedCount}/${roundDetail.participants.length}`}>
+                                <div
+                                  className="h-full rounded-full bg-emerald-500 transition-all"
+                                  style={{ width: `${roundDetail.participants.length ? (submittedCount / roundDetail.participants.length) * 100 : 0}%` }}
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap gap-1.5">
+                                {([
+                                  ["all", `전체 ${roundDetail.participants.length}`],
+                                  ["missing", `미제출 ${missingCount}`],
+                                  ["submitted", `제출 ${submittedCount}`],
+                                  ["evaluated", `평가 완료 ${evaluatedCount}`],
+                                ] as const).map(([value, label]) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => setRoundStudentFilter(value)}
+                                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                                      roundStudentFilter === value
+                                        ? "bg-slate-900 text-white"
+                                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <div className="space-y-2">
+                                {filtered.map((participant) => {
+                                  const item = roundDetail.items.find((candidate) => candidate.submission.id === participant.submissionId);
+                                  if (!item) {
+                                    return (
+                                      <div key={participant.studentKey} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-100 bg-rose-50/50 px-4 py-3">
+                                        <div>
+                                          <p className="text-sm font-bold text-slate-800">{participant.studentId} {participant.studentName}</p>
+                                          <p className="mt-0.5 text-[11px] text-slate-500">{participant.school}</p>
+                                        </div>
+                                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-rose-700 border border-rose-200">미제출</span>
+                                      </div>
+                                    );
+                                  }
+
+                                  return (
+                                    <details key={participant.studentKey} className="group rounded-xl border border-slate-200 bg-white open:border-blue-200 open:shadow-xs">
+                                      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                        <div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-sm font-bold text-slate-900">{participant.studentId} {participant.studentName}</span>
+                                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">제출</span>
+                                            {round.reviewOpenedAt && (
+                                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${participant.evaluated ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                                                {participant.evaluated ? "평가 완료" : "평가 미완료"}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="mt-1 text-[11px] text-slate-500">
+                                            받은 추천 {item.votes.length}개 · 실행 피드백 {item.experiences.length}개
+                                          </p>
+                                        </div>
+                                        <span className="text-xs font-bold text-blue-700 group-open:hidden">내용·평가 보기 ▼</span>
+                                        <span className="hidden text-xs font-bold text-blue-700 group-open:inline">접기 ▲</span>
+                                      </summary>
+
+                                      <div className="space-y-3 border-t border-slate-100 p-4">
+                                        <div>
+                                          <p className="mb-1.5 text-[11px] font-bold text-slate-500">제출한 알고리즘</p>
+                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800">{item.submission.algorithmText}</pre>
+                                        </div>
+
+                                        <div className="grid gap-3 lg:grid-cols-2">
+                                          <div className="rounded-xl border border-slate-200 p-3">
+                                            <p className="mb-2 text-xs font-bold text-slate-800">추천 평가</p>
+                                            <div className="mb-2 flex flex-wrap gap-1.5">
+                                              {WARMUP_VOTE_TYPES.map((type) => (
+                                                <span key={type} className="rounded-full bg-slate-50 border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                                                  {WARMUP_VOTE_ICONS[type]} {WARMUP_VOTE_LABELS[type]} {item.voteCounts[type]}
+                                                </span>
+                                              ))}
+                                            </div>
+                                            {item.votes.length > 0 ? (
+                                              <div className="space-y-1.5">
+                                                {item.votes.map((vote, index) => (
+                                                  <p key={`${vote.voterStudentKey}-${vote.voteType}-${index}`} className="text-[11px] text-slate-600">
+                                                    <span className="font-bold text-slate-800">{vote.voterStudentId} {vote.voterStudentName}</span>
+                                                    <span className="mx-1.5 text-slate-300">·</span>
+                                                    {WARMUP_VOTE_ICONS[vote.voteType]} {WARMUP_VOTE_LABELS[vote.voteType]}
+                                                  </p>
+                                                ))}
+                                              </div>
+                                            ) : <p className="text-[11px] text-slate-400">아직 추천 평가가 없습니다.</p>}
+                                          </div>
+
+                                          <div className="rounded-xl border border-slate-200 p-3">
+                                            <p className="mb-2 text-xs font-bold text-slate-800">실행·피드백</p>
+                                            {item.experiences.length > 0 ? (
+                                              <div className="space-y-2">
+                                                {item.experiences.map((exp, index) => (
+                                                  <div key={index} className="rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-700">
+                                                    <p className="font-bold text-slate-900">{exp.executable ? "✅ 실행 가능" : "❌ 실행 어려움"} · {exp.executorId} {exp.executorName}</p>
+                                                    <p className="mt-1 leading-relaxed">{exp.feedback || "작성된 피드백이 없습니다."}</p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            ) : <p className="text-[11px] text-slate-400">아직 실행 피드백이 없습니다.</p>}
+                                          </div>
+                                        </div>
+
+                                        <div className="flex justify-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteSubmission(item.submission)}
+                                            disabled={warmupBusy}
+                                            className="rounded-lg border border-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer"
+                                          >
+                                            제출 삭제
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </details>
+                                  );
+                                })}
+                                {filtered.length === 0 && (
+                                  <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-xs text-slate-400">해당하는 학생이 없습니다.</p>
                                 )}
                               </div>
-                            ))
-                          )}
-                        </div>
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   ))}

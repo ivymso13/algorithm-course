@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
+import { listAssignments } from "@/lib/roster";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 import { fullyEvaluatedStudentKeys } from "@/lib/warmupEvaluation";
 import {
@@ -238,20 +239,48 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
     .orderBy(warmupSubmissions.id);
   const submissionIds = submissions.map((s) => s.id);
 
-  const [votes, experiences] = submissionIds.length
-    ? await Promise.all([
-        db.select().from(warmupVotes).where(inArray(warmupVotes.submissionId, submissionIds)),
-        db.select().from(warmupExperiences).where(inArray(warmupExperiences.submissionId, submissionIds)),
-      ])
-    : [[], []];
+  const [votes, experiences, assignments] = await Promise.all([
+    submissionIds.length
+      ? db.select().from(warmupVotes).where(inArray(warmupVotes.submissionId, submissionIds))
+      : Promise.resolve([]),
+    submissionIds.length
+      ? db.select().from(warmupExperiences).where(inArray(warmupExperiences.submissionId, submissionIds))
+      : Promise.resolve([]),
+    listAssignments(courseId),
+  ]);
+
+  const realSubmissions = submissions.filter((submission) => !submission.isDemo);
+  const evaluatedKeys = new Set(fullyEvaluatedStudentKeys(realSubmissions, votes));
+  const submissionByStudent = new Map(realSubmissions.map((submission) => [submission.studentKey, submission]));
+  const assignmentByStudent = new Map(assignments.map((assignment) => [assignment.studentKey, assignment]));
+
+  const participants = assignments.map((assignment) => ({
+    studentKey: assignment.studentKey,
+    studentId: assignment.studentId,
+    studentName: assignment.name,
+    school: assignment.school,
+    submissionId: submissionByStudent.get(assignment.studentKey)?.id ?? null,
+    evaluated: evaluatedKeys.has(assignment.studentKey),
+  }));
 
   const items = submissions.map((submission) => ({
     submission,
     voteCounts: tallyVotes(votes.filter((v) => v.submissionId === submission.id)),
+    votes: votes
+      .filter((vote) => vote.submissionId === submission.id)
+      .map((vote) => {
+        const voter = assignmentByStudent.get(vote.voterStudentKey);
+        return {
+          voterStudentKey: vote.voterStudentKey,
+          voterStudentId: voter?.studentId ?? "",
+          voterStudentName: voter?.name ?? "알 수 없음",
+          voteType: vote.voteType,
+        };
+      }),
     experiences: experiences.filter((e) => e.submissionId === submission.id),
   }));
 
-  return { round, items };
+  return { round, participants, items };
 }
 
 function tallyVotes(votes: { voteType: string }[]): Record<WarmupVoteType, number> {
