@@ -141,6 +141,7 @@ export default function TeacherPage() {
   const [warmupProblems, setWarmupProblems] = useState<WarmupProblem[]>([]);
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
+  const [previewRoundId, setPreviewRoundId] = useState<number | null>(null);
   const [warmupBusy, setWarmupBusy] = useState(false);
   // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
   // (used to disable buttons) only takes effect on the next render, so a very
@@ -1056,6 +1057,14 @@ export default function TeacherPage() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewRoundId((current) => current === round.id ? null : round.id)}
+                            aria-expanded={previewRoundId === round.id}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                          >
+                            {previewRoundId === round.id ? "문제 닫기 ▲" : "문제 확인 ▼"}
+                          </button>
                           {round.status === "draft" && (
                             <button
                               type="button"
@@ -1117,6 +1126,19 @@ export default function TeacherPage() {
                       </div>
 
                       <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+
+                      {previewRoundId === round.id && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <span className="text-[11px] font-bold text-blue-700">학생 화면에 제시되는 문제</span>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-blue-100">
+                              {WARMUP_ROUND_STATUS_LABELS[round.status]}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold text-slate-900">{round.title}</h3>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{round.prompt}</p>
+                        </div>
+                      )}
 
                       <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
                         <span className="font-semibold text-slate-700">제출 {round.submissionCount}건</span>
