@@ -153,7 +153,10 @@ export default function TeacherPage() {
   const [presentationMode, setPresentationMode] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  // Submission status is operational data: keep it live by default so the
+  // teacher does not have to discover and enable polling during class.
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const dashboardRequestInFlight = useRef(false);
 
   const authHeaders = useCallback((customPw?: string): HeadersInit => {
     return { "x-teacher-password": customPw || password };
@@ -177,10 +180,15 @@ export default function TeacherPage() {
   }, [authHeaders]);
 
   const loadDashboardWithPw = useCallback(async (pw: string) => {
+    if (dashboardRequestInFlight.current) return;
+    dashboardRequestInFlight.current = true;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/teacher/dashboard", { headers: authHeaders(pw) });
+      const res = await fetch("/api/teacher/dashboard", {
+        headers: authHeaders(pw),
+        cache: "no-store",
+      });
       const data = await readJsonResponse<DashboardResponse>(res);
       if (!res.ok) throw new Error(data.error ?? "불러오기에 실패했습니다.");
       setStudents(data.students ?? []);
@@ -193,6 +201,7 @@ export default function TeacherPage() {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setAuthed(false);
     } finally {
+      dashboardRequestInFlight.current = false;
       setLoading(false);
     }
   }, [authHeaders, loadWarmupRounds]);
@@ -471,7 +480,7 @@ export default function TeacherPage() {
   }, [password, authed, loadWarmupRounds]);
 
   /** Refreshes whichever tab's data is currently on screen — backs both the manual and the auto-refresh button. */
-  async function refreshActiveTab() {
+  const refreshActiveTab = useCallback(async () => {
     if (tab === "warmup") {
       await loadWarmupRounds();
       if (roundDetailId) await loadRoundDetail(roundDetailId);
@@ -481,7 +490,7 @@ export default function TeacherPage() {
       await loadReview();
     }
     // "practice" has no server data to refresh.
-  }
+  }, [tab, roundDetailId, loadWarmupRounds, loadRoundDetail, loadDashboard, loadReview]);
 
   // Auto-refresh interval
   useEffect(() => {
@@ -495,9 +504,20 @@ export default function TeacherPage() {
       } else if (tab === "review") {
         loadReview();
       }
-    }, 4000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [authed, autoRefresh, tab, roundDetailId, loadWarmupRounds, loadRoundDetail, loadDashboard, loadReview]);
+
+  // Browsers throttle timers in background tabs. Refresh immediately when the
+  // teacher returns instead of waiting for the next polling tick.
+  useEffect(() => {
+    if (!authed || !autoRefresh) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshActiveTab();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, [authed, autoRefresh, refreshActiveTab]);
 
   async function handleActivateStage2() {
     if (
