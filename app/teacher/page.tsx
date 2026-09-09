@@ -544,6 +544,23 @@ export default function TeacherPage() {
     return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
   }, [authed, autoRefresh, refreshActiveTab]);
 
+  useEffect(() => {
+    if (!roundDetailId) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setRoundDetailId(null);
+        setRoundDetail(null);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [roundDetailId]);
+
   async function handleActivateStage2() {
     if (
       !confirm(
@@ -926,9 +943,8 @@ export default function TeacherPage() {
           </section>
         )}
 
-        {/* Navigation Tabs: primary (round management, roster) up top, legacy features below */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -958,50 +974,6 @@ export default function TeacherPage() {
             >
               👥 학생 명단
             </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">이전 기능</span>
-
-            <button
-              type="button"
-              onClick={() => {
-                setTab("dashboard");
-                loadDashboard();
-              }}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "dashboard"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              4문제 현황
-            </button>
-
-            <button
-              type="button"
-              onClick={loadReview}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "review"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              토론 화면
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("practice")}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "practice"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              문제별 풀어보기
-            </button>
-          </div>
         </div>
 
         {error && (
@@ -1144,7 +1116,7 @@ export default function TeacherPage() {
                             }}
                             className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
-                            {roundDetailId === round.id ? "현황 닫기 ▲" : `현황 보기 (${round.submissionCount}명) ▼`}
+                            {roundDetailId === round.id ? "현황 닫기" : `큰 화면으로 현황 보기 (${round.submissionCount}명)`}
                           </button>
                         </div>
                       </div>
@@ -1192,7 +1164,39 @@ export default function TeacherPage() {
                             : null;
 
                           return (
-                            <div className="mt-3 space-y-4 border-t border-slate-100 pt-4">
+                            <div
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3 sm:p-6"
+                              onClick={() => {
+                                setRoundDetailId(null);
+                                setRoundDetail(null);
+                              }}
+                            >
+                              <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="round-status-title"
+                                className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-blue-700">라운드 현황</p>
+                                    <h2 id="round-status-title" className="mt-0.5 truncate text-lg font-black text-slate-900">{round.title}</h2>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRoundDetailId(null);
+                                      setRoundDetail(null);
+                                    }}
+                                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                                    aria-label="라운드 현황 닫기"
+                                  >
+                                    닫기 ✕
+                                  </button>
+                                </div>
+
+                                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 {[
                                   ["전체", roundDetail.participants.length, "text-slate-900"],
@@ -1342,6 +1346,8 @@ export default function TeacherPage() {
                                       </div>
                                     </div>
                                   )}
+                                </div>
+                              </div>
                                 </div>
                               </div>
                             </div>
