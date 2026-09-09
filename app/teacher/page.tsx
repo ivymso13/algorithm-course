@@ -157,6 +157,7 @@ export default function TeacherPage() {
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
   const [previewRoundId, setPreviewRoundId] = useState<number | null>(null);
   const [roundStudentFilter, setRoundStudentFilter] = useState<"all" | "missing" | "submitted" | "evaluated">("all");
+  const [selectedRoundStudentKey, setSelectedRoundStudentKey] = useState<string | null>(null);
   const [warmupBusy, setWarmupBusy] = useState(false);
   // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
   // (used to disable buttons) only takes effect on the next render, so a very
@@ -461,7 +462,14 @@ export default function TeacherPage() {
       try {
         const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, { headers: authHeaders() });
         const data = (await res.json()) as WarmupRoundDetail & { error?: string };
-        if (res.ok) setRoundDetail(data);
+        if (res.ok) {
+          setRoundDetail(data);
+          setSelectedRoundStudentKey(
+            data.participants.find((participant) => participant.submissionId !== null)?.studentKey
+              ?? data.participants[0]?.studentKey
+              ?? null
+          );
+        }
       } catch {
         // ignore
       }
@@ -1169,12 +1177,19 @@ export default function TeacherPage() {
                           const submittedCount = roundDetail.participants.filter((p) => p.submissionId !== null).length;
                           const missingCount = roundDetail.participants.length - submittedCount;
                           const evaluatedCount = roundDetail.participants.filter((p) => p.evaluated).length;
-                          const filtered = roundDetail.participants.filter((participant) => {
-                            if (roundStudentFilter === "missing") return participant.submissionId === null;
-                            if (roundStudentFilter === "submitted") return participant.submissionId !== null;
-                            if (roundStudentFilter === "evaluated") return participant.evaluated;
+                          const matchesFilter = (participant: WarmupRoundDetail["participants"][number], filter: typeof roundStudentFilter) => {
+                            if (filter === "missing") return participant.submissionId === null;
+                            if (filter === "submitted") return participant.submissionId !== null;
+                            if (filter === "evaluated") return participant.evaluated;
                             return true;
-                          });
+                          };
+                          const filtered = roundDetail.participants.filter((participant) => matchesFilter(participant, roundStudentFilter));
+                          const selectedParticipant = roundDetail.participants.find((participant) => participant.studentKey === selectedRoundStudentKey)
+                            ?? filtered[0]
+                            ?? null;
+                          const selectedItem = selectedParticipant
+                            ? roundDetail.items.find((candidate) => candidate.submission.id === selectedParticipant.submissionId)
+                            : null;
 
                           return (
                             <div className="mt-3 space-y-4 border-t border-slate-100 pt-4">
@@ -1209,7 +1224,11 @@ export default function TeacherPage() {
                                   <button
                                     key={value}
                                     type="button"
-                                    onClick={() => setRoundStudentFilter(value)}
+                                    onClick={() => {
+                                      setRoundStudentFilter(value);
+                                      const firstMatch = roundDetail.participants.find((participant) => matchesFilter(participant, value));
+                                      setSelectedRoundStudentKey(firstMatch?.studentKey ?? null);
+                                    }}
                                     className={`rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
                                       roundStudentFilter === value
                                         ? "bg-slate-900 text-white"
@@ -1221,103 +1240,109 @@ export default function TeacherPage() {
                                 ))}
                               </div>
 
-                              <div className="space-y-2">
-                                {filtered.map((participant) => {
-                                  const item = roundDetail.items.find((candidate) => candidate.submission.id === participant.submissionId);
-                                  if (!item) {
-                                    return (
-                                      <div key={participant.studentKey} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-100 bg-rose-50/50 px-4 py-3">
-                                        <div>
-                                          <p className="text-sm font-bold text-slate-800">{participant.studentId} {participant.studentName}</p>
-                                          <p className="mt-0.5 text-[11px] text-slate-500">{participant.school}</p>
-                                        </div>
-                                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-rose-700 border border-rose-200">미제출</span>
-                                      </div>
-                                    );
-                                  }
-
-                                  return (
-                                    <details key={participant.studentKey} className="group rounded-xl border border-slate-200 bg-white open:border-blue-200 open:shadow-xs">
-                                      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3">
-                                        <div>
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-sm font-bold text-slate-900">{participant.studentId} {participant.studentName}</span>
-                                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">제출</span>
-                                            {round.reviewOpenedAt && (
-                                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${participant.evaluated ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                                                {participant.evaluated ? "평가 완료" : "평가 미완료"}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="mt-1 text-[11px] text-slate-500">
-                                            받은 추천 {item.votes.length}개 · 실행 피드백 {item.experiences.length}개
-                                          </p>
-                                        </div>
-                                        <span className="text-xs font-bold text-blue-700 group-open:hidden">내용·평가 보기 ▼</span>
-                                        <span className="hidden text-xs font-bold text-blue-700 group-open:inline">접기 ▲</span>
-                                      </summary>
-
-                                      <div className="space-y-3 border-t border-slate-100 p-4">
-                                        <div>
-                                          <p className="mb-1.5 text-[11px] font-bold text-slate-500">제출한 알고리즘</p>
-                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800">{item.submission.algorithmText}</pre>
-                                        </div>
-
-                                        <div className="grid gap-3 lg:grid-cols-2">
-                                          <div className="rounded-xl border border-slate-200 p-3">
-                                            <p className="mb-2 text-xs font-bold text-slate-800">추천 평가</p>
-                                            <div className="mb-2 flex flex-wrap gap-1.5">
-                                              {WARMUP_VOTE_TYPES.map((type) => (
-                                                <span key={type} className="rounded-full bg-slate-50 border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600">
-                                                  {WARMUP_VOTE_ICONS[type]} {WARMUP_VOTE_LABELS[type]} {item.voteCounts[type]}
-                                                </span>
-                                              ))}
-                                            </div>
-                                            {item.votes.length > 0 ? (
-                                              <div className="space-y-1.5">
-                                                {item.votes.map((vote, index) => (
-                                                  <p key={`${vote.voterStudentKey}-${vote.voteType}-${index}`} className="text-[11px] text-slate-600">
-                                                    <span className="font-bold text-slate-800">{vote.voterStudentId} {vote.voterStudentName}</span>
-                                                    <span className="mx-1.5 text-slate-300">·</span>
-                                                    {WARMUP_VOTE_ICONS[vote.voteType]} {WARMUP_VOTE_LABELS[vote.voteType]}
-                                                  </p>
-                                                ))}
-                                              </div>
-                                            ) : <p className="text-[11px] text-slate-400">아직 추천 평가가 없습니다.</p>}
-                                          </div>
-
-                                          <div className="rounded-xl border border-slate-200 p-3">
-                                            <p className="mb-2 text-xs font-bold text-slate-800">실행·피드백</p>
-                                            {item.experiences.length > 0 ? (
-                                              <div className="space-y-2">
-                                                {item.experiences.map((exp, index) => (
-                                                  <div key={index} className="rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-700">
-                                                    <p className="font-bold text-slate-900">{exp.executable ? "✅ 실행 가능" : "❌ 실행 어려움"} · {exp.executorId} {exp.executorName}</p>
-                                                    <p className="mt-1 leading-relaxed">{exp.feedback || "작성된 피드백이 없습니다."}</p>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            ) : <p className="text-[11px] text-slate-400">아직 실행 피드백이 없습니다.</p>}
-                                          </div>
-                                        </div>
-
-                                        <div className="flex justify-end">
+                              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                                <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  {filtered.length === 0 ? (
+                                    <p className="py-8 text-center text-xs text-slate-400">해당하는 학생이 없습니다.</p>
+                                  ) : (
+                                    <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
+                                      {filtered.map((participant) => {
+                                        const item = roundDetail.items.find((candidate) => candidate.submission.id === participant.submissionId);
+                                        const selected = participant.studentKey === selectedParticipant?.studentKey;
+                                        return (
                                           <button
+                                            key={participant.studentKey}
                                             type="button"
-                                            onClick={() => handleDeleteSubmission(item.submission)}
-                                            disabled={warmupBusy}
-                                            className="rounded-lg border border-rose-200 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer"
+                                            onClick={() => setSelectedRoundStudentKey(participant.studentKey)}
+                                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition cursor-pointer ${
+                                              selected ? "border-blue-400 bg-blue-50 shadow-xs" : "border-transparent bg-white hover:border-slate-200"
+                                            }`}
                                           >
-                                            제출 삭제
+                                            <div className="min-w-0">
+                                              <p className="truncate text-xs font-bold text-slate-900">{participant.studentId} {participant.studentName}</p>
+                                              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                                                {item ? `추천 ${item.votes.length} · 피드백 ${item.experiences.length}` : participant.school}
+                                              </p>
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                              <span className={`h-2 w-2 rounded-full ${item ? "bg-emerald-500" : "bg-rose-400"}`} title={item ? "제출" : "미제출"} />
+                                              {round.reviewOpenedAt && participant.evaluated && <span className="text-[10px]" title="평가 완료">✓</span>}
+                                            </div>
                                           </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="min-h-64 rounded-xl border border-slate-200 bg-white p-4 lg:max-h-[32rem] lg:overflow-y-auto">
+                                  {!selectedParticipant ? (
+                                    <div className="flex h-full min-h-56 items-center justify-center text-xs text-slate-400">학생을 선택하세요.</div>
+                                  ) : !selectedItem ? (
+                                    <div className="flex h-full min-h-56 flex-col items-center justify-center text-center">
+                                      <p className="text-base font-bold text-slate-900">{selectedParticipant.studentId} {selectedParticipant.studentName}</p>
+                                      <p className="mt-1 text-xs text-slate-500">{selectedParticipant.school}</p>
+                                      <span className="mt-4 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">아직 제출하지 않음</span>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div>
+                                          <p className="text-sm font-bold text-slate-900">{selectedParticipant.studentId} {selectedParticipant.studentName}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">받은 추천 {selectedItem.votes.length}개 · 실행 피드백 {selectedItem.experiences.length}개</p>
                                         </div>
+                                        {round.reviewOpenedAt && (
+                                          <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${selectedParticipant.evaluated ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                                            {selectedParticipant.evaluated ? "평가 완료" : "평가 미완료"}
+                                          </span>
+                                        )}
                                       </div>
-                                    </details>
-                                  );
-                                })}
-                                {filtered.length === 0 && (
-                                  <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-xs text-slate-400">해당하는 학생이 없습니다.</p>
-                                )}
+
+                                      <div>
+                                        <p className="mb-1 text-[11px] font-bold text-slate-500">제출한 알고리즘</p>
+                                        <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-relaxed text-slate-800">{selectedItem.submission.algorithmText}</pre>
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">추천 평가</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {WARMUP_VOTE_TYPES.map((type) => (
+                                            <span key={type} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                                              {WARMUP_VOTE_ICONS[type]} {WARMUP_VOTE_LABELS[type]} {selectedItem.voteCounts[type]}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        {selectedItem.votes.length > 0 && (
+                                          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                                            {selectedItem.votes.map((vote, index) => (
+                                              <p key={`${vote.voterStudentKey}-${vote.voteType}-${index}`} className="truncate rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+                                                <strong className="text-slate-800">{vote.voterStudentId} {vote.voterStudentName}</strong> · {WARMUP_VOTE_ICONS[vote.voteType]} {WARMUP_VOTE_LABELS[vote.voteType]}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">실행·피드백</p>
+                                        {selectedItem.experiences.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {selectedItem.experiences.map((exp, index) => (
+                                              <div key={index} className="rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] text-slate-700">
+                                                <p className="font-bold text-slate-900">{exp.executable ? "✅ 실행 가능" : "❌ 실행 어려움"} · {exp.executorId} {exp.executorName}</p>
+                                                <p className="mt-0.5 leading-relaxed">{exp.feedback || "작성된 피드백이 없습니다."}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : <p className="text-[10px] text-slate-400">아직 실행 피드백이 없습니다.</p>}
+                                      </div>
+
+                                      <div className="flex justify-end border-t border-slate-100 pt-2">
+                                        <button type="button" onClick={() => handleDeleteSubmission(selectedItem.submission)} disabled={warmupBusy} className="rounded-lg border border-rose-200 px-2.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer">제출 삭제</button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
