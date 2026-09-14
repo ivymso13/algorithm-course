@@ -3,6 +3,7 @@ import { getAssignment } from "@/lib/roster";
 import { getResearchCycle, recordAuthorReflection, recordVersionExecution, WarmupOwnershipError } from "@/lib/warmupStore";
 
 const RESULTS = ["success", "partial", "impossible", "wrong"];
+const SOLVED_STATUSES = ["solved", "not_solved", "uncertain"];
 
 export async function GET(request: Request) {
   const session = await requireStudentSession(request);
@@ -19,10 +20,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   try {
     if (body.action === "execute") {
-      if (!RESULTS.includes(String(body.result)) || String(body.executionNote ?? "").trim().length < 2) return Response.json({ error: "실행 결과와 기록을 입력하세요" }, { status: 400 });
+      if (!RESULTS.includes(String(body.result)) || !SOLVED_STATUSES.includes(String(body.solvedStatus)) || String(body.executionNote ?? "").trim().length < 2) return Response.json({ error: "실행 결과, 문제 해결 여부, 실행 기록을 입력하세요" }, { status: 400 });
       const assignment = await getAssignment(session.courseId, session.studentKey);
       if (!assignment) return Response.json({ error: "학생 정보를 찾을 수 없습니다" }, { status: 404 });
-      return Response.json({ execution: await recordVersionExecution({ versionId: Number(body.versionId), executorStudentKey: session.studentKey, executorId: assignment.studentId, executorName: assignment.name, courseId: session.courseId, result: String(body.result), problemLocation: String(body.problemLocation ?? ""), executionNote: String(body.executionNote) }) });
+      return Response.json({ execution: await recordVersionExecution({ versionId: Number(body.versionId), executorStudentKey: session.studentKey, executorId: assignment.studentId, executorName: assignment.name, courseId: session.courseId, result: String(body.result), solvedStatus: String(body.solvedStatus), problemLocation: String(body.problemLocation ?? ""), executionNote: String(body.executionNote) }) });
     }
     if (body.action === "reflect") {
       if (!String(body.cause ?? "").trim() || !String(body.plannedRevision ?? "").trim()) return Response.json({ error: "생각해보기 항목을 모두 입력하세요" }, { status: 400 });

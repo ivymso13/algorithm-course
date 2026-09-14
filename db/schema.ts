@@ -380,6 +380,7 @@ export const warmupExecutions = sqliteTable(
     executorId: text("executor_id").notNull(),
     executorName: text("executor_name").notNull(),
     result: text("result").notNull(),
+    solvedStatus: text("solved_status").notNull().default("uncertain"),
     problemLocation: text("problem_location"),
     executionNote: text("execution_note").notNull(),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

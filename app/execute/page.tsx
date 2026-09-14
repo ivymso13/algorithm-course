@@ -52,6 +52,7 @@ export default function ExecutePage() {
   const [submitted, setSubmitted] = useState(false);
   const [latestVersionId, setLatestVersionId] = useState<number | null>(null);
   const [result, setResult] = useState("success");
+  const [solvedStatus, setSolvedStatus] = useState("");
   const [problemLocation, setProblemLocation] = useState("");
 
   // Fallback board list if opened without submissionId
@@ -112,7 +113,8 @@ export default function ExecutePage() {
             setChecked(new Set((experience.checkedSteps as number[]) ?? []));
             setExecutable(experience.executable);
             setFeedback(experience.feedback);
-            setSubmitted(true);
+            // Keep the form available after a reload: the same student may be
+            // assigned the author's newly revised version on this submission.
           }
         }
       )
@@ -220,7 +222,7 @@ export default function ExecutePage() {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "제출에 실패했습니다.");
       if (latestVersionId) {
-        const researchRes = await fetch("/api/warmup/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "execute", versionId: latestVersionId, result, problemLocation, executionNote: trimmed }) });
+        const researchRes = await fetch("/api/warmup/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "execute", versionId: latestVersionId, result, solvedStatus, problemLocation, executionNote: trimmed }) });
         const researchData = await researchRes.json() as { error?: string };
         if (!researchRes.ok) throw new Error(researchData.error ?? "실행 기록을 저장하지 못했습니다.");
       }
@@ -502,6 +504,15 @@ export default function ExecutePage() {
               ))}
             </div>
 
+            <div className="space-y-2">
+              <div><p className="text-xs font-bold text-slate-800">이 알고리즘으로 문제를 해결했나요?</p><p className="text-[11px] text-slate-500">끝까지 실행했더라도 올바른 답을 얻었는지는 별도로 판단하세요.</p></div>
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="문제 해결 여부 선택">
+                {[["solved","해결함"],["not_solved","해결하지 못함"],["uncertain","판단하기 어려움"]].map(([value,label]) => (
+                  <button key={value} type="button" onClick={() => setSolvedStatus(value)} disabled={isClosed} aria-pressed={solvedStatus === value} className={`rounded-xl border py-2.5 px-2 text-xs font-bold transition ${solvedStatus === value ? "border-indigo-500 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-200" : "border-slate-200 bg-white text-slate-600"}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700">문제가 발생한 단계 또는 문장 <span className="font-normal text-slate-400">(선택)</span></label>
               <input value={problemLocation} onChange={(e) => setProblemLocation(e.target.value)} disabled={isClosed} placeholder="예: 3단계의 '반복한다' 부분" className="w-full rounded-xl border border-slate-300 bg-slate-50/50 p-3 text-base sm:text-xs" />
@@ -566,7 +577,7 @@ export default function ExecutePage() {
 
             <button
               type="submit"
-              disabled={loading || isClosed || executable === null || feedback.trim().length < 2}
+              disabled={loading || isClosed || executable === null || !solvedStatus || feedback.trim().length < 2}
               className="w-full rounded-xl bg-emerald-600 py-2.5 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
             >
               {loading ? "제출 중..." : "피드백 제출하기 ➔"}

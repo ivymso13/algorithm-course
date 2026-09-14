@@ -399,7 +399,7 @@ export async function getResearchCycle(submissionId: number, studentKey: string,
   return { submission, versions, executions, reflections, isAuthor: submission.studentKey === studentKey };
 }
 
-export async function recordVersionExecution(input: { versionId: number; executorStudentKey: string; executorId: string; executorName: string; courseId: number; result: string; problemLocation?: string; executionNote: string }) {
+export async function recordVersionExecution(input: { versionId: number; executorStudentKey: string; executorId: string; executorName: string; courseId: number; result: string; solvedStatus: string; problemLocation?: string; executionNote: string }) {
   const db = await getDb();
   const [version] = await db.select().from(warmupVersions).where(eq(warmupVersions.id, input.versionId));
   if (!version) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
@@ -409,7 +409,7 @@ export async function recordVersionExecution(input: { versionId: number; executo
   if (submission.studentKey === input.executorStudentKey) throw new WarmupOwnershipError("본인 알고리즘은 실행할 수 없습니다");
   const [existing] = await db.select().from(warmupExecutions).where(and(eq(warmupExecutions.versionId, input.versionId), eq(warmupExecutions.executorStudentKey, input.executorStudentKey)));
   if (existing) return existing;
-  const [created] = await db.insert(warmupExecutions).values({ versionId: version.id, submissionId: version.submissionId, roundId: version.roundId, executorStudentKey: input.executorStudentKey, executorId: input.executorId, executorName: input.executorName, result: input.result, problemLocation: input.problemLocation?.trim() || null, executionNote: input.executionNote.trim(), createdAt: new Date().toISOString() }).returning();
+  const [created] = await db.insert(warmupExecutions).values({ versionId: version.id, submissionId: version.submissionId, roundId: version.roundId, executorStudentKey: input.executorStudentKey, executorId: input.executorId, executorName: input.executorName, result: input.result, solvedStatus: input.solvedStatus, problemLocation: input.problemLocation?.trim() || null, executionNote: input.executionNote.trim(), createdAt: new Date().toISOString() }).returning();
   return created;
 }
 
