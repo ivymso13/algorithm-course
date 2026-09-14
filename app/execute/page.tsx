@@ -50,6 +50,9 @@ export default function ExecutePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [latestVersionId, setLatestVersionId] = useState<number | null>(null);
+  const [result, setResult] = useState("success");
+  const [problemLocation, setProblemLocation] = useState("");
 
   // Fallback board list if opened without submissionId
   const [boardList, setBoardList] = useState<BoardItem[] | null>(null);
@@ -89,17 +92,21 @@ export default function ExecutePage() {
       fetch(`/api/warmup/experience?submissionId=${id}`).then((res) =>
         res.json().then((data) => ({ ok: res.ok, data }))
       ),
+      fetch(`/api/warmup/research?submissionId=${id}`).then((res) => res.json()),
     ])
       .then(
-        ([subRes, expRes]: [
+        ([subRes, expRes, research]: [
           { ok: boolean; data: { submission?: SubmissionView; error?: string } },
-          { ok: boolean; data: { experience?: (Experience & { checkedSteps: unknown }) | null } }
+          { ok: boolean; data: { experience?: (Experience & { checkedSteps: unknown }) | null } },
+          { versions?: { id: number; version: number }[]; executions?: { versionId: number; executorStudentKey: string }[] }
         ]) => {
           if (!subRes.ok || !subRes.data.submission) {
             setLoadError(subRes.data.error ?? "알고리즘을 불러오지 못했습니다.");
             return;
           }
           setSubmission(subRes.data.submission);
+          const latest = research.versions?.at(-1);
+          setLatestVersionId(latest?.id ?? null);
           const experience = expRes.data.experience;
           if (experience) {
             setChecked(new Set((experience.checkedSteps as number[]) ?? []));
@@ -212,6 +219,11 @@ export default function ExecutePage() {
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "제출에 실패했습니다.");
+      if (latestVersionId) {
+        const researchRes = await fetch("/api/warmup/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "execute", versionId: latestVersionId, result, problemLocation, executionNote: trimmed }) });
+        const researchData = await researchRes.json() as { error?: string };
+        if (!researchRes.ok) throw new Error(researchData.error ?? "실행 기록을 저장하지 못했습니다.");
+      }
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
@@ -484,7 +496,18 @@ export default function ExecutePage() {
               <p className="text-[11px] text-slate-500">실행 가능 여부와 2자 이상의 간단한 의견을 남겨주세요.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="실행 가능 여부 선택">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="실행 결과 선택">
+              {[["success","실행 성공"],["partial","일부 수행 가능"],["impossible","실행 불가능"],["wrong","잘못된 결과"]].map(([value,label]) => (
+                <button key={value} type="button" onClick={() => { setResult(value); setExecutable(value === "success"); }} disabled={isClosed} aria-pressed={result === value} className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition ${result === value ? "border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-200" : "border-slate-200 bg-white text-slate-600"}`}>{label}</button>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">문제가 발생한 단계 또는 문장 <span className="font-normal text-slate-400">(선택)</span></label>
+              <input value={problemLocation} onChange={(e) => setProblemLocation(e.target.value)} disabled={isClosed} placeholder="예: 3단계의 '반복한다' 부분" className="w-full rounded-xl border border-slate-300 bg-slate-50/50 p-3 text-base sm:text-xs" />
+            </div>
+
+            <div className="hidden grid-cols-2 gap-2" role="group" aria-label="실행 가능 여부 선택">
               <button
                 type="button"
                 onClick={() => setExecutable(true)}

@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { getDb } from "@/db";
-import { attempts, submissions } from "@/db/schema";
+import { attempts, submissions, warmupExecutions, warmupReflections, warmupSubmissions, warmupVersions } from "@/db/schema";
 import { listAssignments } from "@/lib/roster";
 import { getOrCreateDefaultCourse } from "@/lib/store";
 import type { EvaluationResponses } from "@/lib/store";
@@ -12,14 +12,20 @@ function json(value: unknown): string {
 export async function buildExportWorkbook(): Promise<Uint8Array> {
   const db = await getDb();
   const stage = await getOrCreateDefaultCourse();
-  const [allSubmissions, allAttempts, assignments] = await Promise.all([
+  const [allSubmissions, allAttempts, assignments, researchSubmissions, versions, executions, reflections] = await Promise.all([
     db.select().from(submissions),
     db.select().from(attempts),
     listAssignments(stage.id),
+    db.select().from(warmupSubmissions), db.select().from(warmupVersions), db.select().from(warmupExecutions), db.select().from(warmupReflections),
   ]);
   const submissionById = new Map(allSubmissions.map((s) => [s.id, s]));
 
   const wb = XLSX.utils.book_new();
+
+  const researchSubmissionById = new Map(researchSubmissions.map(s=>[s.id,s]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(versions.map(v=>{const s=researchSubmissionById.get(v.submissionId);return {라운드:v.roundId,작성자학번:s?.studentId??"",작성자이름:s?.studentName??"",버전:`v${v.version}`,알고리즘:v.algorithmText,수정이유:v.revisionReason??"",작성수정시각:v.createdAt};})), "연구_버전");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(executions.map(e=>{const s=researchSubmissionById.get(e.submissionId);const v=versions.find(x=>x.id===e.versionId);return {라운드:e.roundId,작성자학번:s?.studentId??"",작성자이름:s?.studentName??"",버전:`v${v?.version??""}`,실행자학번:e.executorId,실행자이름:e.executorName,실행결과:e.result,문제발생위치:e.problemLocation??"",실행기록:e.executionNote,실행시각:e.createdAt};})), "연구_실행");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reflections.map(r=>{const e=executions.find(x=>x.id===r.executionId);const s=researchSubmissionById.get(r.submissionId);const v=versions.find(x=>x.id===r.versionId);return {작성자학번:s?.studentId??"",작성자이름:s?.studentName??"",버전:`v${v?.version??""}`,예상일치:r.expectedMatch,문제발생부분:r.problemLocation??"",원인:r.cause,수정계획:r.plannedRevision,평가시각:r.createdAt,최종성공:e?.result==="success"?"Y":"N"};})), "연구_자기평가");
 
   const submissionRows = allSubmissions.map((s) => ({
     id: s.id,

@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
+import { warmupExecutions, warmupExperiences, warmupReflections, warmupRounds, warmupSubmissions, warmupVersions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { listAssignments } from "@/lib/roster";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -196,7 +196,12 @@ export async function deleteWarmupRound(id: number, courseId: number) {
   assertWarmupRoundDeletable(round, courseId);
 
   const db = await getDb();
+  const childSubmissions = await db.select({ id: warmupSubmissions.id }).from(warmupSubmissions).where(eq(warmupSubmissions.roundId, id));
+  const childIds = childSubmissions.map((row) => row.id);
   await db.batch([
+    db.delete(warmupReflections).where(childIds.length ? inArray(warmupReflections.submissionId, childIds) : eq(warmupReflections.id, -1)),
+    db.delete(warmupExecutions).where(eq(warmupExecutions.roundId, id)),
+    db.delete(warmupVersions).where(eq(warmupVersions.roundId, id)),
     db.delete(warmupVotes).where(eq(warmupVotes.roundId, id)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.roundId, id)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.roundId, id)),
@@ -221,6 +226,9 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(warmupReflections).where(eq(warmupReflections.submissionId, submissionId)),
+    db.delete(warmupExecutions).where(eq(warmupExecutions.submissionId, submissionId)),
+    db.delete(warmupVersions).where(eq(warmupVersions.submissionId, submissionId)),
     db.delete(warmupVotes).where(eq(warmupVotes.submissionId, submissionId)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.submissionId, submissionId)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId)),
@@ -239,7 +247,7 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
     .orderBy(warmupSubmissions.id);
   const submissionIds = submissions.map((s) => s.id);
 
-  const [votes, experiences, assignments] = await Promise.all([
+  const [votes, experiences, assignments, versions, executions, reflections] = await Promise.all([
     submissionIds.length
       ? db.select().from(warmupVotes).where(inArray(warmupVotes.submissionId, submissionIds))
       : Promise.resolve([]),
@@ -247,6 +255,9 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
       ? db.select().from(warmupExperiences).where(inArray(warmupExperiences.submissionId, submissionIds))
       : Promise.resolve([]),
     listAssignments(courseId),
+    submissionIds.length ? db.select().from(warmupVersions).where(inArray(warmupVersions.submissionId, submissionIds)) : Promise.resolve([]),
+    submissionIds.length ? db.select().from(warmupExecutions).where(inArray(warmupExecutions.submissionId, submissionIds)) : Promise.resolve([]),
+    submissionIds.length ? db.select().from(warmupReflections).where(inArray(warmupReflections.submissionId, submissionIds)) : Promise.resolve([]),
   ]);
 
   const realSubmissions = submissions.filter((submission) => !submission.isDemo);
@@ -278,6 +289,9 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
         };
       }),
     experiences: experiences.filter((e) => e.submissionId === submission.id),
+    versions: versions.filter((v) => v.submissionId === submission.id).sort((a,b) => a.version - b.version),
+    executions: executions.filter((e) => e.submissionId === submission.id),
+    reflections: reflections.filter((r) => r.submissionId === submission.id),
   }));
 
   return { round, participants, items };
@@ -312,6 +326,7 @@ export async function upsertWarmupSubmission(input: {
   studentId: string;
   studentName: string;
   algorithmText: string;
+  revisionReason?: string;
 }) {
   const round = await getWarmupRound(input.roundId);
   if (!round || round.status !== "open") {
@@ -322,11 +337,28 @@ export async function upsertWarmupSubmission(input: {
   const now = new Date().toISOString();
   const existing = await getMyWarmupSubmission(input.roundId, input.studentKey);
   if (existing) {
+    const [latest] = await db.select().from(warmupVersions).where(eq(warmupVersions.submissionId, existing.id)).orderBy(desc(warmupVersions.version));
+    if (latest && latest.algorithmText === input.algorithmText) return existing;
+    if (latest) {
+      const [execution] = await db.select().from(warmupExecutions).where(eq(warmupExecutions.versionId, latest.id)).orderBy(desc(warmupExecutions.id));
+      if (!execution) throw new WarmupStateError("먼저 현재 버전을 다른 학생이 실행해야 합니다");
+      const [reflection] = await db.select().from(warmupReflections).where(eq(warmupReflections.executionId, execution.id));
+      if (!reflection) throw new WarmupStateError("실행 결과를 확인하고 먼저 생각해보기를 작성하세요");
+      if (!input.revisionReason?.trim()) throw new WarmupStateError("수정 이유를 입력하세요");
+    }
     const [updated] = await db
       .update(warmupSubmissions)
       .set({ algorithmText: input.algorithmText, updatedAt: now })
       .where(eq(warmupSubmissions.id, existing.id))
       .returning();
+    await db.insert(warmupVersions).values({
+      submissionId: existing.id,
+      roundId: input.roundId,
+      version: (latest?.version ?? 0) + 1,
+      algorithmText: input.algorithmText,
+      revisionReason: input.revisionReason?.trim() || null,
+      createdAt: now,
+    });
     return updated;
   }
 
@@ -351,6 +383,46 @@ export async function upsertWarmupSubmission(input: {
       updatedAt: now,
     })
     .returning();
+  await db.insert(warmupVersions).values({ submissionId: created.id, roundId: input.roundId, version: 1, algorithmText: input.algorithmText, createdAt: now });
+  return created;
+}
+
+export async function getResearchCycle(submissionId: number, studentKey: string, courseId: number) {
+  const db = await getDb();
+  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId));
+  if (!submission) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
+  const round = await getWarmupRound(submission.roundId);
+  if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
+  const versions = await db.select().from(warmupVersions).where(eq(warmupVersions.submissionId, submissionId)).orderBy(warmupVersions.version);
+  const executions = await db.select().from(warmupExecutions).where(eq(warmupExecutions.submissionId, submissionId)).orderBy(warmupExecutions.id);
+  const reflections = await db.select().from(warmupReflections).where(eq(warmupReflections.submissionId, submissionId)).orderBy(warmupReflections.id);
+  return { submission, versions, executions, reflections, isAuthor: submission.studentKey === studentKey };
+}
+
+export async function recordVersionExecution(input: { versionId: number; executorStudentKey: string; executorId: string; executorName: string; courseId: number; result: string; problemLocation?: string; executionNote: string }) {
+  const db = await getDb();
+  const [version] = await db.select().from(warmupVersions).where(eq(warmupVersions.id, input.versionId));
+  if (!version) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
+  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, version.submissionId));
+  const round = await getWarmupRound(version.roundId);
+  if (!submission || !round || round.courseId !== input.courseId) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
+  if (submission.studentKey === input.executorStudentKey) throw new WarmupOwnershipError("본인 알고리즘은 실행할 수 없습니다");
+  const [existing] = await db.select().from(warmupExecutions).where(and(eq(warmupExecutions.versionId, input.versionId), eq(warmupExecutions.executorStudentKey, input.executorStudentKey)));
+  if (existing) return existing;
+  const [created] = await db.insert(warmupExecutions).values({ versionId: version.id, submissionId: version.submissionId, roundId: version.roundId, executorStudentKey: input.executorStudentKey, executorId: input.executorId, executorName: input.executorName, result: input.result, problemLocation: input.problemLocation?.trim() || null, executionNote: input.executionNote.trim(), createdAt: new Date().toISOString() }).returning();
+  return created;
+}
+
+export async function recordAuthorReflection(input: { executionId: number; studentKey: string; courseId: number; expectedMatch: string; problemLocation?: string; cause: string; plannedRevision: string }) {
+  const db = await getDb();
+  const [execution] = await db.select().from(warmupExecutions).where(eq(warmupExecutions.id, input.executionId));
+  if (!execution) throw new WarmupNotFoundError("실행 기록을 찾을 수 없습니다");
+  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, execution.submissionId));
+  const round = await getWarmupRound(execution.roundId);
+  if (!submission || !round || round.courseId !== input.courseId || submission.studentKey !== input.studentKey) throw new WarmupOwnershipError("작성자만 생각해보기를 기록할 수 있습니다");
+  const [existing] = await db.select().from(warmupReflections).where(eq(warmupReflections.executionId, execution.id));
+  if (existing) return existing;
+  const [created] = await db.insert(warmupReflections).values({ executionId: execution.id, versionId: execution.versionId, submissionId: execution.submissionId, expectedMatch: input.expectedMatch, problemLocation: input.problemLocation?.trim() || null, cause: input.cause.trim(), plannedRevision: input.plannedRevision.trim(), createdAt: new Date().toISOString() }).returning();
   return created;
 }
 

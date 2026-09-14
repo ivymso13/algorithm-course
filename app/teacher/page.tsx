@@ -54,6 +54,9 @@ type WarmupRoundDetail = {
       voteType: WarmupVoteType;
     }[];
     experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
+    versions: { id:number; version:number; algorithmText:string; revisionReason:string|null; createdAt:string }[];
+    executions: { id:number; versionId:number; executorId:string; executorName:string; result:string; problemLocation:string|null; executionNote:string; createdAt:string }[];
+    reflections: { executionId:number; expectedMatch:string; problemLocation:string|null; cause:string; plannedRevision:string; createdAt:string }[];
   }[];
 };
 
@@ -1345,6 +1348,17 @@ export default function TeacherPage() {
                                             ))}
                                           </div>
                                         ) : <p className="text-[10px] text-slate-400">아직 실행 피드백이 없습니다.</p>}
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">연구 과정 타임라인</p>
+                                        <div className="space-y-2">
+                                          {selectedItem.versions.map((version) => {
+                                            const runs=selectedItem.executions.filter((execution)=>execution.versionId===version.id);
+                                            return <div key={version.id} className="rounded-xl border border-slate-200 p-3 text-[10px]"><div className="flex justify-between"><b className="text-blue-700">v{version.version} 작성</b><span className="text-slate-400">{new Date(version.createdAt).toLocaleString("ko-KR")}</span></div><pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 font-mono">{version.algorithmText}</pre>{version.revisionReason&&<p className="mt-2 text-indigo-700">수정 이유: {version.revisionReason}</p>}{runs.map(run=>{const reflection=selectedItem.reflections.find(r=>r.executionId===run.id);return <div key={run.id} className="mt-2 border-t border-slate-100 pt-2"><p><b>{run.result==="success"?"실행 성공":run.result==="partial"?"일부 수행 가능":run.result==="wrong"?"잘못된 결과":"실행 불가능"}</b> · {run.executorId} {run.executorName}</p><p className="mt-1">문제 위치: {run.problemLocation||"없음"} · {run.executionNote}</p>{reflection&&<div className="mt-1 rounded bg-indigo-50 p-2"><b>작성자 평가</b><p>원인: {reflection.cause}</p><p>수정 계획: {reflection.plannedRevision}</p></div>}</div>})}</div>;
+                                          })}
+                                          {selectedItem.versions.length===0&&<p className="text-slate-400">이전 형식의 제출로 버전 기록이 없습니다.</p>}
+                                        </div>
                                       </div>
 
                                       <div className="flex justify-end border-t border-slate-100 pt-2">

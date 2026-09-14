@@ -204,7 +204,7 @@ export default function WriteExplorePage() {
               </div>
               <div className="pt-2">
                 <a
-                  href="/write/algorithm"
+                  href="/write/reflect"
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition"
                 >
                   <span>알고리즘 작성하러 가기 ➔</span>
@@ -229,7 +229,7 @@ export default function WriteExplorePage() {
                   href="/write/algorithm"
                   className="shrink-0 text-xs font-bold text-slate-700 hover:text-blue-600 transition"
                 >
-                  ✏️ 수정하기
+                  실행 결과 확인 · 생각해보기
                 </a>
               </div>
             </section>

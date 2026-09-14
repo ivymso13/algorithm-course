@@ -39,6 +39,7 @@ export default function AlgorithmWritePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
+  const [revisionReason, setRevisionReason] = useState("");
 
   // Initialize steps from a pending draft, falling back to the last saved
   // submission. A non-empty draft always wins: submitting always clears the
@@ -139,7 +140,7 @@ export default function AlgorithmWritePage() {
       const res = await fetch("/api/warmup/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ algorithmText: serialized }),
+        body: JSON.stringify({ algorithmText: serialized, revisionReason }),
       });
       const data = (await res.json()) as { mySubmission?: typeof mySubmission; error?: string };
       if (!res.ok || !data.mySubmission) {
@@ -329,6 +330,12 @@ export default function AlgorithmWritePage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {hasSubmitted && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2"><label htmlFor="revision-reason" className="text-xs font-bold text-indigo-900">수정 이유</label><a href="/write/reflect" className="text-[11px] font-bold text-indigo-700 hover:underline">실행 결과와 이전 버전 보기 →</a></div>
+                    <textarea id="revision-reason" required rows={2} maxLength={500} value={revisionReason} onChange={(e) => setRevisionReason(e.target.value)} placeholder="실행 결과와 내 생각을 바탕으로 무엇을 왜 고치는지 적어주세요." className="w-full rounded-xl border border-indigo-200 bg-white p-3 text-base sm:text-xs" />
+                  </div>
+                )}
                 <div className="space-y-3">
                   {steps.map((step, index) => {
                     const stepInvalid = submitAttempted && !step.trim();

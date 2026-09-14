@@ -348,3 +348,61 @@ export const warmupExperiences = sqliteTable(
     submissionIdx: index("warmup_experiences_submission_idx").on(table.submissionId),
   })
 );
+
+/** Immutable snapshots used by the research cycle. The current text remains
+ * on warmup_submissions for compatibility, while every save appends here. */
+export const warmupVersions = sqliteTable(
+  "warmup_versions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    submissionId: integer("submission_id").notNull(),
+    roundId: integer("round_id").notNull(),
+    version: integer("version").notNull(),
+    algorithmText: text("algorithm_text").notNull(),
+    revisionReason: text("revision_reason"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    submissionVersionIdx: uniqueIndex("warmup_versions_submission_version_idx").on(table.submissionId, table.version),
+    roundIdx: index("warmup_versions_round_idx").on(table.roundId),
+  })
+);
+
+/** One executor's outcome for one immutable version. */
+export const warmupExecutions = sqliteTable(
+  "warmup_executions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    versionId: integer("version_id").notNull(),
+    submissionId: integer("submission_id").notNull(),
+    roundId: integer("round_id").notNull(),
+    executorStudentKey: text("executor_student_key").notNull(),
+    executorId: text("executor_id").notNull(),
+    executorName: text("executor_name").notNull(),
+    result: text("result").notNull(),
+    problemLocation: text("problem_location"),
+    executionNote: text("execution_note").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    versionExecutorIdx: uniqueIndex("warmup_executions_version_executor_idx").on(table.versionId, table.executorStudentKey),
+    submissionIdx: index("warmup_executions_submission_idx").on(table.submissionId),
+  })
+);
+
+/** The author must reflect on an execution before creating the next version. */
+export const warmupReflections = sqliteTable(
+  "warmup_reflections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    executionId: integer("execution_id").notNull(),
+    versionId: integer("version_id").notNull(),
+    submissionId: integer("submission_id").notNull(),
+    expectedMatch: text("expected_match").notNull(),
+    problemLocation: text("problem_location"),
+    cause: text("cause").notNull(),
+    plannedRevision: text("planned_revision").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({ executionIdx: uniqueIndex("warmup_reflections_execution_idx").on(table.executionId) })
+);
