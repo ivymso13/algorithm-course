@@ -1,7 +1,7 @@
 import { buildSessionCookie } from "@/lib/session";
 import { jsonWithCookie } from "@/lib/http";
 import { createSession, findOrCreateStudent, getOrCreateDefaultCourse, writePhaseSnapshot } from "@/lib/store";
-import { getAssignmentBySchoolAndStudentId } from "@/lib/roster";
+import { addRosterStudent, getAssignmentBySchoolAndStudentId } from "@/lib/roster";
 import { ValidationError, validateConsent, validateSchool, validateStudentId } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -31,7 +31,18 @@ export async function POST(request: Request) {
   // School + student ID is the login identifier — never the client-supplied
   // name (there isn't one). The real name/studentKey always come from the
   // roster row itself, never from the client.
-  const assignment = await getAssignmentBySchoolAndStudentId(course.id, school, studentId);
+  let assignment = await getAssignmentBySchoolAndStudentId(course.id, school, studentId);
+  // Owner-facing temporary preview account. It is created lazily on first
+  // login so the live course can be inspected without adding a real student.
+  // The row is clearly labelled and can be removed later from the teacher
+  // roster like any other student.
+  if (!assignment && school === "테스트학교" && studentId === "test001") {
+    assignment = await addRosterStudent(course.id, {
+      school: "테스트학교",
+      studentId: "test001",
+      name: "테스트학생",
+    });
+  }
   if (!assignment) {
     return Response.json({ error: "학교와 학번을 확인해주세요" }, { status: 404 });
   }
