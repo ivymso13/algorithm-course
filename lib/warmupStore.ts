@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupTeacherAssessments, warmupVersions, warmupVotes } from "@/db/schema";
+import { warmupAssignmentReassignments, warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupTeacherAssessments, warmupVersions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { listAssignments } from "@/lib/roster";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -200,6 +200,31 @@ export async function openWarmupReview(id: number, courseId: number) {
   return updated;
 }
 
+export async function reassignPendingPeerAssignments(input: { roundId:number; courseId:number; fromEvaluatorStudentKey:string; toEvaluatorStudentKey:string }) {
+  if (!input.fromEvaluatorStudentKey || !input.toEvaluatorStudentKey || input.fromEvaluatorStudentKey === input.toEvaluatorStudentKey) throw new WarmupStateError("결석 학생과 대체 학생을 다르게 선택하세요");
+  const round = assertWarmupRoundExists(await getWarmupRound(input.roundId), input.courseId);
+  if (round.status !== "open" || !round.reviewOpenedAt) throw new WarmupStateError("동료 평가 진행 중에만 재배정할 수 있습니다");
+  if (round.selfReviewOpenedAt) throw new WarmupStateError("자기 평가가 시작된 뒤에는 평가자를 바꿀 수 없습니다");
+  const rosterRows = await listAssignments(input.courseId);
+  if (!rosterRows.some(row=>row.studentKey===input.fromEvaluatorStudentKey) || !rosterRows.some(row=>row.studentKey===input.toEvaluatorStudentKey)) throw new WarmupNotFoundError("학생을 찾을 수 없습니다");
+  const db = await getDb();
+  const assignments = await db.select().from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId,input.roundId),eq(warmupPeerAssignments.evaluatorStudentKey,input.fromEvaluatorStudentKey)));
+  const completed = await db.select({submissionId:warmupExecutions.submissionId}).from(warmupExecutions).where(and(eq(warmupExecutions.roundId,input.roundId),eq(warmupExecutions.executorStudentKey,input.fromEvaluatorStudentKey)));
+  const completedIds = new Set(completed.map(row=>row.submissionId));
+  const submissions = await db.select({id:warmupSubmissions.id,studentKey:warmupSubmissions.studentKey}).from(warmupSubmissions).where(eq(warmupSubmissions.roundId,input.roundId));
+  const authorBySubmission = new Map(submissions.map(row=>[row.id,row.studentKey]));
+  const existingForReplacement = await db.select({submissionId:warmupPeerAssignments.submissionId}).from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId,input.roundId),eq(warmupPeerAssignments.evaluatorStudentKey,input.toEvaluatorStudentKey)));
+  const replacementIds = new Set(existingForReplacement.map(row=>row.submissionId));
+  const movable = assignments.filter(row=>!completedIds.has(row.submissionId)&&authorBySubmission.get(row.submissionId)!==input.toEvaluatorStudentKey&&!replacementIds.has(row.submissionId));
+  if (!movable.length) throw new WarmupStateError("옮길 수 있는 미완료 평가가 없습니다. 이미 완료됐거나 대체 학생에게 중복되는 배정입니다");
+  const now = new Date().toISOString();
+  await db.batch(movable.flatMap(row=>[
+    db.update(warmupPeerAssignments).set({evaluatorStudentKey:input.toEvaluatorStudentKey}).where(eq(warmupPeerAssignments.id,row.id)),
+    db.insert(warmupAssignmentReassignments).values({roundId:input.roundId,assignmentId:row.id,submissionId:row.submissionId,fromEvaluatorStudentKey:input.fromEvaluatorStudentKey,toEvaluatorStudentKey:input.toEvaluatorStudentKey,createdAt:now}),
+  ]));
+  return { moved:movable.length, remaining:assignments.length-completedIds.size-movable.length };
+}
+
 export async function openWarmupStage(id: number, courseId: number, stage: 2 | 4) {
   const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
   if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드만 단계를 시작할 수 있습니다");
@@ -242,6 +267,7 @@ export async function deleteWarmupRound(id: number, courseId: number) {
   const childSubmissions = await db.select({ id: warmupSubmissions.id }).from(warmupSubmissions).where(eq(warmupSubmissions.roundId, id));
   const childIds = childSubmissions.map((row) => row.id);
   await db.batch([
+    db.delete(warmupAssignmentReassignments).where(eq(warmupAssignmentReassignments.roundId,id)),
     db.delete(warmupTeacherAssessments).where(childIds.length ? inArray(warmupTeacherAssessments.submissionId, childIds) : eq(warmupTeacherAssessments.id, -1)),
     db.delete(warmupReflections).where(childIds.length ? inArray(warmupReflections.submissionId, childIds) : eq(warmupReflections.id, -1)),
     db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.roundId, id)),
@@ -271,6 +297,7 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(warmupAssignmentReassignments).where(eq(warmupAssignmentReassignments.submissionId, submissionId)),
     db.delete(warmupTeacherAssessments).where(eq(warmupTeacherAssessments.submissionId, submissionId)),
     db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.submissionId, submissionId)),
     db.delete(warmupReflections).where(eq(warmupReflections.submissionId, submissionId)),

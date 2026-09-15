@@ -106,6 +106,13 @@
       "when": 1789443319983,
       "tag": "0014_sparkling_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1789443682125,
+      "tag": "0015_quiet_kingpin",
+      "breakpoints": true
     }
   ]
 }

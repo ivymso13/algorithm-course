@@ -336,6 +336,21 @@ export const warmupPeerAssignments = sqliteTable(
   })
 );
 
+/** Immutable audit log for teacher-initiated evaluator replacements. */
+export const warmupAssignmentReassignments = sqliteTable(
+  "warmup_assignment_reassignments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    roundId: integer("round_id").notNull(),
+    assignmentId: integer("assignment_id").notNull(),
+    submissionId: integer("submission_id").notNull(),
+    fromEvaluatorStudentKey: text("from_evaluator_student_key").notNull(),
+    toEvaluatorStudentKey: text("to_evaluator_student_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({ roundIdx: index("warmup_assignment_reassignments_round_idx").on(table.roundId) })
+);
+
 /**
  * One student's generic step-check walkthrough of another student's
  * submission: which lines of the algorithm text they checked off while
