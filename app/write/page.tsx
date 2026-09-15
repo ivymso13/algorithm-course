@@ -98,7 +98,7 @@ export default function WriteProblemPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         {/* 3-Step Navigation */}
         <StudentStepNav currentStep={1} hasSubmitted={hasSubmitted} />
 

@@ -271,7 +271,7 @@ export default function ExecutePage() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
-        <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+        <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
           <nav aria-label="경로" className="flex items-center gap-1.5 text-xs text-slate-500">
             <a href="/write/explore" className="hover:text-blue-600 hover:underline">
               아이디어·추천 보드
@@ -391,7 +391,7 @@ export default function ExecutePage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <nav aria-label="경로" className="flex items-center gap-1.5 text-xs text-slate-500">
           <a href="/write/explore" className="hover:text-blue-600 hover:underline">
             아이디어·추천 보드
