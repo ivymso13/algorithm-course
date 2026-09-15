@@ -118,9 +118,9 @@ export default function Home() {
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">아이디어 추천 &amp; 체험</h3>
+                    <h3 className="text-base font-bold text-slate-900">동료 평가</h3>
                   <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                    새로운 랜덤 문제로 친구들의 알고리즘을 차례대로 실습해보고, 4종 추천 투표와 단계별 체험으로 시야를 넓힙니다.
+                    친구의 알고리즘을 문장 그대로 실행하고, 실행 결과와 문제 해결 여부를 근거와 함께 평가합니다.
                   </p>
                 </div>
               </div>

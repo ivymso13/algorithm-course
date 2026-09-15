@@ -446,8 +446,8 @@ export default function AlgorithmWritePage() {
                       {submitting
                         ? "제출 중..."
                         : hasSubmitted
-                        ? "수정 내용 저장하고 아이디어 보드로 이동 ➔"
-                        : "알고리즘 제출하고 아이디어 보드로 이동 ➔"}
+                        ? "수정 내용 저장하고 동료 평가로 이동 ➔"
+                        : "알고리즘 제출하고 동료 평가로 이동 ➔"}
                     </button>
                   </div>
                 ) : (

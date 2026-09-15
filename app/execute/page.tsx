@@ -274,7 +274,7 @@ export default function ExecutePage() {
         <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
           <nav aria-label="경로" className="flex items-center gap-1.5 text-xs text-slate-500">
             <a href="/write/explore" className="hover:text-blue-600 hover:underline">
-              아이디어·추천 보드
+              동료 평가
             </a>
             <span className="text-slate-300">/</span>
             <span className="font-semibold text-slate-800">체험 선택</span>
@@ -283,12 +283,12 @@ export default function ExecutePage() {
           <header className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
             <div>
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                아이디어 체험
+                동료 알고리즘 평가
               </span>
               <h1 className="text-base font-bold text-slate-900 mt-1">체험할 알고리즘 선택</h1>
             </div>
             <a href="/write/explore" className="text-xs text-blue-600 hover:underline font-semibold">
-              ← 아이디어 보드로
+              ← 동료 평가로
             </a>
           </header>
 
@@ -313,7 +313,7 @@ export default function ExecutePage() {
                 href="/write/explore"
                 className="inline-block rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
               >
-                아이디어 보드로 이동 ➔
+                동료 평가로 이동 ➔
               </a>
             </div>
           ) : (
@@ -362,7 +362,7 @@ export default function ExecutePage() {
           <div className="max-w-sm space-y-3">
             <p className="text-sm font-bold text-rose-700">⚠️ {loadError}</p>
             <a href="/write/explore" className="inline-block text-xs font-bold text-blue-600 hover:underline">
-              ← 아이디어 보드로 돌아가기
+              ← 동료 평가로 돌아가기
             </a>
           </div>
         </main>
@@ -394,7 +394,7 @@ export default function ExecutePage() {
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <nav aria-label="경로" className="flex items-center gap-1.5 text-xs text-slate-500">
           <a href="/write/explore" className="hover:text-blue-600 hover:underline">
-            아이디어·추천 보드
+            동료 평가
           </a>
           <span className="text-slate-300">/</span>
           <span className="font-semibold text-slate-800">{submission.anonLabel} 체험</span>
@@ -405,7 +405,7 @@ export default function ExecutePage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                아이디어 체험
+                동료 알고리즘 평가
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -421,7 +421,7 @@ export default function ExecutePage() {
             href="/write/explore"
             className="text-xs text-blue-600 hover:underline font-semibold shrink-0"
           >
-            ← 아이디어 보드로
+            ← 동료 평가로
           </a>
         </header>
 

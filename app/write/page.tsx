@@ -203,7 +203,7 @@ export default function WriteProblemPage() {
                     href="/write/explore"
                     className="w-full sm:w-1/2 rounded-xl bg-blue-600 py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition text-center"
                   >
-                    아이디어 보드로 가기 ➔
+                    동료 평가로 가기 ➔
                   </a>
                 </div>
               ) : (

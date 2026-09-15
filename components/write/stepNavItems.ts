@@ -5,7 +5,7 @@
  *
  * `label` must NOT include the step number: `StudentStepNav` already renders
  * `number` on its own in a circular badge next to `label` — prefixing the
- * label with the number too is exactly the "3 3 아이디어·추천" duplicate-digit
+ * label with the number too would create a duplicate step number.
  * bug this file previously had.
  *
  * The flow is 3 steps, not 4: peer-algorithm "체험" (/execute) is reached as
@@ -27,7 +27,7 @@ export type StepNavItem = {
 const STEP_DEFS: { number: StepNumber; label: string; href: string }[] = [
   { number: 1, label: "문제·실습", href: "/write" },
   { number: 2, label: "알고리즘 작성", href: "/write/algorithm" },
-  { number: 3, label: "아이디어·추천", href: "/write/explore" },
+  { number: 3, label: "동료 평가", href: "/write/explore" },
 ];
 
 /**

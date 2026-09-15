@@ -10,6 +10,7 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
+import { PeerEvaluationPractice } from "@/components/write/PeerEvaluationPractice";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
 import {
   WARMUP_VOTE_ICONS,
@@ -196,15 +197,15 @@ export default function WriteExplorePage() {
               </div>
               <div>
                 <h1 className="text-base sm:text-lg font-bold text-slate-900">
-                  아이디어 & 추천 (잠김)
+                  동료 평가 (잠김)
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-md mx-auto leading-relaxed">
-                  알고리즘을 먼저 제출해야 다른 학생들의 아이디어와 추천, 새로운 무작위 문제 실습이 열립니다.
+                  알고리즘을 먼저 제출해야 다른 학생의 알고리즘을 실행하고 평가할 수 있습니다.
                 </p>
               </div>
               <div className="pt-2">
                 <a
-                  href="/write/reflect"
+                  href="/write/algorithm"
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition"
                 >
                   <span>알고리즘 작성하러 가기 ➔</span>
@@ -226,7 +227,7 @@ export default function WriteExplorePage() {
                   </p>
                 </div>
                 <a
-                  href="/write/algorithm"
+                  href="/write/reflect"
                   className="shrink-0 text-xs font-bold text-slate-700 hover:text-blue-600 transition"
                 >
                   실행 결과 확인 · 생각해보기
@@ -257,6 +258,7 @@ export default function WriteExplorePage() {
               </div>
             ) : (
               <>
+                <PeerEvaluationPractice />
                 {boardError && (
                   <div
                     role="alert"
@@ -284,7 +286,7 @@ export default function WriteExplorePage() {
                       className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
                       aria-hidden="true"
                     />
-                    <span>다른 학생의 아이디어를 불러오는 중...</span>
+                    <span>다른 학생의 알고리즘을 불러오는 중...</span>
                   </div>
                 ) : board.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-400 space-y-2">
@@ -370,7 +372,7 @@ export default function WriteExplorePage() {
 
                       <div className="pt-2 border-t border-slate-100 space-y-1">
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
-                          <span>💡 추천하기</span>
+                          <span>💡 좋은 점 표시하기</span>
                           {!isOpen && (
                             <span className="text-[10px] font-normal text-slate-400">(라운드 종료)</span>
                           )}
@@ -477,7 +479,7 @@ export default function WriteExplorePage() {
                         {evaluatedCount} / {board.length}개 알고리즘 평가 완료
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        위 목록에서 아직 추천 태그를 누르지 않은 알고리즘을 모두 평가해주세요.
+                        위 목록에서 아직 평가하지 않은 알고리즘을 모두 확인해주세요.
                       </p>
                     </div>
                   ) : round.problemType ? (
@@ -485,7 +487,7 @@ export default function WriteExplorePage() {
                   ) : (
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xs flex flex-col items-center justify-center space-y-1">
                       <p className="text-xs font-bold text-slate-700">이 문제는 별도 실습 도구가 준비되어 있지 않습니다</p>
-                      <p className="text-[11px] text-slate-500">위 알고리즘을 읽고 추천 여부를 판단해보세요.</p>
+                      <p className="text-[11px] text-slate-500">위 알고리즘을 직접 실행하고 평가해보세요.</p>
                     </div>
                   )}
                 </section>
