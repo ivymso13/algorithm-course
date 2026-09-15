@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const session = await requireStudentSession(request);
   if (!session) return SESSION_ERROR_RESPONSE();
 
-  const body = (await request.json().catch(() => ({}))) as { algorithmText?: string; revisionReason?: string };
+  const body = (await request.json().catch(() => ({}))) as { algorithmText?: string; revisionReason?: string; finalSubmission?: boolean };
   let algorithmText: string;
   try {
     algorithmText = validateAlgorithmText(body.algorithmText);
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       studentName: assignment.name,
       algorithmText,
       revisionReason: body.revisionReason,
+      finalSubmission: body.finalSubmission === true,
     });
     return Response.json({
       ok: true,

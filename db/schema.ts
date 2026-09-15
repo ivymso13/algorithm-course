@@ -378,6 +378,7 @@ export const warmupVersions = sqliteTable(
     version: integer("version").notNull(),
     algorithmText: text("algorithm_text").notNull(),
     revisionReason: text("revision_reason"),
+    isFinal: integer("is_final", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({

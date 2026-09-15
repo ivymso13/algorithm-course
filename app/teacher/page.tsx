@@ -56,7 +56,7 @@ type WarmupRoundDetail = {
       voteType: WarmupVoteType;
     }[];
     experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
-    versions: { id:number; version:number; algorithmText:string; revisionReason:string|null; createdAt:string }[];
+    versions: { id:number; version:number; algorithmText:string; revisionReason:string|null; isFinal:boolean; createdAt:string }[];
     executions: { id:number; versionId:number; executorId:string; executorName:string; result:string; solvedStatus:string; problemLocation:string|null; executionNote:string; createdAt:string }[];
     reflections: { executionId:number; expectedMatch:string; problemLocation:string|null; cause:string; plannedRevision:string; createdAt:string }[];
   }[];

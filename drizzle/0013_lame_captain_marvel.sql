@@ -1,0 +1,1 @@
+ALTER TABLE `warmup_versions` ADD `is_final` integer DEFAULT false NOT NULL;

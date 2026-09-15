@@ -351,6 +351,7 @@ export async function upsertWarmupSubmission(input: {
   studentName: string;
   algorithmText: string;
   revisionReason?: string;
+  finalSubmission?: boolean;
 }) {
   const round = await getWarmupRound(input.roundId);
   if (!round || round.status !== "open") {
@@ -363,6 +364,7 @@ export async function upsertWarmupSubmission(input: {
   const existing = await getMyWarmupSubmission(input.roundId, input.studentKey);
   if (existing) {
     const [latest] = await db.select().from(warmupVersions).where(eq(warmupVersions.submissionId, existing.id)).orderBy(desc(warmupVersions.version));
+    if (latest?.isFinal) throw new WarmupStateError("최종 제출이 완료되어 더 이상 수정할 수 없습니다");
     if (latest && latest.algorithmText === input.algorithmText) return existing;
     if (latest) {
       const [execution] = await db.select().from(warmupExecutions).where(eq(warmupExecutions.versionId, latest.id)).orderBy(desc(warmupExecutions.id));
@@ -382,6 +384,7 @@ export async function upsertWarmupSubmission(input: {
       version: (latest?.version ?? 0) + 1,
       algorithmText: input.algorithmText,
       revisionReason: input.revisionReason?.trim() || null,
+      isFinal: input.finalSubmission === true,
       createdAt: now,
     });
     return updated;
@@ -408,7 +411,7 @@ export async function upsertWarmupSubmission(input: {
       updatedAt: now,
     })
     .returning();
-  await db.insert(warmupVersions).values({ submissionId: created.id, roundId: input.roundId, version: 1, algorithmText: input.algorithmText, createdAt: now });
+  await db.insert(warmupVersions).values({ submissionId: created.id, roundId: input.roundId, version: 1, algorithmText: input.algorithmText, isFinal: false, createdAt: now });
   return created;
 }
 
