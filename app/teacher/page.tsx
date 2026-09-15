@@ -19,6 +19,8 @@ type WarmupRoundSummary = {
   prompt: string;
   status: WarmupRoundStatus;
   reviewOpenedAt: string | null;
+  writingOpenedAt: string | null;
+  selfReviewOpenedAt: string | null;
   submissionCount: number;
   voteCount: number;
   experienceCount: number;
@@ -311,6 +313,17 @@ export default function TeacherPage() {
       await loadWarmupRounds();
       await loadDashboard();
     }, "평가 단계 시작에 실패했습니다.");
+  }
+
+  async function handleOpenStage(round: WarmupRoundSummary, stage: 2 | 4) {
+    const label = stage === 2 ? "알고리즘 작성" : "자기 평가";
+    if (!confirm(`${label} 단계를 시작할까요? 시작 후에는 이전 단계로 되돌릴 수 없습니다.`)) return;
+    await runWarmupAction(async () => {
+      const res = await fetch("/api/teacher/warmup/stage", { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ roundId: round.id, stage }) });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? `${label} 단계 시작에 실패했습니다.`);
+      await loadWarmupRounds();
+    }, `${label} 단계 시작에 실패했습니다.`);
   }
 
   async function handleCloseRound(roundId: number) {
@@ -1081,20 +1094,28 @@ export default function TeacherPage() {
                             </button>
                           )}
                           {round.status === "open" && !round.reviewOpenedAt && (
+                            !round.writingOpenedAt ? (
+                            <button type="button" onClick={() => handleOpenStage(round, 2)} disabled={warmupBusy} className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 cursor-pointer">✍️ 2단계 작성 시작</button>
+                            ) : (
                             <button
                               type="button"
                               onClick={() => handleOpenReview(round)}
                               disabled={warmupBusy}
                               className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
                             >
-                              📝 평가 단계 시작
+                              👥 3단계 동료 평가 시작
                             </button>
+                            )
                           )}
                           {round.status === "open" && round.reviewOpenedAt && (
                             <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
                               🔎 평가 진행 중 {round.evaluatedCount}/{round.submissionCount}명
                             </span>
                           )}
+                          {round.status === "open" && round.reviewOpenedAt && !round.selfReviewOpenedAt && (
+                            <button type="button" onClick={() => handleOpenStage(round, 4)} disabled={warmupBusy} className="rounded-lg bg-violet-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-violet-700 disabled:opacity-50 cursor-pointer">🪞 4단계 자기 평가 시작</button>
+                          )}
+                          {round.selfReviewOpenedAt && <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">4단계 진행 중</span>}
                           {round.status === "open" && (
                             <button
                               type="button"

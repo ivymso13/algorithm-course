@@ -7,6 +7,9 @@ export type RoundInfo = {
   prompt: string;
   status: "draft" | "open" | "closed";
   reviewOpenedAt: string | null;
+  writingOpenedAt: string | null;
+  selfReviewOpenedAt: string | null;
+  activityStage: 1 | 2 | 3 | 4;
   problemType: ProblemType | null;
 };
 

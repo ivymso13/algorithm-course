@@ -249,6 +249,8 @@ export const warmupRounds = sqliteTable(
     publishedAt: text("published_at"),
     closedAt: text("closed_at"),
     reviewOpenedAt: text("review_opened_at"),
+    writingOpenedAt: text("writing_opened_at"),
+    selfReviewOpenedAt: text("self_review_opened_at"),
   },
   (table) => ({
     courseIdx: index("warmup_rounds_course_idx").on(table.courseId),
@@ -315,6 +317,22 @@ export const warmupVotes = sqliteTable(
       table.voteType
     ),
     submissionIdx: index("warmup_votes_submission_idx").on(table.submissionId),
+  })
+);
+
+/** Balanced, teacher-created peer-evaluation assignments for a round. */
+export const warmupPeerAssignments = sqliteTable(
+  "warmup_peer_assignments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    roundId: integer("round_id").notNull(),
+    submissionId: integer("submission_id").notNull(),
+    evaluatorStudentKey: text("evaluator_student_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    uniqueAssignmentIdx: uniqueIndex("warmup_peer_assignments_unique_idx").on(table.roundId, table.submissionId, table.evaluatorStudentKey),
+    evaluatorIdx: index("warmup_peer_assignments_evaluator_idx").on(table.roundId, table.evaluatorStudentKey),
   })
 );
 

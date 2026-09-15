@@ -198,7 +198,7 @@ export default function AlgorithmWritePage() {
   }
 
   const hasSubmitted = Boolean(mySubmission);
-  const isOpen = round?.status === "open";
+  const isOpen = round?.status === "open" && (round?.activityStage ?? 1) >= 2;
   const serializedText = serializeAlgorithmSteps(steps);
 
   return (
@@ -207,7 +207,7 @@ export default function AlgorithmWritePage() {
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         {/* 3-Step Navigation */}
-        <StudentStepNav currentStep={2} hasSubmitted={hasSubmitted} />
+        <StudentStepNav currentStep={2} hasSubmitted={hasSubmitted} activityStage={round?.activityStage ?? 1} />
 
         {sessionRestoredNotice && (
           <div
@@ -452,7 +452,7 @@ export default function AlgorithmWritePage() {
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 text-center py-2">
-                    이 라운드는 종료되어 제출하거나 수정할 수 없습니다.
+                    {round?.status === "open" ? "교사가 알고리즘 작성 단계를 시작하면 작성할 수 있습니다." : "이 라운드는 종료되어 제출하거나 수정할 수 없습니다."}
                   </p>
                 )}
               </form>

@@ -161,7 +161,7 @@ export default function WriteExplorePage() {
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 sm:gap-5 px-4 py-4 sm:py-5 sm:px-6">
         {/* 3-Step Navigation */}
-        <StudentStepNav currentStep={3} hasSubmitted={hasSubmitted} />
+        <StudentStepNav currentStep={3} hasSubmitted={hasSubmitted} activityStage={round?.activityStage ?? 1} />
 
         {sessionRestoredNotice && (
           <div

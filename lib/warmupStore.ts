@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { warmupExecutions, warmupExperiences, warmupReflections, warmupRounds, warmupSubmissions, warmupVersions, warmupVotes } from "@/db/schema";
+import { warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupVersions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { listAssignments } from "@/lib/roster";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -174,14 +174,36 @@ export async function closeWarmupRound(id: number, courseId: number) {
 export async function openWarmupReview(id: number, courseId: number) {
   const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
   if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드만 평가 단계를 열 수 있습니다");
+  if (!round.writingOpenedAt) throw new WarmupStateError("먼저 알고리즘 작성 단계를 시작하세요");
   if (round.reviewOpenedAt) return round;
 
   const db = await getDb();
+  const submissions = await db.select().from(warmupSubmissions).where(and(eq(warmupSubmissions.roundId, id), eq(warmupSubmissions.isDemo, false))).orderBy(warmupSubmissions.id);
+  if (submissions.length < 4) throw new WarmupStateError("3명씩 배정하려면 최소 4명의 제출이 필요합니다");
+  const assignedAt = new Date().toISOString();
+  const assignments = submissions.flatMap((submission, authorIndex) => [1, 2, 3].map((offset) => ({ roundId: id, submissionId: submission.id, evaluatorStudentKey: submissions[(authorIndex + offset) % submissions.length].studentKey, createdAt: assignedAt })));
+  await db.batch(assignments.map((assignment) => db.insert(warmupPeerAssignments).values(assignment).onConflictDoNothing()));
   const [updated] = await db
     .update(warmupRounds)
     .set({ reviewOpenedAt: new Date().toISOString() })
     .where(eq(warmupRounds.id, id))
     .returning();
+  return updated;
+}
+
+export async function openWarmupStage(id: number, courseId: number, stage: 2 | 4) {
+  const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
+  if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드만 단계를 시작할 수 있습니다");
+  const db = await getDb();
+  const now = new Date().toISOString();
+  if (stage === 2) {
+    if (round.writingOpenedAt) return round;
+    const [updated] = await db.update(warmupRounds).set({ writingOpenedAt: now }).where(eq(warmupRounds.id, id)).returning();
+    return updated;
+  }
+  if (!round.reviewOpenedAt) throw new WarmupStateError("먼저 동료 평가 단계를 시작하세요");
+  if (round.selfReviewOpenedAt) return round;
+  const [updated] = await db.update(warmupRounds).set({ selfReviewOpenedAt: now }).where(eq(warmupRounds.id, id)).returning();
   return updated;
 }
 
@@ -200,6 +222,7 @@ export async function deleteWarmupRound(id: number, courseId: number) {
   const childIds = childSubmissions.map((row) => row.id);
   await db.batch([
     db.delete(warmupReflections).where(childIds.length ? inArray(warmupReflections.submissionId, childIds) : eq(warmupReflections.id, -1)),
+    db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.roundId, id)),
     db.delete(warmupExecutions).where(eq(warmupExecutions.roundId, id)),
     db.delete(warmupVersions).where(eq(warmupVersions.roundId, id)),
     db.delete(warmupVotes).where(eq(warmupVotes.roundId, id)),
@@ -226,6 +249,7 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.submissionId, submissionId)),
     db.delete(warmupReflections).where(eq(warmupReflections.submissionId, submissionId)),
     db.delete(warmupExecutions).where(eq(warmupExecutions.submissionId, submissionId)),
     db.delete(warmupVersions).where(eq(warmupVersions.submissionId, submissionId)),
@@ -332,6 +356,7 @@ export async function upsertWarmupSubmission(input: {
   if (!round || round.status !== "open") {
     throw new WarmupStateError("현재 진행 중인 라운드가 아닙니다");
   }
+  if (!round.writingOpenedAt) throw new WarmupStateError("아직 알고리즘 작성 단계가 시작되지 않았습니다");
 
   const db = await getDb();
   const now = new Date().toISOString();
@@ -407,6 +432,8 @@ export async function recordVersionExecution(input: { versionId: number; executo
   const round = await getWarmupRound(version.roundId);
   if (!submission || !round || round.courseId !== input.courseId) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
   if (submission.studentKey === input.executorStudentKey) throw new WarmupOwnershipError("본인 알고리즘은 실행할 수 없습니다");
+  const [assignment] = await db.select().from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId, version.roundId), eq(warmupPeerAssignments.submissionId, version.submissionId), eq(warmupPeerAssignments.evaluatorStudentKey, input.executorStudentKey)));
+  if (!assignment) throw new WarmupOwnershipError("배정되지 않은 알고리즘은 평가할 수 없습니다");
   const [existing] = await db.select().from(warmupExecutions).where(and(eq(warmupExecutions.versionId, input.versionId), eq(warmupExecutions.executorStudentKey, input.executorStudentKey)));
   if (existing) return existing;
   const [created] = await db.insert(warmupExecutions).values({ versionId: version.id, submissionId: version.submissionId, roundId: version.roundId, executorStudentKey: input.executorStudentKey, executorId: input.executorId, executorName: input.executorName, result: input.result, solvedStatus: input.solvedStatus, problemLocation: input.problemLocation?.trim() || null, executionNote: input.executionNote.trim(), createdAt: new Date().toISOString() }).returning();
@@ -420,6 +447,7 @@ export async function recordAuthorReflection(input: { executionId: number; stude
   const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, execution.submissionId));
   const round = await getWarmupRound(execution.roundId);
   if (!submission || !round || round.courseId !== input.courseId || submission.studentKey !== input.studentKey) throw new WarmupOwnershipError("작성자만 생각해보기를 기록할 수 있습니다");
+  if (!round.selfReviewOpenedAt) throw new WarmupStateError("아직 자기 평가 단계가 시작되지 않았습니다");
   const [existing] = await db.select().from(warmupReflections).where(eq(warmupReflections.executionId, execution.id));
   if (existing) return existing;
   const [created] = await db.insert(warmupReflections).values({ executionId: execution.id, versionId: execution.versionId, submissionId: execution.submissionId, expectedMatch: input.expectedMatch, problemLocation: input.problemLocation?.trim() || null, cause: input.cause.trim(), plannedRevision: input.plannedRevision.trim(), createdAt: new Date().toISOString() }).returning();
@@ -441,6 +469,9 @@ export type BoardEntry = {
 
 export async function listBoardSubmissions(roundId: number, viewerStudentKey: string): Promise<BoardEntry[]> {
   const db = await getDb();
+  const assigned = await db.select({ submissionId: warmupPeerAssignments.submissionId }).from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId, roundId), eq(warmupPeerAssignments.evaluatorStudentKey, viewerStudentKey)));
+  const assignedIds = assigned.map((row) => row.submissionId);
+  if (assignedIds.length === 0) return [];
   const rows = await db
     .select()
     .from(warmupSubmissions)
@@ -448,7 +479,8 @@ export async function listBoardSubmissions(roundId: number, viewerStudentKey: st
       and(
         eq(warmupSubmissions.roundId, roundId),
         ne(warmupSubmissions.studentKey, viewerStudentKey),
-        eq(warmupSubmissions.isDemo, false)
+        eq(warmupSubmissions.isDemo, false),
+        inArray(warmupSubmissions.id, assignedIds)
       )
     )
     .orderBy(warmupSubmissions.id);
@@ -552,6 +584,8 @@ export async function getBoardSubmissionForViewer(
   if (row.studentKey === viewerStudentKey) {
     throw new WarmupOwnershipError("본인 제출은 체험할 수 없습니다");
   }
+  const [assignment] = await db.select().from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId, row.roundId), eq(warmupPeerAssignments.submissionId, row.id), eq(warmupPeerAssignments.evaluatorStudentKey, viewerStudentKey)));
+  if (!assignment) throw new WarmupOwnershipError("배정되지 않은 알고리즘은 평가할 수 없습니다");
 
   return {
     id: row.id,

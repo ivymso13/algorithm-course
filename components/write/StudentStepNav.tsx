@@ -12,14 +12,15 @@ export type { StepNumber };
 interface StudentStepNavProps {
   currentStep: StepNumber;
   hasSubmitted: boolean;
+  activityStage?: 1 | 2 | 3 | 4;
 }
 
-export function StudentStepNav({ currentStep, hasSubmitted }: StudentStepNavProps) {
-  const steps = computeStepNavItems(currentStep, hasSubmitted);
+export function StudentStepNav({ currentStep, hasSubmitted, activityStage = 4 }: StudentStepNavProps) {
+  const steps = computeStepNavItems(currentStep, hasSubmitted, activityStage);
 
   return (
     <nav
-      aria-label="학생 활동 3단계 내비게이션"
+      aria-label="학생 활동 4단계 내비게이션"
       className="rounded-2xl border border-slate-200 bg-white p-2 sm:p-2.5 shadow-2xs"
     >
       <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto py-0.5">

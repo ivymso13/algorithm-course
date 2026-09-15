@@ -13,7 +13,7 @@
  * not as its own top-level numbered step.
  */
 
-export type StepNumber = 1 | 2 | 3;
+export type StepNumber = 1 | 2 | 3 | 4;
 
 export type StepNavItem = {
   number: StepNumber;
@@ -28,6 +28,7 @@ const STEP_DEFS: { number: StepNumber; label: string; href: string }[] = [
   { number: 1, label: "문제·실습", href: "/write" },
   { number: 2, label: "알고리즘 작성", href: "/write/algorithm" },
   { number: 3, label: "동료 평가", href: "/write/explore" },
+  { number: 4, label: "자기 평가", href: "/write/reflect" },
 ];
 
 /**
@@ -37,19 +38,11 @@ const STEP_DEFS: { number: StepNumber; label: string; href: string }[] = [
  * enforced again independently by every step-3 API endpoint server-side
  * regardless of what this nav renders.
  */
-export function computeStepNavItems(currentStep: StepNumber, hasSubmitted: boolean): StepNavItem[] {
+export function computeStepNavItems(currentStep: StepNumber, hasSubmitted: boolean, activityStage = 4): StepNavItem[] {
   return STEP_DEFS.map((step): StepNavItem => {
     const isCurrent = currentStep === step.number;
-    if (step.number <= 2) {
-      return {
-        ...step,
-        isCurrent,
-        isCompleted: step.number === 1 ? currentStep > 1 || hasSubmitted : hasSubmitted,
-        isLocked: false,
-      };
-    }
-    // Step 3 is the flow's terminal step — there's nothing after it to mark
-    // it "completed" against, so it simply stays uncompleted once reached.
-    return { ...step, isCurrent, isCompleted: false, isLocked: !hasSubmitted };
+    const teacherLocked = step.number > activityStage;
+    const submissionLocked = step.number >= 3 && !hasSubmitted;
+    return { ...step, isCurrent, isCompleted: currentStep > step.number, isLocked: teacherLocked || submissionLocked };
   });
 }

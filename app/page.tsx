@@ -48,7 +48,7 @@ export default function Home() {
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Learning Flow</span>
               <h2 className="text-lg sm:text-2xl font-extrabold text-slate-900 mt-0.5">
-                수업 진행 3단계
+                수업 진행 4단계
               </h2>
             </div>
             <span className="self-start sm:self-auto rounded-full bg-blue-50 border border-blue-200/80 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -57,7 +57,7 @@ export default function Home() {
           </div>
 
           {/* 3 Steps Columns */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
             {/* Step 1 */}
             <div className="relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5 transition hover:bg-white hover:border-blue-300 hover:shadow-md">
               <div className="space-y-3">
@@ -128,6 +128,11 @@ export default function Home() {
                 <span>익명 상호 평가</span>
                 <span className="text-emerald-600 font-bold">3단계 ➔</span>
               </div>
+            </div>
+
+            <div className="relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5 transition hover:bg-white hover:border-violet-300 hover:shadow-md">
+              <div className="space-y-3"><div className="flex items-center justify-between"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-xl">🪞</span><span className="rounded-full border border-violet-200 bg-white px-2.5 py-0.5 text-xs font-extrabold text-violet-700">STEP 4</span></div><div><h3 className="text-base font-bold text-slate-900">자기 평가</h3><p className="mt-1.5 text-xs leading-relaxed text-slate-600">세 명의 동료 평가 결과를 확인하고 문제의 원인과 수정할 부분을 스스로 정리합니다.</p></div></div>
+              <div className="mt-5 flex items-center justify-between border-t border-slate-200/70 pt-3 text-[11px] font-semibold text-slate-500"><span>성찰 기록</span><span className="font-bold text-violet-600">4단계</span></div>
             </div>
           </div>
 

@@ -19,6 +19,9 @@ export async function GET(request: Request) {
       prompt: round.prompt,
       status: round.status,
       reviewOpenedAt: round.reviewOpenedAt,
+      writingOpenedAt: round.writingOpenedAt,
+      selfReviewOpenedAt: round.selfReviewOpenedAt,
+      activityStage: round.selfReviewOpenedAt ? 4 : round.reviewOpenedAt ? 3 : round.writingOpenedAt ? 2 : 1,
       problemType: resolveWarmupSandboxProblemType(round),
     },
     mySubmission: mySubmission
