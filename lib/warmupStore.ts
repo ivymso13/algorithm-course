@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { warmupAssignmentReassignments, warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupTeacherAssessments, warmupVersions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { listAssignments } from "@/lib/roster";
+import { planBalancedReassignment } from "@/lib/peerReassignment";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 import {
   assertWarmupRoundDeletable,
@@ -200,29 +201,29 @@ export async function openWarmupReview(id: number, courseId: number) {
   return updated;
 }
 
-export async function reassignPendingPeerAssignments(input: { roundId:number; courseId:number; fromEvaluatorStudentKey:string; toEvaluatorStudentKey:string }) {
-  if (!input.fromEvaluatorStudentKey || !input.toEvaluatorStudentKey || input.fromEvaluatorStudentKey === input.toEvaluatorStudentKey) throw new WarmupStateError("결석 학생과 대체 학생을 다르게 선택하세요");
+export async function reassignPendingPeerAssignments(input: { roundId:number; courseId:number; fromEvaluatorStudentKey:string }) {
+  if (!input.fromEvaluatorStudentKey) throw new WarmupStateError("결석 학생을 선택하세요");
   const round = assertWarmupRoundExists(await getWarmupRound(input.roundId), input.courseId);
   if (round.status !== "open" || !round.reviewOpenedAt) throw new WarmupStateError("동료 평가 진행 중에만 재배정할 수 있습니다");
   if (round.selfReviewOpenedAt) throw new WarmupStateError("자기 평가가 시작된 뒤에는 평가자를 바꿀 수 없습니다");
   const rosterRows = await listAssignments(input.courseId);
-  if (!rosterRows.some(row=>row.studentKey===input.fromEvaluatorStudentKey) || !rosterRows.some(row=>row.studentKey===input.toEvaluatorStudentKey)) throw new WarmupNotFoundError("학생을 찾을 수 없습니다");
+  if (!rosterRows.some(row=>row.studentKey===input.fromEvaluatorStudentKey)) throw new WarmupNotFoundError("학생을 찾을 수 없습니다");
   const db = await getDb();
-  const assignments = await db.select().from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId,input.roundId),eq(warmupPeerAssignments.evaluatorStudentKey,input.fromEvaluatorStudentKey)));
+  const assignments = await db.select().from(warmupPeerAssignments).where(eq(warmupPeerAssignments.roundId,input.roundId));
   const completed = await db.select({submissionId:warmupExecutions.submissionId}).from(warmupExecutions).where(and(eq(warmupExecutions.roundId,input.roundId),eq(warmupExecutions.executorStudentKey,input.fromEvaluatorStudentKey)));
   const completedIds = new Set(completed.map(row=>row.submissionId));
   const submissions = await db.select({id:warmupSubmissions.id,studentKey:warmupSubmissions.studentKey}).from(warmupSubmissions).where(eq(warmupSubmissions.roundId,input.roundId));
   const authorBySubmission = new Map(submissions.map(row=>[row.id,row.studentKey]));
-  const existingForReplacement = await db.select({submissionId:warmupPeerAssignments.submissionId}).from(warmupPeerAssignments).where(and(eq(warmupPeerAssignments.roundId,input.roundId),eq(warmupPeerAssignments.evaluatorStudentKey,input.toEvaluatorStudentKey)));
-  const replacementIds = new Set(existingForReplacement.map(row=>row.submissionId));
-  const movable = assignments.filter(row=>!completedIds.has(row.submissionId)&&authorBySubmission.get(row.submissionId)!==input.toEvaluatorStudentKey&&!replacementIds.has(row.submissionId));
-  if (!movable.length) throw new WarmupStateError("옮길 수 있는 미완료 평가가 없습니다. 이미 완료됐거나 대체 학생에게 중복되는 배정입니다");
+  const participantKeys=submissions.map(row=>row.studentKey).filter(key=>key!==input.fromEvaluatorStudentKey);
+  const plan=planBalancedReassignment({absentStudentKey:input.fromEvaluatorStudentKey,participantStudentKeys:participantKeys,assignments,completedSubmissionIds:completedIds,authorBySubmission});
+  if (!plan.pendingCount) throw new WarmupStateError("재배정할 미완료 평가가 없습니다");
+  if (plan.unresolved.length) throw new WarmupStateError(`서로 다른 평가자 3명을 유지할 수 있는 학생이 부족합니다. 미배정 ${plan.unresolved.length}개`);
   const now = new Date().toISOString();
-  await db.batch(movable.flatMap(row=>[
-    db.update(warmupPeerAssignments).set({evaluatorStudentKey:input.toEvaluatorStudentKey}).where(eq(warmupPeerAssignments.id,row.id)),
-    db.insert(warmupAssignmentReassignments).values({roundId:input.roundId,assignmentId:row.id,submissionId:row.submissionId,fromEvaluatorStudentKey:input.fromEvaluatorStudentKey,toEvaluatorStudentKey:input.toEvaluatorStudentKey,createdAt:now}),
+  await db.batch(plan.plans.flatMap(item=>[
+    db.update(warmupPeerAssignments).set({evaluatorStudentKey:item.toEvaluatorStudentKey}).where(eq(warmupPeerAssignments.id,item.assignmentId)),
+    db.insert(warmupAssignmentReassignments).values({roundId:input.roundId,assignmentId:item.assignmentId,submissionId:item.submissionId,fromEvaluatorStudentKey:input.fromEvaluatorStudentKey,toEvaluatorStudentKey:item.toEvaluatorStudentKey,createdAt:now}),
   ]));
-  return { moved:movable.length, remaining:assignments.length-completedIds.size-movable.length };
+  return { moved:plan.plans.length, replacements:new Set(plan.plans.map(item=>item.toEvaluatorStudentKey)).size };
 }
 
 export async function openWarmupStage(id: number, courseId: number, stage: 2 | 4) {

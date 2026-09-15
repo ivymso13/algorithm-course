@@ -7,7 +7,7 @@ export async function POST(request:Request){
   const body=await request.json().catch(()=>({})) as Record<string,unknown>;
   const course=await getOrCreateDefaultCourse();
   try{
-    const result=await reassignPendingPeerAssignments({roundId:Number(body.roundId),courseId:course.id,fromEvaluatorStudentKey:String(body.fromEvaluatorStudentKey??""),toEvaluatorStudentKey:String(body.toEvaluatorStudentKey??"")});
+    const result=await reassignPendingPeerAssignments({roundId:Number(body.roundId),courseId:course.id,fromEvaluatorStudentKey:String(body.fromEvaluatorStudentKey??"")});
     return Response.json(result);
   }catch(error){
     if(error instanceof WarmupNotFoundError)return Response.json({error:error.message},{status:404});

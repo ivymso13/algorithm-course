@@ -180,7 +180,6 @@ export default function TeacherPage() {
   const [roundStudentFilter, setRoundStudentFilter] = useState<"all" | "missing" | "submitted" | "evaluated">("all");
   const [selectedRoundStudentKey, setSelectedRoundStudentKey] = useState<string | null>(null);
   const [reassignFrom, setReassignFrom] = useState("");
-  const [reassignTo, setReassignTo] = useState("");
   const [warmupBusy, setWarmupBusy] = useState(false);
   // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
   // (used to disable buttons) only takes effect on the next render, so a very
@@ -345,11 +344,10 @@ export default function TeacherPage() {
   }
 
   async function handleReassign(roundId:number){
-    if(!reassignFrom||!reassignTo){setError("결석 학생과 대체 학생을 선택하세요.");return;}
+    if(!reassignFrom){setError("결석 학생을 선택하세요.");return;}
     const from=roundDetail?.participants.find(participant=>participant.studentKey===reassignFrom);
-    const to=roundDetail?.participants.find(participant=>participant.studentKey===reassignTo);
-    if(!confirm(`${from?.studentId} ${from?.studentName}의 미완료 평가를 ${to?.studentId} ${to?.studentName}에게 넘길까요?\n이미 완료된 평가는 그대로 보존됩니다.`))return;
-    await runWarmupAction(async()=>{const response=await fetch("/api/teacher/warmup/reassign",{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify({roundId,fromEvaluatorStudentKey:reassignFrom,toEvaluatorStudentKey:reassignTo})});const data=await readJsonResponse<{moved?:number;error?:string}>(response);if(!response.ok)throw new Error(data.error??"재배정하지 못했습니다.");setNotice(`미완료 평가 ${data.moved??0}개를 재배정했습니다.`);setReassignFrom("");setReassignTo("");await loadRoundDetail(roundId);await loadWarmupRounds();},"재배정하지 못했습니다.");
+    if(!confirm(`${from?.studentId} ${from?.studentName}의 미완료 평가를 여러 학생에게 자동 분산할까요?\n각 알고리즘은 서로 다른 평가자 3명을 유지합니다.`))return;
+    await runWarmupAction(async()=>{const response=await fetch("/api/teacher/warmup/reassign",{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify({roundId,fromEvaluatorStudentKey:reassignFrom})});const data=await readJsonResponse<{moved?:number;replacements?:number;error?:string}>(response);if(!response.ok)throw new Error(data.error??"재배정하지 못했습니다.");setNotice(`미완료 평가 ${data.moved??0}개를 ${data.replacements??0}명에게 자동 분산했습니다.`);setReassignFrom("");await loadRoundDetail(roundId);await loadWarmupRounds();},"재배정하지 못했습니다.");
   }
 
   async function handleCloseRound(roundId: number) {
@@ -1253,7 +1251,7 @@ export default function TeacherPage() {
                                 </div>
 
                                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
-                              {round.reviewOpenedAt&&!round.selfReviewOpenedAt&&<section className="rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="flex flex-wrap items-end gap-2"><div className="min-w-48 flex-1"><p className="text-xs font-black text-amber-900">결석 학생 평가 재배정</p><p className="mt-0.5 text-[10px] text-amber-700">이미 완료한 평가는 보존하고 미완료 배정만 대체 학생에게 넘깁니다.</p></div><label className="text-[10px] font-bold text-slate-600">결석 학생<select value={reassignFrom} onChange={event=>setReassignFrom(event.target.value)} className="mt-1 block min-w-40 rounded-lg border bg-white p-2 text-xs"><option value="">선택</option>{roundDetail.participants.filter(participant=>participant.peerReviewsGiven<3).map(participant=><option key={participant.studentKey} value={participant.studentKey}>{participant.studentId} {participant.studentName} ({participant.peerReviewsGiven}/3)</option>)}</select></label><label className="text-[10px] font-bold text-slate-600">대체 학생<select value={reassignTo} onChange={event=>setReassignTo(event.target.value)} className="mt-1 block min-w-40 rounded-lg border bg-white p-2 text-xs"><option value="">선택</option>{roundDetail.participants.filter(participant=>participant.studentKey!==reassignFrom&&participant.submissionId!==null).map(participant=><option key={participant.studentKey} value={participant.studentKey}>{participant.studentId} {participant.studentName} (현재 {participant.peerReviewsGiven}개)</option>)}</select></label><button type="button" onClick={()=>handleReassign(round.id)} disabled={warmupBusy||!reassignFrom||!reassignTo} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">미완료 평가 재배정</button></div></section>}
+                              {round.reviewOpenedAt&&!round.selfReviewOpenedAt&&<section className="rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="flex flex-wrap items-end gap-2"><div className="min-w-48 flex-1"><p className="text-xs font-black text-amber-900">결석 학생 평가 자동 재배정</p><p className="mt-0.5 text-[10px] text-amber-700">미완료 평가를 평가 수가 적은 학생부터 분산합니다. 각 알고리즘은 서로 다른 3명에게 평가받습니다.</p></div><label className="text-[10px] font-bold text-slate-600">결석 학생<select value={reassignFrom} onChange={event=>setReassignFrom(event.target.value)} className="mt-1 block min-w-48 rounded-lg border bg-white p-2 text-xs"><option value="">선택</option>{roundDetail.participants.filter(participant=>participant.peerReviewsGiven<3).map(participant=><option key={participant.studentKey} value={participant.studentKey}>{participant.studentId} {participant.studentName} ({participant.peerReviewsGiven}/3)</option>)}</select></label><button type="button" onClick={()=>handleReassign(round.id)} disabled={warmupBusy||!reassignFrom} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">자동 균등 재배정</button></div></section>}
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 {[
                                   ["전체", roundDetail.participants.length, "text-slate-900"],
