@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "reflect") {
       if (!String(body.cause ?? "").trim() || !String(body.plannedRevision ?? "").trim()) return Response.json({ error: "생각해보기 항목을 모두 입력하세요" }, { status: 400 });
-      return Response.json({ reflection: await recordAuthorReflection({ executionId: Number(body.executionId), studentKey: session.studentKey, courseId: session.courseId, expectedMatch: String(body.expectedMatch ?? ""), problemLocation: String(body.problemLocation ?? ""), cause: String(body.cause), plannedRevision: String(body.plannedRevision) }) });
+      return Response.json({ reflection: await recordAuthorReflection({ submissionId: Number(body.submissionId), studentKey: session.studentKey, courseId: session.courseId, expectedMatch: String(body.expectedMatch ?? ""), problemLocation: String(body.problemLocation ?? ""), cause: String(body.cause), plannedRevision: String(body.plannedRevision) }) });
     }
     return Response.json({ error: "지원하지 않는 작업입니다" }, { status: 400 });
   } catch (error) {

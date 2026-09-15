@@ -38,6 +38,11 @@ type WarmupRoundDetail = {
     school: string;
     submissionId: number | null;
     evaluated: boolean;
+    peerReviewsGiven: number;
+    peerReviewsReceived: number;
+    reflectionCompleted: boolean;
+    finalSubmitted: boolean;
+    teacherAssessmentCount: number;
   }[];
   items: {
     submission: {
@@ -59,6 +64,7 @@ type WarmupRoundDetail = {
     versions: { id:number; version:number; algorithmText:string; revisionReason:string|null; isFinal:boolean; createdAt:string }[];
     executions: { id:number; versionId:number; executorId:string; executorName:string; result:string; solvedStatus:string; problemLocation:string|null; executionNote:string; createdAt:string }[];
     reflections: { executionId:number; expectedMatch:string; problemLocation:string|null; cause:string; plannedRevision:string; createdAt:string }[];
+    teacherAssessments: { id:number; versionId:number; clarity:number; completeness:number; accuracy:number; executability:number; solvedStatus:string; comment:string|null; updatedAt:string }[];
   }[];
 };
 
@@ -136,6 +142,16 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
   } catch {
     throw new Error(`서버 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요. (${response.status})`);
   }
+}
+
+function TeacherAssessmentForm({ versionId, initial, password, onSaved }: { versionId:number; initial?: WarmupRoundDetail["items"][number]["teacherAssessments"][number]; password:string; onSaved:()=>void }) {
+  const [scores,setScores]=useState({clarity:initial?.clarity??3,completeness:initial?.completeness??3,accuracy:initial?.accuracy??3,executability:initial?.executability??3});
+  const [solvedStatus,setSolvedStatus]=useState(initial?.solvedStatus??"solved");
+  const [comment,setComment]=useState(initial?.comment??"");
+  const [saving,setSaving]=useState(false);
+  const [message,setMessage]=useState<string|null>(null);
+  async function save(){setSaving(true);setMessage(null);try{const response=await fetch("/api/teacher/warmup/assessment",{method:"POST",headers:{"Content-Type":"application/json","x-teacher-password":password},body:JSON.stringify({versionId,...scores,solvedStatus,comment})});const data=await readJsonResponse<{error?:string}>(response);if(!response.ok)throw new Error(data.error??"평가를 저장하지 못했습니다.");setMessage("저장 완료");onSaved();}catch(error){setMessage(error instanceof Error?error.message:"저장하지 못했습니다.");}finally{setSaving(false)}}
+  return <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3"><div className="flex items-center justify-between"><b className="text-indigo-900">교사 평가</b>{initial&&<span className="text-[9px] text-indigo-600">평가 완료</span>}</div><div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{([['clarity','명확성'],['completeness','완전성'],['accuracy','정확성'],['executability','실행 가능성']] as const).map(([key,label])=><label key={key} className="font-bold text-slate-600">{label}<select value={scores[key]} onChange={event=>setScores(current=>({...current,[key]:Number(event.target.value)}))} className="mt-1 w-full rounded border bg-white p-1.5">{[1,2,3,4].map(score=><option key={score} value={score}>{score}점</option>)}</select></label>)}</div><label className="mt-2 block font-bold text-slate-600">문제 해결 여부<select value={solvedStatus} onChange={event=>setSolvedStatus(event.target.value)} className="mt-1 w-full rounded border bg-white p-1.5"><option value="solved">해결</option><option value="partial">부분 해결</option><option value="not_solved">미해결</option></select></label><label className="mt-2 block font-bold text-slate-600">종합 의견<textarea value={comment} onChange={event=>setComment(event.target.value)} rows={2} className="mt-1 w-full rounded border bg-white p-2" placeholder="판단 근거와 개선점을 기록하세요."/></label><div className="mt-2 flex items-center justify-end gap-2">{message&&<span className="text-[10px] font-bold text-indigo-700">{message}</span>}<button type="button" onClick={save} disabled={saving} className="rounded bg-indigo-600 px-3 py-1.5 font-bold text-white disabled:opacity-50">{saving?"저장 중":"교사 평가 저장"}</button></div></div>;
 }
 
 export default function TeacherPage() {
@@ -1113,7 +1129,7 @@ export default function TeacherPage() {
                             </span>
                           )}
                           {round.status === "open" && round.reviewOpenedAt && !round.selfReviewOpenedAt && (
-                            <button type="button" onClick={() => handleOpenStage(round, 4)} disabled={warmupBusy} className="rounded-lg bg-violet-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-violet-700 disabled:opacity-50 cursor-pointer">🪞 4단계 자기 평가 시작</button>
+                            <button type="button" onClick={() => handleOpenStage(round, 4)} disabled={warmupBusy||round.evaluatedCount<round.submissionCount} title={round.evaluatedCount<round.submissionCount?"모든 학생이 동료 평가 3개를 완료해야 합니다":"4단계 시작"} className="rounded-lg bg-violet-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-violet-700 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">🪞 4단계 자기 평가 시작</button>
                           )}
                           {round.selfReviewOpenedAt && <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">4단계 진행 중</span>}
                           {round.status === "open" && (
@@ -1294,9 +1310,7 @@ export default function TeacherPage() {
                                           >
                                             <div className="min-w-0">
                                               <p className="truncate text-xs font-bold text-slate-900">{participant.studentId} {participant.studentName}</p>
-                                              <p className="mt-0.5 truncate text-[10px] text-slate-500">
-                                                {item ? `추천 ${item.votes.length} · 피드백 ${item.experiences.length}` : participant.school}
-                                              </p>
+                                              <p className="mt-0.5 truncate text-[10px] text-slate-500">{item ? `평가 수행 ${participant.peerReviewsGiven}/3 · 평가 수신 ${participant.peerReviewsReceived}/3` : participant.school}</p>
                                             </div>
                                             <div className="flex shrink-0 items-center gap-1">
                                               <span className={`h-2 w-2 rounded-full ${item ? "bg-emerald-500" : "bg-rose-400"}`} title={item ? "제출" : "미제출"} />
@@ -1323,7 +1337,7 @@ export default function TeacherPage() {
                                       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
                                         <div>
                                           <p className="text-sm font-bold text-slate-900">{selectedParticipant.studentId} {selectedParticipant.studentName}</p>
-                                          <p className="mt-1 text-[11px] text-slate-500">받은 추천 {selectedItem.votes.length}개 · 실행 피드백 {selectedItem.experiences.length}개</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">동료 평가 수행 {selectedParticipant.peerReviewsGiven}/3 · 수신 {selectedParticipant.peerReviewsReceived}/3 · 최종본 {selectedParticipant.finalSubmitted?"제출":"미제출"} · 교사 평가 {selectedParticipant.teacherAssessmentCount}/2</p>
                                         </div>
                                         {round.reviewOpenedAt && (
                                           <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${selectedParticipant.evaluated ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
@@ -1376,7 +1390,8 @@ export default function TeacherPage() {
                                         <div className="space-y-2">
                                           {selectedItem.versions.map((version) => {
                                             const runs=selectedItem.executions.filter((execution)=>execution.versionId===version.id);
-                                            return <div key={version.id} className="rounded-xl border border-slate-200 p-3 text-[10px]"><div className="flex justify-between"><b className="text-blue-700">v{version.version} 작성</b><span className="text-slate-400">{new Date(version.createdAt).toLocaleString("ko-KR")}</span></div><pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 font-mono">{version.algorithmText}</pre>{version.revisionReason&&<p className="mt-2 text-indigo-700">수정 이유: {version.revisionReason}</p>}{runs.map(run=>{const reflection=selectedItem.reflections.find(r=>r.executionId===run.id);const solved=run.solvedStatus==="solved"?"문제 해결":run.solvedStatus==="not_solved"?"문제 미해결":"해결 여부 판단 어려움";return <div key={run.id} className="mt-2 border-t border-slate-100 pt-2"><p><b>{run.result==="success"?"실행 성공":run.result==="partial"?"일부 수행 가능":run.result==="wrong"?"잘못된 결과":"실행 불가능"}</b> · <b className={run.solvedStatus==="solved"?"text-emerald-700":"text-amber-700"}>{solved}</b> · {run.executorId} {run.executorName}</p><p className="mt-1">문제 위치: {run.problemLocation||"없음"} · {run.executionNote}</p>{reflection&&<div className="mt-1 rounded bg-indigo-50 p-2"><b>작성자 평가</b><p>원인: {reflection.cause}</p><p>수정 계획: {reflection.plannedRevision}</p></div>}</div>})}</div>;
+                                            const assessment=selectedItem.teacherAssessments.find(item=>item.versionId===version.id);
+                                            return <div key={version.id} className="rounded-xl border border-slate-200 p-3 text-[10px]"><div className="flex justify-between"><b className="text-blue-700">v{version.version} {version.isFinal?"최종본":"작성"}</b><span className="text-slate-400">{new Date(version.createdAt).toLocaleString("ko-KR")}</span></div><pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 font-mono">{version.algorithmText}</pre>{version.revisionReason&&<p className="mt-2 text-indigo-700">수정 이유: {version.revisionReason}</p>}{runs.map(run=>{const reflection=selectedItem.reflections.find(r=>r.executionId===run.id);const solved=run.solvedStatus==="solved"?"문제 해결":run.solvedStatus==="not_solved"?"문제 미해결":"해결 여부 판단 어려움";return <div key={run.id} className="mt-2 border-t border-slate-100 pt-2"><p><b>{run.result==="success"?"실행 성공":run.result==="partial"?"일부 수행 가능":run.result==="wrong"?"잘못된 결과":"실행 불가능"}</b> · <b className={run.solvedStatus==="solved"?"text-emerald-700":"text-amber-700"}>{solved}</b> · {run.executorId} {run.executorName}</p><p className="mt-1">문제 위치: {run.problemLocation||"없음"} · {run.executionNote}</p>{reflection&&<div className="mt-1 rounded bg-indigo-50 p-2"><b>작성자 평가</b><p>원인: {reflection.cause}</p><p>수정 계획: {reflection.plannedRevision}</p></div>}</div>})}<TeacherAssessmentForm versionId={version.id} initial={assessment} password={password} onSaved={()=>loadRoundDetail(round.id,false)}/></div>;
                                           })}
                                           {selectedItem.versions.length===0&&<p className="text-slate-400">이전 형식의 제출로 버전 기록이 없습니다.</p>}
                                         </div>

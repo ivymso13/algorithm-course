@@ -422,7 +422,32 @@ export const warmupReflections = sqliteTable(
     problemLocation: text("problem_location"),
     cause: text("cause").notNull(),
     plannedRevision: text("planned_revision").notNull(),
+    sourceExecutionIds: text("source_execution_ids", { mode: "json" }).notNull().default("[]"),
+    peerFeedbackCount: integer("peer_feedback_count").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({ executionIdx: uniqueIndex("warmup_reflections_execution_idx").on(table.executionId) })
+);
+
+/** Teacher's rubric assessment for an immutable algorithm version. */
+export const warmupTeacherAssessments = sqliteTable(
+  "warmup_teacher_assessments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    versionId: integer("version_id").notNull(),
+    submissionId: integer("submission_id").notNull(),
+    roundId: integer("round_id").notNull(),
+    clarity: integer("clarity").notNull(),
+    completeness: integer("completeness").notNull(),
+    accuracy: integer("accuracy").notNull(),
+    executability: integer("executability").notNull(),
+    solvedStatus: text("solved_status").notNull(),
+    comment: text("comment"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    versionIdx: uniqueIndex("warmup_teacher_assessments_version_idx").on(table.versionId),
+    roundIdx: index("warmup_teacher_assessments_round_idx").on(table.roundId),
+  })
 );

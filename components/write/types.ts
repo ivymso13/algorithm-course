@@ -27,4 +27,5 @@ export type BoardEntry = {
   voteCounts: Record<WarmupVoteType, number>;
   myVotes: WarmupVoteType[];
   experienced: boolean;
+  evaluated: boolean;
 };

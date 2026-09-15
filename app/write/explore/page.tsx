@@ -148,7 +148,7 @@ export default function WriteExplorePage() {
   // each entry, so it survives a refresh instead of relying on client-only
   // view tracking, and it's the same definition the teacher's roster/round
   // views use server-side (see lib/warmupEvaluation.ts).
-  const evaluatedCount = board ? board.filter((e) => e.myVotes.length > 0).length : 0;
+  const evaluatedCount = board ? board.filter((e) => e.evaluated).length : 0;
   const allEvaluated = board !== null && board.length > 0 && evaluatedCount === board.length;
   // The practice sandbox is the "다음 기능" gated behind full evaluation —
   // only while the round is actually open for review; a closed round must
@@ -332,7 +332,7 @@ export default function WriteExplorePage() {
                 {/* Grid: up to BOARD_PAGE_SIZE peer algorithms per page */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {currentPageEntries.map((entry) => {
-                    const isEvaluated = entry.myVotes.length > 0;
+                    const isEvaluated = entry.evaluated;
                     return (
                     <section
                       key={entry.id}

@@ -1,5 +1,5 @@
 /**
- * Pure derivation of the 3-step student nav's per-step state — no React/Next
+ * Pure derivation of the 4-step student nav's per-step state — no React/Next
  * import, so it can be unit-tested directly (see `StudentStepNav.tsx`, which
  * only handles rendering these into markup).
  *
@@ -8,9 +8,8 @@
  * label with the number too would create a duplicate step number.
  * bug this file previously had.
  *
- * The flow is 3 steps, not 4: peer-algorithm "체험" (/execute) is reached as
- * a sub-flow from inside step 3's board (see app/write/explore/page.tsx),
- * not as its own top-level numbered step.
+ * Peer-algorithm execution remains a sub-flow inside step 3; step 4 is the
+ * author's aggregate reflection and final revision.
  */
 
 export type StepNumber = 1 | 2 | 3 | 4;

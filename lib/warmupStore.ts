@@ -1,10 +1,9 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupVersions, warmupVotes } from "@/db/schema";
+import { warmupExecutions, warmupExperiences, warmupPeerAssignments, warmupReflections, warmupRounds, warmupSubmissions, warmupTeacherAssessments, warmupVersions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { listAssignments } from "@/lib/roster";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
-import { fullyEvaluatedStudentKeys } from "@/lib/warmupEvaluation";
 import {
   assertWarmupRoundDeletable,
   assertWarmupRoundExists,
@@ -14,6 +13,18 @@ import {
 } from "@/lib/warmupRoundGuards";
 
 export { WarmupNotFoundError, WarmupOwnershipError, WarmupStateError };
+
+const REQUIRED_PEER_REVIEWS = 3;
+
+function fullyExecutedStudentKeys(rows: { executorStudentKey: string; submissionId: number }[]) {
+  const byStudent = new Map<string, Set<number>>();
+  for (const row of rows) {
+    const set = byStudent.get(row.executorStudentKey) ?? new Set<number>();
+    set.add(row.submissionId);
+    byStudent.set(row.executorStudentKey, set);
+  }
+  return [...byStudent].filter(([, ids]) => ids.size >= REQUIRED_PEER_REVIEWS).map(([studentKey]) => studentKey);
+}
 
 // ---------------------------------------------------------------------------
 // Teacher: round lifecycle
@@ -57,15 +68,13 @@ export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
   if (!round) return null;
 
   const db = await getDb();
-  const [submissionRows, voteRows] = await Promise.all([
+  const [submissionRows, executionRows] = await Promise.all([
     db
       .select({ id: warmupSubmissions.id, studentKey: warmupSubmissions.studentKey })
       .from(warmupSubmissions)
       .where(and(eq(warmupSubmissions.roundId, round.id), eq(warmupSubmissions.isDemo, false))),
-    db
-      .select({ submissionId: warmupVotes.submissionId, voterStudentKey: warmupVotes.voterStudentKey })
-      .from(warmupVotes)
-      .where(eq(warmupVotes.roundId, round.id)),
+    db.select({ submissionId: warmupExecutions.submissionId, executorStudentKey: warmupExecutions.executorStudentKey })
+      .from(warmupExecutions).where(eq(warmupExecutions.roundId, round.id)),
   ]);
 
   return {
@@ -73,7 +82,7 @@ export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
     title: round.title,
     reviewOpenedAt: round.reviewOpenedAt,
     submittedStudentKeys: submissionRows.map((r) => r.studentKey),
-    evaluatedStudentKeys: fullyEvaluatedStudentKeys(submissionRows, voteRows),
+    evaluatedStudentKeys: fullyExecutedStudentKeys(executionRows),
   };
 }
 
@@ -93,7 +102,7 @@ export async function listWarmupRoundsForCourse(courseId: number) {
   if (rounds.length === 0) return [];
 
   const ids = rounds.map((r) => r.id);
-  const [submissionRows, voteRows, experienceRows] = await Promise.all([
+  const [submissionRows, voteRows, experienceRows, executionRows] = await Promise.all([
     db
       .select({
         roundId: warmupSubmissions.roundId,
@@ -114,20 +123,20 @@ export async function listWarmupRoundsForCourse(courseId: number) {
       .select({ roundId: warmupExperiences.roundId })
       .from(warmupExperiences)
       .where(inArray(warmupExperiences.roundId, ids)),
+    db.select({ roundId: warmupExecutions.roundId, submissionId: warmupExecutions.submissionId, executorStudentKey: warmupExecutions.executorStudentKey })
+      .from(warmupExecutions).where(inArray(warmupExecutions.roundId, ids)),
   ]);
   const submissionCounts = countByRound(submissionRows);
   const voteCounts = countByRound(voteRows);
   const experienceCounts = countByRound(experienceRows);
 
   return rounds.map((round) => {
-    const roundSubmissions = submissionRows.filter((r) => r.roundId === round.id);
-    const roundVotes = voteRows.filter((v) => v.roundId === round.id);
     return {
       ...round,
       submissionCount: submissionCounts.get(round.id) ?? 0,
       voteCount: voteCounts.get(round.id) ?? 0,
       experienceCount: experienceCounts.get(round.id) ?? 0,
-      evaluatedCount: fullyEvaluatedStudentKeys(roundSubmissions, roundVotes).length,
+      evaluatedCount: fullyExecutedStudentKeys(executionRows.filter((row) => row.roundId === round.id)).length,
     };
   });
 }
@@ -203,6 +212,18 @@ export async function openWarmupStage(id: number, courseId: number, stage: 2 | 4
   }
   if (!round.reviewOpenedAt) throw new WarmupStateError("먼저 동료 평가 단계를 시작하세요");
   if (round.selfReviewOpenedAt) return round;
+  const submissions = await db.select({ id: warmupSubmissions.id }).from(warmupSubmissions).where(and(eq(warmupSubmissions.roundId, id), eq(warmupSubmissions.isDemo, false)));
+  const versionRows = await db.select({ id: warmupVersions.id, submissionId: warmupVersions.submissionId, version: warmupVersions.version }).from(warmupVersions).where(eq(warmupVersions.roundId, id));
+  const v1Ids = new Set(versionRows.filter((version) => version.version === 1).map((version) => version.id));
+  const executionRows = await db.select({ versionId: warmupExecutions.versionId, submissionId: warmupExecutions.submissionId }).from(warmupExecutions).where(eq(warmupExecutions.roundId, id));
+  const completedSubmissionIds = new Set<number>();
+  for (const submission of submissions) {
+    const count = executionRows.filter((execution) => execution.submissionId === submission.id && v1Ids.has(execution.versionId)).length;
+    if (count >= REQUIRED_PEER_REVIEWS) completedSubmissionIds.add(submission.id);
+  }
+  if (completedSubmissionIds.size !== submissions.length) {
+    throw new WarmupStateError(`모든 학생이 동료 평가 3개를 받은 뒤 4단계를 시작할 수 있습니다 (${completedSubmissionIds.size}/${submissions.length}명 완료)`);
+  }
   const [updated] = await db.update(warmupRounds).set({ selfReviewOpenedAt: now }).where(eq(warmupRounds.id, id)).returning();
   return updated;
 }
@@ -221,6 +242,7 @@ export async function deleteWarmupRound(id: number, courseId: number) {
   const childSubmissions = await db.select({ id: warmupSubmissions.id }).from(warmupSubmissions).where(eq(warmupSubmissions.roundId, id));
   const childIds = childSubmissions.map((row) => row.id);
   await db.batch([
+    db.delete(warmupTeacherAssessments).where(childIds.length ? inArray(warmupTeacherAssessments.submissionId, childIds) : eq(warmupTeacherAssessments.id, -1)),
     db.delete(warmupReflections).where(childIds.length ? inArray(warmupReflections.submissionId, childIds) : eq(warmupReflections.id, -1)),
     db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.roundId, id)),
     db.delete(warmupExecutions).where(eq(warmupExecutions.roundId, id)),
@@ -249,6 +271,7 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(warmupTeacherAssessments).where(eq(warmupTeacherAssessments.submissionId, submissionId)),
     db.delete(warmupPeerAssignments).where(eq(warmupPeerAssignments.submissionId, submissionId)),
     db.delete(warmupReflections).where(eq(warmupReflections.submissionId, submissionId)),
     db.delete(warmupExecutions).where(eq(warmupExecutions.submissionId, submissionId)),
@@ -271,7 +294,7 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
     .orderBy(warmupSubmissions.id);
   const submissionIds = submissions.map((s) => s.id);
 
-  const [votes, experiences, assignments, versions, executions, reflections] = await Promise.all([
+  const [votes, experiences, assignments, versions, executions, reflections, teacherAssessments] = await Promise.all([
     submissionIds.length
       ? db.select().from(warmupVotes).where(inArray(warmupVotes.submissionId, submissionIds))
       : Promise.resolve([]),
@@ -282,21 +305,35 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
     submissionIds.length ? db.select().from(warmupVersions).where(inArray(warmupVersions.submissionId, submissionIds)) : Promise.resolve([]),
     submissionIds.length ? db.select().from(warmupExecutions).where(inArray(warmupExecutions.submissionId, submissionIds)) : Promise.resolve([]),
     submissionIds.length ? db.select().from(warmupReflections).where(inArray(warmupReflections.submissionId, submissionIds)) : Promise.resolve([]),
+    submissionIds.length ? db.select().from(warmupTeacherAssessments).where(inArray(warmupTeacherAssessments.submissionId, submissionIds)) : Promise.resolve([]),
   ]);
 
   const realSubmissions = submissions.filter((submission) => !submission.isDemo);
-  const evaluatedKeys = new Set(fullyEvaluatedStudentKeys(realSubmissions, votes));
+  const evaluatedKeys = new Set(fullyExecutedStudentKeys(executions));
   const submissionByStudent = new Map(realSubmissions.map((submission) => [submission.studentKey, submission]));
   const assignmentByStudent = new Map(assignments.map((assignment) => [assignment.studentKey, assignment]));
 
-  const participants = assignments.map((assignment) => ({
-    studentKey: assignment.studentKey,
-    studentId: assignment.studentId,
-    studentName: assignment.name,
-    school: assignment.school,
-    submissionId: submissionByStudent.get(assignment.studentKey)?.id ?? null,
-    evaluated: evaluatedKeys.has(assignment.studentKey),
-  }));
+  const participants = assignments.map((assignment) => {
+    const submission = submissionByStudent.get(assignment.studentKey);
+    const studentVersions = submission ? versions.filter((version) => version.submissionId === submission.id) : [];
+    const v1 = studentVersions.find((version) => version.version === 1);
+    const finalVersion = studentVersions.find((version) => version.isFinal);
+    const receivedCount = v1 ? executions.filter((execution) => execution.versionId === v1.id).length : 0;
+    const assessmentCount = [v1, finalVersion].filter(Boolean).filter((version) => teacherAssessments.some((assessment) => assessment.versionId === version!.id)).length;
+    return {
+      studentKey: assignment.studentKey,
+      studentId: assignment.studentId,
+      studentName: assignment.name,
+      school: assignment.school,
+      submissionId: submission?.id ?? null,
+      evaluated: evaluatedKeys.has(assignment.studentKey),
+      peerReviewsGiven: new Set(executions.filter((execution) => execution.executorStudentKey === assignment.studentKey).map((execution) => execution.submissionId)).size,
+      peerReviewsReceived: receivedCount,
+      reflectionCompleted: submission ? reflections.some((reflection) => reflection.submissionId === submission.id) : false,
+      finalSubmitted: Boolean(finalVersion),
+      teacherAssessmentCount: assessmentCount,
+    };
+  });
 
   const items = submissions.map((submission) => ({
     submission,
@@ -316,6 +353,7 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
     versions: versions.filter((v) => v.submissionId === submission.id).sort((a,b) => a.version - b.version),
     executions: executions.filter((e) => e.submissionId === submission.id),
     reflections: reflections.filter((r) => r.submissionId === submission.id),
+    teacherAssessments: teacherAssessments.filter((assessment) => assessment.submissionId === submission.id),
   }));
 
   return { round, participants, items };
@@ -367,10 +405,11 @@ export async function upsertWarmupSubmission(input: {
     if (latest?.isFinal) throw new WarmupStateError("최종 제출이 완료되어 더 이상 수정할 수 없습니다");
     if (latest && latest.algorithmText === input.algorithmText) return existing;
     if (latest) {
-      const [execution] = await db.select().from(warmupExecutions).where(eq(warmupExecutions.versionId, latest.id)).orderBy(desc(warmupExecutions.id));
-      if (!execution) throw new WarmupStateError("먼저 현재 버전을 다른 학생이 실행해야 합니다");
-      const [reflection] = await db.select().from(warmupReflections).where(eq(warmupReflections.executionId, execution.id));
-      if (!reflection) throw new WarmupStateError("실행 결과를 확인하고 먼저 생각해보기를 작성하세요");
+      const executions = await db.select().from(warmupExecutions).where(eq(warmupExecutions.versionId, latest.id)).orderBy(warmupExecutions.id);
+      if (input.finalSubmission === true && executions.length < REQUIRED_PEER_REVIEWS) throw new WarmupStateError("동료 평가 3개가 모두 도착한 뒤 최종 제출할 수 있습니다");
+      if (input.finalSubmission === true && !round.selfReviewOpenedAt) throw new WarmupStateError("아직 자기 평가 단계가 시작되지 않았습니다");
+      const [reflection] = await db.select().from(warmupReflections).where(eq(warmupReflections.versionId, latest.id));
+      if (!reflection) throw new WarmupStateError("실행 결과 3개를 확인하고 먼저 자기 평가를 작성하세요");
       if (!input.revisionReason?.trim()) throw new WarmupStateError("수정 이유를 입력하세요");
     }
     const [updated] = await db
@@ -443,17 +482,41 @@ export async function recordVersionExecution(input: { versionId: number; executo
   return created;
 }
 
-export async function recordAuthorReflection(input: { executionId: number; studentKey: string; courseId: number; expectedMatch: string; problemLocation?: string; cause: string; plannedRevision: string }) {
+export async function recordAuthorReflection(input: { submissionId: number; studentKey: string; courseId: number; expectedMatch: string; problemLocation?: string; cause: string; plannedRevision: string }) {
   const db = await getDb();
-  const [execution] = await db.select().from(warmupExecutions).where(eq(warmupExecutions.id, input.executionId));
-  if (!execution) throw new WarmupNotFoundError("실행 기록을 찾을 수 없습니다");
-  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, execution.submissionId));
-  const round = await getWarmupRound(execution.roundId);
+  const [submission] = await db.select().from(warmupSubmissions).where(eq(warmupSubmissions.id, input.submissionId));
+  if (!submission) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
+  const round = await getWarmupRound(submission.roundId);
   if (!submission || !round || round.courseId !== input.courseId || submission.studentKey !== input.studentKey) throw new WarmupOwnershipError("작성자만 생각해보기를 기록할 수 있습니다");
   if (!round.selfReviewOpenedAt) throw new WarmupStateError("아직 자기 평가 단계가 시작되지 않았습니다");
-  const [existing] = await db.select().from(warmupReflections).where(eq(warmupReflections.executionId, execution.id));
+  const [sourceVersion] = await db.select().from(warmupVersions).where(and(eq(warmupVersions.submissionId, submission.id), eq(warmupVersions.version, 1)));
+  if (!sourceVersion) throw new WarmupNotFoundError("최초 알고리즘을 찾을 수 없습니다");
+  const executions = await db.select().from(warmupExecutions).where(eq(warmupExecutions.versionId, sourceVersion.id)).orderBy(warmupExecutions.id);
+  if (executions.length < REQUIRED_PEER_REVIEWS) throw new WarmupStateError("동료 평가 3개가 모두 도착한 뒤 자기 평가를 작성할 수 있습니다");
+  const sourceExecutions = executions.slice(0, REQUIRED_PEER_REVIEWS);
+  const [existing] = await db.select().from(warmupReflections).where(eq(warmupReflections.versionId, sourceVersion.id));
   if (existing) return existing;
-  const [created] = await db.insert(warmupReflections).values({ executionId: execution.id, versionId: execution.versionId, submissionId: execution.submissionId, expectedMatch: input.expectedMatch, problemLocation: input.problemLocation?.trim() || null, cause: input.cause.trim(), plannedRevision: input.plannedRevision.trim(), createdAt: new Date().toISOString() }).returning();
+  const [created] = await db.insert(warmupReflections).values({ executionId: sourceExecutions[0].id, versionId: sourceVersion.id, submissionId: submission.id, sourceExecutionIds: sourceExecutions.map((execution) => execution.id), peerFeedbackCount: sourceExecutions.length, expectedMatch: input.expectedMatch, problemLocation: input.problemLocation?.trim() || null, cause: input.cause.trim(), plannedRevision: input.plannedRevision.trim(), createdAt: new Date().toISOString() }).returning();
+  return created;
+}
+
+export async function upsertTeacherAssessment(input: { versionId: number; courseId: number; clarity: number; completeness: number; accuracy: number; executability: number; solvedStatus: string; comment?: string }) {
+  const scores = [input.clarity, input.completeness, input.accuracy, input.executability];
+  if (scores.some((score) => !Number.isInteger(score) || score < 1 || score > 4)) throw new WarmupStateError("평가 점수는 각 항목 1~4점이어야 합니다");
+  if (!["solved", "partial", "not_solved"].includes(input.solvedStatus)) throw new WarmupStateError("문제 해결 여부를 선택하세요");
+  const db = await getDb();
+  const [version] = await db.select().from(warmupVersions).where(eq(warmupVersions.id, input.versionId));
+  if (!version) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
+  const round = await getWarmupRound(version.roundId);
+  if (!round || round.courseId !== input.courseId) throw new WarmupNotFoundError("버전을 찾을 수 없습니다");
+  const now = new Date().toISOString();
+  const values = { versionId: version.id, submissionId: version.submissionId, roundId: version.roundId, clarity: input.clarity, completeness: input.completeness, accuracy: input.accuracy, executability: input.executability, solvedStatus: input.solvedStatus, comment: input.comment?.trim() || null, updatedAt: now };
+  const [existing] = await db.select().from(warmupTeacherAssessments).where(eq(warmupTeacherAssessments.versionId, version.id));
+  if (existing) {
+    const [updated] = await db.update(warmupTeacherAssessments).set(values).where(eq(warmupTeacherAssessments.id, existing.id)).returning();
+    return updated;
+  }
+  const [created] = await db.insert(warmupTeacherAssessments).values({ ...values, createdAt: now }).returning();
   return created;
 }
 
@@ -468,6 +531,7 @@ export type BoardEntry = {
   voteCounts: Record<WarmupVoteType, number>;
   myVotes: WarmupVoteType[];
   experienced: boolean;
+  evaluated: boolean;
 };
 
 export async function listBoardSubmissions(roundId: number, viewerStudentKey: string): Promise<BoardEntry[]> {
@@ -490,7 +554,7 @@ export async function listBoardSubmissions(roundId: number, viewerStudentKey: st
   if (rows.length === 0) return [];
 
   const ids = rows.map((r) => r.id);
-  const [allVotes, allExperiences] = await Promise.all([
+  const [allVotes, allExperiences, allExecutions] = await Promise.all([
     db.select().from(warmupVotes).where(inArray(warmupVotes.submissionId, ids)),
     db
       .select({
@@ -499,6 +563,8 @@ export async function listBoardSubmissions(roundId: number, viewerStudentKey: st
       })
       .from(warmupExperiences)
       .where(inArray(warmupExperiences.submissionId, ids)),
+    db.select({ submissionId: warmupExecutions.submissionId, executorStudentKey: warmupExecutions.executorStudentKey })
+      .from(warmupExecutions).where(inArray(warmupExecutions.submissionId, ids)),
   ]);
 
   const experiencedIds = new Set(
@@ -518,6 +584,7 @@ export async function listBoardSubmissions(roundId: number, viewerStudentKey: st
       voteCounts,
       myVotes,
       experienced: experiencedIds.has(row.id),
+      evaluated: allExecutions.some((execution) => execution.submissionId === row.id && execution.executorStudentKey === viewerStudentKey),
     };
   });
 }

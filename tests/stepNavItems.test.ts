@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { computeStepNavItems } from "../components/write/stepNavItems.ts";
 
-function byNumber(items: ReturnType<typeof computeStepNavItems>, number: 1 | 2 | 3) {
+function byNumber(items: ReturnType<typeof computeStepNavItems>, number: 1 | 2 | 3 | 4) {
   return items.find((item) => item.number === number)!;
 }
 
-test("computeStepNavItems: the flow has exactly 3 steps — peer-algorithm 체험 (/execute) is not a numbered step", () => {
+test("computeStepNavItems: the research flow has exactly 4 steps", () => {
   const items = computeStepNavItems(1, false);
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 4);
   assert.deepEqual(
     items.map((i) => i.number),
-    [1, 2, 3]
+    [1, 2, 3, 4]
   );
 });
 
@@ -24,11 +24,11 @@ test("computeStepNavItems: no label repeats its own step number (regression for 
   }
 });
 
-test("computeStepNavItems: hrefs point at the 3 intended routes, in order", () => {
+test("computeStepNavItems: hrefs point at the 4 intended routes, in order", () => {
   const items = computeStepNavItems(1, false);
   assert.deepEqual(
     items.map((i) => i.href),
-    ["/write", "/write/algorithm", "/write/explore"]
+    ["/write", "/write/algorithm", "/write/explore", "/write/reflect"]
   );
 });
 
@@ -71,15 +71,15 @@ test("computeStepNavItems: exactly one step is marked current, matching the give
   }
 });
 
-test("computeStepNavItems: step 1 shows completed once the student has moved past it or submitted", () => {
+test("computeStepNavItems: step 1 shows completed once the student has moved past it", () => {
   assert.equal(byNumber(computeStepNavItems(1, false), 1).isCompleted, false);
   assert.equal(byNumber(computeStepNavItems(2, false), 1).isCompleted, true);
-  assert.equal(byNumber(computeStepNavItems(1, true), 1).isCompleted, true);
+  assert.equal(byNumber(computeStepNavItems(1, true), 1).isCompleted, false);
 });
 
-test("computeStepNavItems: step 2 shows completed only once submitted, regardless of current step", () => {
+test("computeStepNavItems: step 2 shows completed once the student has moved past it", () => {
   assert.equal(byNumber(computeStepNavItems(2, false), 2).isCompleted, false);
-  assert.equal(byNumber(computeStepNavItems(2, true), 2).isCompleted, true);
+  assert.equal(byNumber(computeStepNavItems(2, true), 2).isCompleted, false);
   assert.equal(byNumber(computeStepNavItems(3, true), 2).isCompleted, true);
 });
 
