@@ -102,6 +102,13 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
           팬케이크 {String(i.n)}장 (위에서 k장을 뒤집어 1~{String(i.n)} 오름차순 정렬)
         </p>
       );
+    case "woodcut":
+      return (
+        <div className="space-y-1 font-mono text-slate-700">
+          <p>나무 높이({String(i.n)}그루): [{Array.isArray(i.heights) ? (i.heights as number[]).join(", ") : ""}]</p>
+          <p>목표 목재량: {String(i.target)}</p>
+        </div>
+      );
     default:
       return null;
   }

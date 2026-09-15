@@ -7,6 +7,7 @@ import { CoinsSandbox } from "./CoinsSandbox";
 import { CardsSandbox } from "./CardsSandbox";
 import { JosephusSandbox } from "./JosephusSandbox";
 import { PancakeSandbox } from "./PancakeSandbox";
+import { WoodcutSandbox } from "./WoodcutSandbox";
 
 interface ProblemSandboxContainerProps {
   problemType: ProblemType;
@@ -49,6 +50,10 @@ export function ProblemSandboxContainer({
 
       {problemType === "pancake" && (
         <PancakeSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
+      )}
+
+      {problemType === "woodcut" && (
+        <WoodcutSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
     </div>
   );

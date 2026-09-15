@@ -1797,7 +1797,7 @@ export default function TeacherPage() {
 
             {/* Problem Type Selector Tabs */}
             <div className="flex flex-wrap gap-2">
-              {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+              {(["12coins", "card", "josephus", "pancake", "woodcut"] as ProblemType[]).map(
                 (pType) => (
                   <button
                     key={pType}
@@ -2044,7 +2044,7 @@ export default function TeacherPage() {
             {/* Problem Type Selector + Presentation Mode Toggle */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+                {(["12coins", "card", "josephus", "pancake", "woodcut"] as ProblemType[]).map(
                   (pType) => (
                     <button
                       key={pType}
