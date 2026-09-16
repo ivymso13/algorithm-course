@@ -517,8 +517,11 @@ export default function ExecutePage() {
             </div>
 
             <div className="space-y-1">
+              {/* No native `required` here — that would make the browser's
+                  own validation bubble block the submit before handleSubmit
+                  ever runs, pre-empting the "피드백을 2자 이상 입력해주세요"
+                  message below with a less consistent native one. */}
               <textarea
-                required
                 rows={3}
                 maxLength={200}
                 disabled={isClosed}
