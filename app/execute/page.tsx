@@ -543,7 +543,15 @@ export default function ExecutePage() {
 
             <button
               type="submit"
-              disabled={loading || isClosed || executable === null || feedback.trim().length < 2}
+              // Only the two hard blockers (already submitting, or the round
+              // closed under them) actually disable the button. Missing
+              // required fields (executable choice, feedback length) used to
+              // disable it too — but a disabled button never fires
+              // onSubmit, so handleSubmit's own "실행 가능 여부를
+              // 선택하세요" / "피드백을 2자 이상 입력해주세요" messages could
+              // never actually reach the student; the button just sat there
+              // looking broken. Leaving it clickable lets those checks run.
+              disabled={loading || isClosed}
               className="w-full rounded-xl bg-emerald-600 py-2.5 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
             >
               {loading ? "제출 중..." : "피드백 제출하기 ➔"}
