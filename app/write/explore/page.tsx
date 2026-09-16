@@ -39,6 +39,7 @@ export default function WriteExplorePage() {
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
   const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   // 0-indexed page into the board, BOARD_PAGE_SIZE entries at a time. See
   // lib/boardPagination.ts for why a plain page number stays stable across a
@@ -91,13 +92,25 @@ export default function WriteExplorePage() {
   async function handleVote(submissionId: number, voteType: WarmupVoteType) {
     const key = `${submissionId}:${voteType}`;
     setPendingVotes((prev) => new Set(prev).add(key));
+    setVoteError(null);
     try {
       const res = await fetch("/api/warmup/vote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ submissionId, voteType }),
       });
-      if (res.ok) await loadBoard();
+      // A rejected vote (already-submitted requirement, round state, etc.)
+      // used to fail completely silently here — the button just went back
+      // to normal with no explanation, which read as "nothing happens" to
+      // a student. Surface whatever the API said instead.
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.ok) {
+        await loadBoard();
+      } else {
+        setVoteError(data.error ?? "추천을 제출하지 못했습니다. 다시 시도해주세요.");
+      }
+    } catch {
+      setVoteError("네트워크 오류로 추천을 제출하지 못했습니다. 다시 시도해주세요.");
     } finally {
       setPendingVotes((prev) => {
         const next = new Set(prev);
@@ -271,6 +284,37 @@ export default function WriteExplorePage() {
                     >
                       다시 시도
                     </button>
+                  </div>
+                )}
+
+                {voteError && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-bold text-rose-700 flex items-center justify-between gap-2"
+                  >
+                    <span>⚠️ {voteError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setVoteError(null)}
+                      className="underline hover:text-rose-900 cursor-pointer text-xs"
+                    >
+                      닫기
+                    </button>
+                  </div>
+                )}
+
+                {/* Every 추천 button on the board is silently `disabled` once
+                    the round closes — that used to read as "clicking does
+                    nothing" with zero explanation. Say so once, up top,
+                    instead of only a tiny "(라운드 종료)" tag buried under
+                    each card. */}
+                {!isOpen && (
+                  <div
+                    role="status"
+                    className="rounded-xl border border-slate-300 bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-600 flex items-center gap-2"
+                  >
+                    <span>⏹️ 이 라운드는 선생님이 종료했습니다. 더 이상 추천(투표)을 남길 수 없습니다.</span>
                   </div>
                 )}
 
