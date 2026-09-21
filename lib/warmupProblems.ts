@@ -22,6 +22,21 @@ export const WARMUP_PROBLEMS = [
     title: "팬케이크 뒤집기로 정렬하기",
     prompt: "크기가 서로 다른 팬케이크가 뒤섞여 있습니다. 위에서부터 k장을 한꺼번에 뒤집는 행동만 사용해 작은 팬케이크가 위, 큰 팬케이크가 아래에 오도록 정렬하는 알고리즘을 작성하세요.",
   },
+  {
+    id: "tree-cutting",
+    title: "나무 자르기로 목표 목재량 채우기",
+    prompt: "나무 N그루의 높이가 모두 주어집니다(각각 1~100 사이 정수). 절단 높이 H로 자르면 H보다 높은 나무는 초과분만큼만 목재로 쌓입니다. 절단 높이 후보가 101가지나 되어 하나씩 다 확인할 수는 없으니, 목표 목재량 M 이상을 확보하면서 절단 높이를 최대한 높게 설정하는 알고리즘을 최소한의 확인 횟수로 작성하세요.",
+  },
+  {
+    id: "constellation",
+    title: "별자리 만들기로 모든 별 최소 비용 연결하기",
+    prompt: "좌표평면 위에 별 N개가 흩어져 있고, 모든 별의 좌표는 처음부터 공개되어 있습니다. 별과 별 사이를 선으로 이어 모든 별이 서로 연결되도록 만들되, 이미 연결된 두 별을 또 잇는 것은 낭비이므로 피해야 합니다. 사용한 모든 선의 길이 합이 최소가 되도록 별들을 연결하는 알고리즘을 작성하세요.",
+  },
+  {
+    id: "max-apple-box",
+    title: "상자 속 사과 개수 중 최댓값 찾기",
+    prompt: "상자 N개가 왼쪽에서 오른쪽으로 한 줄로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자는 왼쪽부터 순서대로 한 번에 하나씩만 열어볼 수 있고, 한 번 닫은 상자는 다시 열어 개수를 확인할 수 없습니다. 모든 상자를 다 확인한 뒤, 그중 가장 많았던 사과 개수를 찾는 알고리즘을 작성하세요.",
+  },
 ] as const;
 
 export type WarmupProblem = (typeof WARMUP_PROBLEMS)[number];
@@ -37,6 +52,9 @@ export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemTy
   "hidden-card": "card",
   josephus: "josephus",
   "pancake-sort": "pancake",
+  "tree-cutting": "woodcut",
+  constellation: "constellation",
+  "max-apple-box": "maxbox",
 };
 
 /**

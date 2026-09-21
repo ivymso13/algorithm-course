@@ -102,6 +102,38 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
           팬케이크 {String(i.n)}장 (위에서 k장을 뒤집어 1~{String(i.n)} 오름차순 정렬)
         </p>
       );
+    case "woodcut":
+      return (
+        <div className="space-y-1 font-mono text-slate-700">
+          <p>나무 높이({String(i.n)}그루): [{Array.isArray(i.heights) ? (i.heights as number[]).join(", ") : ""}]</p>
+          <p>목표 목재량: {String(i.target)}</p>
+        </div>
+      );
+    case "constellation":
+      return (
+        <div className="space-y-1 font-mono text-slate-700">
+          <p>별 개수: {String(i.n)}개</p>
+          <p>
+            좌표 예시:{" "}
+            {Array.isArray(i.points)
+              ? (i.points as { id: number; x: number; y: number }[])
+                  .slice(0, 5)
+                  .map((p) => `(${p.x},${p.y})`)
+                  .join(", ") + "..."
+              : ""}
+          </p>
+        </div>
+      );
+    case "maxbox":
+      return (
+        <div className="space-y-1 font-mono text-slate-700">
+          <p>상자 개수: {String(i.n)}개</p>
+          <p>
+            사과 개수 예시(왼쪽부터):{" "}
+            {Array.isArray(i.counts) ? (i.counts as number[]).join(", ") : ""}
+          </p>
+        </div>
+      );
     default:
       return null;
   }

@@ -10,7 +10,7 @@
  * unit-testable.
  */
 
-export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake"] as const;
+export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox"] as const;
 export type ProblemType = (typeof PROBLEM_TYPES)[number];
 
 export type Roster = { school: string; studentId: string; name: string }[];
@@ -29,6 +29,11 @@ export type Assignment = {
 // complement (the other 2 types), so a student's `execute` list can never
 // overlap their `write` list. Order here also doubles as the round-robin
 // order used to balance the roster across combos.
+//
+// Deliberately scoped to only the original 4 types: the write/execute
+// pairing flow is legacy and no longer used to assign students, so newer
+// problem types (e.g. "woodcut") are never slotted into it and only ever
+// reached through the warm-up sandbox.
 const COMBOS: [[ProblemType, ProblemType], [ProblemType, ProblemType]][] = [
   [["12coins", "card"], ["josephus", "pancake"]],
   [["12coins", "josephus"], ["card", "pancake"]],
