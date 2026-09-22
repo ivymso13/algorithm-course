@@ -5,6 +5,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
   card: "정렬된 뒤집힌 카드에서 목표 숫자 찾기",
   josephus: "조세퍼스 — 원형으로 매 k번째 제거",
   pancake: "팬케이크 정렬",
+  woodcut: "나무 자르기 — 목표 목재량을 채우는 최대 절단 높이 찾기",
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
@@ -12,6 +13,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
   card: "카드 찾기",
   josephus: "조세퍼스",
   pancake: "팬케이크",
+  woodcut: "나무 자르기",
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
@@ -19,6 +21,7 @@ export const PROBLEM_ICONS: Record<ProblemType, string> = {
   card: "🎴",
   josephus: "🔄",
   pancake: "🥞",
+  woodcut: "🪚",
 };
 
 export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
@@ -29,6 +32,8 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
     "N명이 원형으로 둘러앉아 1번부터 시계 방향으로 번호가 매겨져 있습니다. 1번부터 시계 방향으로 세기 시작해 매 k번째 사람을 제거합니다(제거된 사람은 더 이상 세지 않음). 마지막까지 남는 한 사람의 번호를 찾는 알고리즘을 쓰세요.",
   pancake:
     "크기가 서로 다른 팬케이크 N장이 위에서부터 뒤죽박죽 쌓여 있습니다. \"위에서부터 k장을 통째로 뒤집는다\"는 행동만 사용해서 맨 아래가 가장 크고 맨 위가 가장 작도록 정렬하는 알고리즘을 쓰세요.",
+  woodcut:
+    "나무 N그루의 높이가 모두 주어집니다(각각 1~100 사이의 정수). 벌목기의 절단 높이를 H로 설정하면, 높이가 H보다 큰 나무는 초과분만큼만 잘려 목재로 쌓입니다(높이가 H 이하인 나무는 목재를 내지 않습니다). 목표 목재량 M 이상을 확보하면서 나무를 최대한 적게 건드리도록, 절단 높이 H를 가능한 한 높게 설정하는 알고리즘을 쓰세요. 절단 높이 후보는 0~100까지 101가지나 되어 하나씩 다 확인할 수는 없으므로, 특정 절단 높이를 제시하면 그 높이로 잘랐을 때의 총 목재량을 알려주는 질문을 최대한 적게 사용해서 찾아야 합니다.",
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
@@ -51,6 +56,10 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
     "위에서부터 k장을 선택해 통째로 뒤집기 (1~N장)",
     "현재 쌓인 순서(위→아래) 확인하기",
     "최종 답으로 정렬 완료 시의 순서(위→아래 이어붙인 숫자, 예: 12345) 입력",
+  ],
+  woodcut: [
+    "절단 높이 h(0~100)를 제시해서 그 높이로 자를 때의 총 목재량 확인하기",
+    "최종 답으로 절단 높이(0~100) 입력",
   ],
 };
 
@@ -75,6 +84,11 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
     "이미 맨 아래에 정렬된 팬케이크는 다음 반복에서 제외한다는 범위를 명시하세요.",
     "정렬이 끝났는지 확인하는 명확한 기준이나 반복 횟수를 서술하세요.",
   ],
+  woodcut: [
+    "확인한 목재량이 목표보다 많을 때와 적을 때 절단 높이를 각각 어느 방향으로 조정할지 명확히 적으세요.",
+    "탐색 범위의 하한/상한을 어떻게 갱신하는지 구체적인 갱신 규칙을 적으세요 (예: 목재량이 충분하면 하한을 현재 값으로, 부족하면 상한을 현재 값-1로).",
+    "하한과 상한이 얼마나 좁혀졌을 때 반복을 멈추고 무엇을 최종 답으로 낼지 종료 조건을 적으세요.",
+  ],
 };
 
 export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
@@ -82,6 +96,7 @@ export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
   card: "목표 숫자가 없을 때 종료 조건 누락, 범위 좁히기 판단 기준 불명확",
   josephus: "제거된 사람 포함 여부 혼동, 원형 순환 처리 누락, 종료 조건 누락",
   pancake: "반복 시 k값 재계산 누락, 정렬 완료된 바닥 제외 조건 누락, 종료 조건 모호",
+  woodcut: "목재량이 목표와 정확히 같을 때 절단 높이를 더 올릴 수 있는지 확인 누락, 상한/하한 갱신 방향 혼동, 종료 조건 누락",
 };
 
 export const WRITING_GUIDANCE =

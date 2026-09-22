@@ -12,12 +12,21 @@ export async function GET(request: Request) {
       getStage2Active(course.id),
       getOpenWarmupRoundWithSubmitters(course.id),
     ]);
-    return Response.json({
-      students,
-      stage2Active,
-      openWarmupRound,
-      course: { code: course.code, name: course.name, retentionDays: course.retentionDays },
-    });
+    return Response.json(
+      {
+        students,
+        stage2Active,
+        openWarmupRound,
+        course: { code: course.code, name: course.name, retentionDays: course.retentionDays },
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("teacher dashboard failed", error);
     return Response.json({ error: "학생 명단을 불러오지 못했습니다. 잠시 후 다시 시도해주세요." }, { status: 500 });

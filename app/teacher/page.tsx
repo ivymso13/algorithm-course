@@ -29,6 +29,14 @@ type WarmupProblem = { id: string; title: string; prompt: string };
 
 type WarmupRoundDetail = {
   round: WarmupRoundSummary;
+  participants: {
+    studentKey: string;
+    studentId: string;
+    studentName: string;
+    school: string;
+    submissionId: number | null;
+    evaluated: boolean;
+  }[];
   items: {
     submission: {
       id: number;
@@ -39,7 +47,16 @@ type WarmupRoundDetail = {
       isDemo: boolean;
     };
     voteCounts: Record<WarmupVoteType, number>;
+    votes: {
+      voterStudentKey: string;
+      voterStudentId: string;
+      voterStudentName: string;
+      voteType: WarmupVoteType;
+    }[];
     experiences: { executorId: string; executorName: string; executable: boolean; feedback: string }[];
+    versions: { id:number; version:number; algorithmText:string; revisionReason:string|null; createdAt:string }[];
+    executions: { id:number; versionId:number; executorId:string; executorName:string; result:string; solvedStatus:string; problemLocation:string|null; executionNote:string; createdAt:string }[];
+    reflections: { executionId:number; expectedMatch:string; problemLocation:string|null; cause:string; plannedRevision:string; createdAt:string }[];
   }[];
 };
 
@@ -141,6 +158,9 @@ export default function TeacherPage() {
   const [warmupProblems, setWarmupProblems] = useState<WarmupProblem[]>([]);
   const [roundDetail, setRoundDetail] = useState<WarmupRoundDetail | null>(null);
   const [roundDetailId, setRoundDetailId] = useState<number | null>(null);
+  const [previewRoundId, setPreviewRoundId] = useState<number | null>(null);
+  const [roundStudentFilter, setRoundStudentFilter] = useState<"all" | "missing" | "submitted" | "evaluated">("all");
+  const [selectedRoundStudentKey, setSelectedRoundStudentKey] = useState<string | null>(null);
   const [warmupBusy, setWarmupBusy] = useState(false);
   // Guards create/publish/close/delete against rapid double-clicks: `warmupBusy`
   // (used to disable buttons) only takes effect on the next render, so a very
@@ -153,7 +173,10 @@ export default function TeacherPage() {
   const [presentationMode, setPresentationMode] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  // Submission status is operational data: keep it live by default so the
+  // teacher does not have to discover and enable polling during class.
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const dashboardRequestInFlight = useRef(false);
 
   const authHeaders = useCallback((customPw?: string): HeadersInit => {
     return { "x-teacher-password": customPw || password };
@@ -177,10 +200,15 @@ export default function TeacherPage() {
   }, [authHeaders]);
 
   const loadDashboardWithPw = useCallback(async (pw: string) => {
+    if (dashboardRequestInFlight.current) return;
+    dashboardRequestInFlight.current = true;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/teacher/dashboard", { headers: authHeaders(pw) });
+      const res = await fetch("/api/teacher/dashboard", {
+        headers: authHeaders(pw),
+        cache: "no-store",
+      });
       const data = await readJsonResponse<DashboardResponse>(res);
       if (!res.ok) throw new Error(data.error ?? "불러오기에 실패했습니다.");
       setStudents(data.students ?? []);
@@ -193,6 +221,7 @@ export default function TeacherPage() {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setAuthed(false);
     } finally {
+      dashboardRequestInFlight.current = false;
       setLoading(false);
     }
   }, [authHeaders, loadWarmupRounds]);
@@ -430,12 +459,26 @@ export default function TeacherPage() {
   }, [students, rosterSearch, rosterFilter, openWarmupRound]);
 
   const loadRoundDetail = useCallback(
-    async (roundId: number) => {
+    async (roundId: number, resetView = false) => {
       setRoundDetailId(roundId);
+      if (resetView) setRoundStudentFilter("all");
       try {
-        const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, { headers: authHeaders() });
+        const res = await fetch(`/api/teacher/warmup/round?id=${roundId}`, {
+          headers: authHeaders(),
+          cache: "no-store",
+        });
         const data = (await res.json()) as WarmupRoundDetail & { error?: string };
-        if (res.ok) setRoundDetail(data);
+        if (res.ok) {
+          setRoundDetail(data);
+          setSelectedRoundStudentKey((current) => {
+            if (!resetView && current && data.participants.some((participant) => participant.studentKey === current)) {
+              return current;
+            }
+            return data.participants.find((participant) => participant.submissionId !== null)?.studentKey
+              ?? data.participants[0]?.studentKey
+              ?? null;
+          });
+        }
       } catch {
         // ignore
       }
@@ -471,7 +514,7 @@ export default function TeacherPage() {
   }, [password, authed, loadWarmupRounds]);
 
   /** Refreshes whichever tab's data is currently on screen — backs both the manual and the auto-refresh button. */
-  async function refreshActiveTab() {
+  const refreshActiveTab = useCallback(async () => {
     if (tab === "warmup") {
       await loadWarmupRounds();
       if (roundDetailId) await loadRoundDetail(roundDetailId);
@@ -481,7 +524,7 @@ export default function TeacherPage() {
       await loadReview();
     }
     // "practice" has no server data to refresh.
-  }
+  }, [tab, roundDetailId, loadWarmupRounds, loadRoundDetail, loadDashboard, loadReview]);
 
   // Auto-refresh interval
   useEffect(() => {
@@ -495,9 +538,37 @@ export default function TeacherPage() {
       } else if (tab === "review") {
         loadReview();
       }
-    }, 4000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [authed, autoRefresh, tab, roundDetailId, loadWarmupRounds, loadRoundDetail, loadDashboard, loadReview]);
+
+  // Browsers throttle timers in background tabs. Refresh immediately when the
+  // teacher returns instead of waiting for the next polling tick.
+  useEffect(() => {
+    if (!authed || !autoRefresh) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshActiveTab();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, [authed, autoRefresh, refreshActiveTab]);
+
+  useEffect(() => {
+    if (!roundDetailId) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setRoundDetailId(null);
+        setRoundDetail(null);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [roundDetailId]);
 
   async function handleActivateStage2() {
     if (
@@ -881,9 +952,8 @@ export default function TeacherPage() {
           </section>
         )}
 
-        {/* Navigation Tabs: primary (round management, roster) up top, legacy features below */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -913,50 +983,6 @@ export default function TeacherPage() {
             >
               👥 학생 명단
             </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">이전 기능</span>
-
-            <button
-              type="button"
-              onClick={() => {
-                setTab("dashboard");
-                loadDashboard();
-              }}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "dashboard"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              4문제 현황
-            </button>
-
-            <button
-              type="button"
-              onClick={loadReview}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "review"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              토론 화면
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("practice")}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "practice"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              문제별 풀어보기
-            </button>
-          </div>
         </div>
 
         {error && (
@@ -1036,6 +1062,14 @@ export default function TeacherPage() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewRoundId((current) => current === round.id ? null : round.id)}
+                            aria-expanded={previewRoundId === round.id}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                          >
+                            {previewRoundId === round.id ? "문제 닫기 ▲" : "문제 확인 ▼"}
+                          </button>
                           {round.status === "draft" && (
                             <button
                               type="button"
@@ -1086,17 +1120,30 @@ export default function TeacherPage() {
                               if (roundDetailId === round.id) {
                                 setRoundDetailId(null);
                               } else {
-                                loadRoundDetail(round.id);
+                                loadRoundDetail(round.id, true);
                               }
                             }}
                             className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
-                            {roundDetailId === round.id ? "현황 닫기 ▲" : `현황 보기 (${round.submissionCount}명) ▼`}
+                            {roundDetailId === round.id ? "현황 닫기" : `현황판 (${round.submissionCount}명)`}
                           </button>
                         </div>
                       </div>
 
                       <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+
+                      {previewRoundId === round.id && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <span className="text-[11px] font-bold text-blue-700">학생 화면에 제시되는 문제</span>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-blue-100">
+                              {WARMUP_ROUND_STATUS_LABELS[round.status]}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold text-slate-900">{round.title}</h3>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{round.prompt}</p>
+                        </div>
+                      )}
 
                       <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
                         <span className="font-semibold text-slate-700">제출 {round.submissionCount}건</span>
@@ -1107,64 +1154,225 @@ export default function TeacherPage() {
                       </div>
 
                       {roundDetailId === round.id && roundDetail && (
-                        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-                          <h3 className="text-xs font-bold text-slate-800">
-                            제출 목록 및 동료 피드백 ({roundDetail.items.length}명)
-                          </h3>
-                          {roundDetail.items.length === 0 ? (
-                            <p className="text-xs text-slate-400 py-2">아직 제출이 없습니다.</p>
-                          ) : (
-                            roundDetail.items.map((item) => (
-                              <div key={item.submission.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                                    {item.submission.anonLabel} · {item.submission.studentId} {item.submission.studentName}
-                                    {item.submission.isDemo && (
-                                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                                        예시
-                                      </span>
-                                    )}
-                                  </span>
-                                  <div className="flex items-center gap-1.5">
-                                    {WARMUP_VOTE_TYPES.map((type) => (
-                                      <span
-                                        key={type}
-                                        title={WARMUP_VOTE_LABELS[type]}
-                                        className="rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
-                                      >
-                                        {WARMUP_VOTE_ICONS[type]} {item.voteCounts[type]}
-                                      </span>
-                                    ))}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSubmission(item.submission)}
-                                      disabled={warmupBusy}
-                                      title="이 제출을 삭제합니다"
-                                      className="rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer"
-                                    >
-                                      🗑️ 삭제
-                                    </button>
+                        (() => {
+                          const submittedCount = roundDetail.participants.filter((p) => p.submissionId !== null).length;
+                          const missingCount = roundDetail.participants.length - submittedCount;
+                          const evaluatedCount = roundDetail.participants.filter((p) => p.evaluated).length;
+                          const matchesFilter = (participant: WarmupRoundDetail["participants"][number], filter: typeof roundStudentFilter) => {
+                            if (filter === "missing") return participant.submissionId === null;
+                            if (filter === "submitted") return participant.submissionId !== null;
+                            if (filter === "evaluated") return participant.evaluated;
+                            return true;
+                          };
+                          const filtered = roundDetail.participants.filter((participant) => matchesFilter(participant, roundStudentFilter));
+                          const selectedParticipant = roundDetail.participants.find((participant) => participant.studentKey === selectedRoundStudentKey)
+                            ?? filtered[0]
+                            ?? null;
+                          const selectedItem = selectedParticipant
+                            ? roundDetail.items.find((candidate) => candidate.submission.id === selectedParticipant.submissionId)
+                            : null;
+
+                          return (
+                            <div
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3 sm:p-6"
+                              onClick={() => {
+                                setRoundDetailId(null);
+                                setRoundDetail(null);
+                              }}
+                            >
+                              <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="round-status-title"
+                                className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-blue-700">라운드 현황</p>
+                                    <h2 id="round-status-title" className="mt-0.5 truncate text-lg font-black text-slate-900">{round.title}</h2>
                                   </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRoundDetailId(null);
+                                      setRoundDetail(null);
+                                    }}
+                                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                                    aria-label="라운드 현황 닫기"
+                                  >
+                                    닫기 ✕
+                                  </button>
                                 </div>
-                                <pre className="whitespace-pre-wrap rounded-lg bg-white p-2.5 font-mono text-[11px] leading-relaxed text-slate-800 max-h-36 overflow-y-auto border border-slate-200">
-                                  {item.submission.algorithmText}
-                                </pre>
-                                {item.experiences.length > 0 ? (
-                                  <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
-                                    <span className="text-[10px] font-bold text-slate-400 block mb-0.5">동료 체험 피드백:</span>
-                                    {item.experiences.map((exp, idx) => (
-                                      <p key={idx} className="text-[11px] text-slate-700">
-                                        <span className="font-bold">{exp.executable ? "✅" : "❌"} {exp.executorName} ({exp.executorId}):</span> “{exp.feedback}”
-                                      </p>
-                                    ))}
+
+                                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {[
+                                  ["전체", roundDetail.participants.length, "text-slate-900"],
+                                  ["제출", submittedCount, "text-emerald-700"],
+                                  ["미제출", missingCount, "text-rose-700"],
+                                  ["평가 완료", evaluatedCount, "text-indigo-700"],
+                                ].map(([label, value, color]) => (
+                                  <div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                    <p className="text-[10px] font-bold text-slate-500">{label}</p>
+                                    <p className={`mt-0.5 text-xl font-black ${color}`}>{value}명</p>
                                   </div>
-                                ) : (
-                                  <p className="text-[10px] text-slate-400">아직 동료 체험 피드백이 없습니다.</p>
-                                )}
+                                ))}
                               </div>
-                            ))
-                          )}
-                        </div>
+
+                              <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`제출률 ${submittedCount}/${roundDetail.participants.length}`}>
+                                <div
+                                  className="h-full rounded-full bg-emerald-500 transition-all"
+                                  style={{ width: `${roundDetail.participants.length ? (submittedCount / roundDetail.participants.length) * 100 : 0}%` }}
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap gap-1.5">
+                                {([
+                                  ["all", `전체 ${roundDetail.participants.length}`],
+                                  ["missing", `미제출 ${missingCount}`],
+                                  ["submitted", `제출 ${submittedCount}`],
+                                  ["evaluated", `평가 완료 ${evaluatedCount}`],
+                                ] as const).map(([value, label]) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                      setRoundStudentFilter(value);
+                                      const firstMatch = roundDetail.participants.find((participant) => matchesFilter(participant, value));
+                                      setSelectedRoundStudentKey(firstMatch?.studentKey ?? null);
+                                    }}
+                                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                                      roundStudentFilter === value
+                                        ? "bg-slate-900 text-white"
+                                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                                <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  {filtered.length === 0 ? (
+                                    <p className="py-8 text-center text-xs text-slate-400">해당하는 학생이 없습니다.</p>
+                                  ) : (
+                                    <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-1">
+                                      {filtered.map((participant) => {
+                                        const item = roundDetail.items.find((candidate) => candidate.submission.id === participant.submissionId);
+                                        const selected = participant.studentKey === selectedParticipant?.studentKey;
+                                        return (
+                                          <button
+                                            key={participant.studentKey}
+                                            type="button"
+                                            onClick={() => setSelectedRoundStudentKey(participant.studentKey)}
+                                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition cursor-pointer ${
+                                              selected ? "border-blue-400 bg-blue-50 shadow-xs" : "border-transparent bg-white hover:border-slate-200"
+                                            }`}
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="truncate text-xs font-bold text-slate-900">{participant.studentId} {participant.studentName}</p>
+                                              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                                                {item ? `추천 ${item.votes.length} · 피드백 ${item.experiences.length}` : participant.school}
+                                              </p>
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                              <span className={`h-2 w-2 rounded-full ${item ? "bg-emerald-500" : "bg-rose-400"}`} title={item ? "제출" : "미제출"} />
+                                              {round.reviewOpenedAt && participant.evaluated && <span className="text-[10px]" title="평가 완료">✓</span>}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="min-h-64 rounded-xl border border-slate-200 bg-white p-4 lg:max-h-[32rem] lg:overflow-y-auto">
+                                  {!selectedParticipant ? (
+                                    <div className="flex h-full min-h-56 items-center justify-center text-xs text-slate-400">학생을 선택하세요.</div>
+                                  ) : !selectedItem ? (
+                                    <div className="flex h-full min-h-56 flex-col items-center justify-center text-center">
+                                      <p className="text-base font-bold text-slate-900">{selectedParticipant.studentId} {selectedParticipant.studentName}</p>
+                                      <p className="mt-1 text-xs text-slate-500">{selectedParticipant.school}</p>
+                                      <span className="mt-4 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">아직 제출하지 않음</span>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                                        <div>
+                                          <p className="text-sm font-bold text-slate-900">{selectedParticipant.studentId} {selectedParticipant.studentName}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">받은 추천 {selectedItem.votes.length}개 · 실행 피드백 {selectedItem.experiences.length}개</p>
+                                        </div>
+                                        {round.reviewOpenedAt && (
+                                          <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${selectedParticipant.evaluated ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                                            {selectedParticipant.evaluated ? "평가 완료" : "평가 미완료"}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1 text-[11px] font-bold text-slate-500">제출한 알고리즘</p>
+                                        <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-relaxed text-slate-800">{selectedItem.submission.algorithmText}</pre>
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">추천 평가</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {WARMUP_VOTE_TYPES.map((type) => (
+                                            <span key={type} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                                              {WARMUP_VOTE_ICONS[type]} {WARMUP_VOTE_LABELS[type]} {selectedItem.voteCounts[type]}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        {selectedItem.votes.length > 0 && (
+                                          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                                            {selectedItem.votes.map((vote, index) => (
+                                              <p key={`${vote.voterStudentKey}-${vote.voteType}-${index}`} className="truncate rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+                                                <strong className="text-slate-800">{vote.voterStudentId} {vote.voterStudentName}</strong> · {WARMUP_VOTE_ICONS[vote.voteType]} {WARMUP_VOTE_LABELS[vote.voteType]}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">실행·피드백</p>
+                                        {selectedItem.experiences.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {selectedItem.experiences.map((exp, index) => (
+                                              <div key={index} className="rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] text-slate-700">
+                                                <p className="font-bold text-slate-900">{exp.executable ? "✅ 실행 가능" : "❌ 실행 어려움"} · {exp.executorId} {exp.executorName}</p>
+                                                <p className="mt-0.5 leading-relaxed">{exp.feedback || "작성된 피드백이 없습니다."}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : <p className="text-[10px] text-slate-400">아직 실행 피드백이 없습니다.</p>}
+                                      </div>
+
+                                      <div>
+                                        <p className="mb-1.5 text-[11px] font-bold text-slate-500">연구 과정 타임라인</p>
+                                        <div className="space-y-2">
+                                          {selectedItem.versions.map((version) => {
+                                            const runs=selectedItem.executions.filter((execution)=>execution.versionId===version.id);
+                                            return <div key={version.id} className="rounded-xl border border-slate-200 p-3 text-[10px]"><div className="flex justify-between"><b className="text-blue-700">v{version.version} 작성</b><span className="text-slate-400">{new Date(version.createdAt).toLocaleString("ko-KR")}</span></div><pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 font-mono">{version.algorithmText}</pre>{version.revisionReason&&<p className="mt-2 text-indigo-700">수정 이유: {version.revisionReason}</p>}{runs.map(run=>{const reflection=selectedItem.reflections.find(r=>r.executionId===run.id);const solved=run.solvedStatus==="solved"?"문제 해결":run.solvedStatus==="not_solved"?"문제 미해결":"해결 여부 판단 어려움";return <div key={run.id} className="mt-2 border-t border-slate-100 pt-2"><p><b>{run.result==="success"?"실행 성공":run.result==="partial"?"일부 수행 가능":run.result==="wrong"?"잘못된 결과":"실행 불가능"}</b> · <b className={run.solvedStatus==="solved"?"text-emerald-700":"text-amber-700"}>{solved}</b> · {run.executorId} {run.executorName}</p><p className="mt-1">문제 위치: {run.problemLocation||"없음"} · {run.executionNote}</p>{reflection&&<div className="mt-1 rounded bg-indigo-50 p-2"><b>작성자 평가</b><p>원인: {reflection.cause}</p><p>수정 계획: {reflection.plannedRevision}</p></div>}</div>})}</div>;
+                                          })}
+                                          {selectedItem.versions.length===0&&<p className="text-slate-400">이전 형식의 제출로 버전 기록이 없습니다.</p>}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex justify-end border-t border-slate-100 pt-2">
+                                        <button type="button" onClick={() => handleDeleteSubmission(selectedItem.submission)} disabled={warmupBusy} className="rounded-lg border border-rose-200 px-2.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40 cursor-pointer">제출 삭제</button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   ))}
@@ -1589,7 +1797,7 @@ export default function TeacherPage() {
 
             {/* Problem Type Selector Tabs */}
             <div className="flex flex-wrap gap-2">
-              {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+              {(["12coins", "card", "josephus", "pancake", "woodcut"] as ProblemType[]).map(
                 (pType) => (
                   <button
                     key={pType}
@@ -1836,7 +2044,7 @@ export default function TeacherPage() {
             {/* Problem Type Selector + Presentation Mode Toggle */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                {(["12coins", "card", "josephus", "pancake"] as ProblemType[]).map(
+                {(["12coins", "card", "josephus", "pancake", "woodcut"] as ProblemType[]).map(
                   (pType) => (
                     <button
                       key={pType}

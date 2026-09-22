@@ -1,0 +1,1 @@
+ALTER TABLE `warmup_executions` ADD `solved_status` text DEFAULT 'uncertain' NOT NULL;

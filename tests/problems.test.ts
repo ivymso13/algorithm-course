@@ -4,6 +4,7 @@ import { coinsProblem } from "../lib/problems/coins.ts";
 import { cardsProblem } from "../lib/problems/cards.ts";
 import { josephusProblem, type JosephusState } from "../lib/problems/josephus.ts";
 import { pancakeProblem, encodeAscending } from "../lib/problems/pancake.ts";
+import { woodcutProblem, totalWood, MAX_HEIGHT, type WoodcutState } from "../lib/problems/woodcut.ts";
 
 test("12coins: weighing correctly reports which side the fake coin is on", () => {
   const { input, correctAnswer, state } = coinsProblem.generate();
@@ -122,4 +123,39 @@ test("pancake: generated initial order is never already sorted, and flip reverse
 
 test("pancake: ascending encoding matches the spec example (N=5 -> 12345)", () => {
   assert.equal(encodeAscending(5), 12345);
+});
+
+test("woodcut: generated correctAnswer is the max height with totalWood >= target, and heights are distinct within [1, MAX_HEIGHT]", () => {
+  for (let i = 0; i < 100; i += 1) {
+    const { input, correctAnswer } = woodcutProblem.generate();
+
+    assert.equal(new Set(input.heights).size, input.heights.length, "heights must be distinct");
+    for (const h of input.heights) {
+      assert.ok(h >= 1 && h <= MAX_HEIGHT, "every height must be within [1, MAX_HEIGHT]");
+    }
+
+    assert.ok(totalWood(input.heights, correctAnswer) >= input.target, "answer height must still meet the target");
+    assert.ok(
+      totalWood(input.heights, correctAnswer + 1) < input.target,
+      "one height higher must fall below the target (answer must be the max feasible height)"
+    );
+  }
+});
+
+test("woodcut: cut reports the total wood collected at a given height and counts the action", () => {
+  const input = { n: 3, heights: [30, 50, 70], target: 40 };
+  const state: WoodcutState = { history: [], queryCount: 0 };
+
+  const outcome = woodcutProblem.applyAction(state, input, "cut", { height: 40 });
+  assert.equal((outcome.result as { collected: number }).collected, 40); // (50-40) + (70-40) = 40
+  assert.equal(outcome.counted, true);
+  assert.equal((outcome.state as WoodcutState).queryCount, 1);
+});
+
+test("woodcut: rejects a height outside [0, MAX_HEIGHT]", () => {
+  const input = { n: 1, heights: [500], target: 100 };
+  const state: WoodcutState = { history: [], queryCount: 0 };
+  assert.throws(() => woodcutProblem.applyAction(state, input, "cut", { height: -1 }));
+  assert.throws(() => woodcutProblem.applyAction(state, input, "cut", { height: MAX_HEIGHT + 1 }));
+  assert.throws(() => woodcutProblem.applyAction(state, input, "cut", { height: 1.5 }));
 });
