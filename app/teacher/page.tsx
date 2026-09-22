@@ -881,7 +881,7 @@ export default function TeacherPage() {
           </section>
         )}
 
-        {/* Navigation Tabs: primary (round management, roster) up top, legacy features below */}
+        {/* Administrator navigation; legacy dashboard and review remain implemented but have no menu entry */}
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -913,37 +913,6 @@ export default function TeacherPage() {
             >
               👥 학생 명단
             </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">이전 기능</span>
-
-            <button
-              type="button"
-              onClick={() => {
-                setTab("dashboard");
-                loadDashboard();
-              }}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "dashboard"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              4문제 현황
-            </button>
-
-            <button
-              type="button"
-              onClick={loadReview}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                tab === "review"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              토론 화면
-            </button>
 
             <button
               type="button"
@@ -954,7 +923,7 @@ export default function TeacherPage() {
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              문제별 풀어보기
+              🧩 체험하기
             </button>
           </div>
         </div>
@@ -1823,7 +1792,7 @@ export default function TeacherPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xl">🧩</span>
                 <h3 className="text-base font-bold text-slate-900">
-                  문제별 함께 풀어보기
+                  문제 체험하기
                 </h3>
               </div>
               <p className="text-xs text-slate-600">

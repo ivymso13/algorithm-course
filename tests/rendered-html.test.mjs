@@ -31,7 +31,7 @@ test("server-renders the landing page", async () => {
   const html = await response.text();
   assert.match(html, /알고리즘 워밍업/);
   assert.match(html, /href="\/write"/);
-  assert.match(html, /href="\/execute"/);
+  assert.doesNotMatch(html, /href="\/execute"/);
   assert.match(html, /href="\/teacher"/);
 });
 
@@ -79,3 +79,11 @@ test("server-renders the teacher page", async () => {
   const html = await response.text();
   assert.match(html, /교사용/);
 });
+
+for (const problem of ["woodcut", "constellation", "maxbox"]) {
+  test(`standalone ${problem} preview redirects to administrator login`, async () => {
+    const response = await render(`/dev-preview-${problem}`);
+    assert.equal(response.status, 307);
+    assert.equal(new URL(response.headers.get("location"), "http://localhost").pathname, "/teacher");
+  });
+}
