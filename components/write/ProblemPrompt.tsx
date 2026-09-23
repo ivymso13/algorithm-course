@@ -109,6 +109,21 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
           <p>목표 목재량: {String(i.target)}</p>
         </div>
       );
+    case "constellation":
+      return (
+        <div className="space-y-1 font-mono text-slate-700">
+          <p>별 개수: {String(i.n)}개</p>
+          <p>
+            좌표 예시:{" "}
+            {Array.isArray(i.points)
+              ? (i.points as { id: number; x: number; y: number }[])
+                  .slice(0, 5)
+                  .map((p) => `(${p.x},${p.y})`)
+                  .join(", ") + "..."
+              : ""}
+          </p>
+        </div>
+      );
     case "maxbox":
       return (
         <p className="font-mono text-slate-700">

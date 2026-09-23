@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   woodcutProblem,
   totalWood,
@@ -8,6 +8,7 @@ import {
   type WoodcutInput,
   type WoodcutState,
 } from "@/lib/problems/woodcut";
+import type { GeneratedInstance } from "@/lib/problems/types";
 
 interface WoodcutSandboxProps {
   onCopyHistory?: (summary: string) => void;
@@ -28,12 +29,28 @@ function diffLabel(collected: number, target: number): string {
 }
 
 export function WoodcutSandbox({ onCopyHistory, presentationMode = false }: WoodcutSandboxProps) {
-  const [instance, setInstance] = useState(() => woodcutProblem.generate());
+  // Generated lazily on mount (not in the useState initializer) — the
+  // instance is random, and computing it during the initial render would run
+  // once on the server and once again on the client, so the two would never
+  // agree and React would flag a hydration mismatch.
+  const [instance, setInstance] = useState<GeneratedInstance<WoodcutInput> | null>(null);
   const [queryHeight, setQueryHeight] = useState(MID_HEIGHT);
   const [guessHeight, setGuessHeight] = useState<string>("");
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; message: string } | null>(null);
   const [justCut, setJustCut] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setInstance(woodcutProblem.generate());
+  }, []);
+
+  if (!instance) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+        🌲 숲을 준비하는 중...
+      </div>
+    );
+  }
 
   const input = instance.input as WoodcutInput;
   const state = instance.state as WoodcutState;
@@ -187,7 +204,7 @@ export function WoodcutSandbox({ onCopyHistory, presentationMode = false }: Wood
             나무 높이가 H <strong className="text-rose-700">이하</strong>면 → 그 나무에서는 목재가 나오지 않습니다.
           </li>
           <li>
-            모든 나무의 목재를 합한 값이 <strong>&quot;총 목재량&quot;</strong>입니다.
+            모든 나무의 목재를 합한 값이 <strong>"총 목재량"</strong>입니다.
           </li>
         </ul>
         <p className="border-t border-amber-200 pt-2 text-sm sm:text-base font-bold text-amber-900">

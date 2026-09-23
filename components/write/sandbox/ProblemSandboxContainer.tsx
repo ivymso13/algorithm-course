@@ -8,6 +8,7 @@ import { CardsSandbox } from "./CardsSandbox";
 import { JosephusSandbox } from "./JosephusSandbox";
 import { PancakeSandbox } from "./PancakeSandbox";
 import { WoodcutSandbox } from "./WoodcutSandbox";
+import { ConstellationSandbox } from "./ConstellationSandbox";
 import { MaxBoxSandbox } from "./MaxBoxSandbox";
 
 interface ProblemSandboxContainerProps {
@@ -55,6 +56,10 @@ export function ProblemSandboxContainer({
 
       {problemType === "woodcut" && (
         <WoodcutSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
+      )}
+
+      {problemType === "constellation" && (
+        <ConstellationSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
 
       {problemType === "maxbox" && (
