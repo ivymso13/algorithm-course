@@ -109,6 +109,12 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
           <p>목표 목재량: {String(i.target)}</p>
         </div>
       );
+    case "maxbox":
+      return (
+        <p className="font-mono text-slate-700">
+          상자 {String(i.n)}개 (각 상자 속 사과 개수는 열어보기 전까지 비공개)
+        </p>
+      );
     default:
       return null;
   }

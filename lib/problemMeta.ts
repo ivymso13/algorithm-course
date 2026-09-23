@@ -6,6 +6,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
   josephus: "조세퍼스 — 원형으로 매 k번째 제거",
   pancake: "팬케이크 정렬",
   woodcut: "나무 자르기 — 목표 목재량을 채우는 최대 절단 높이 찾기",
+  maxbox: "가장 많은 사과가 든 상자 찾기",
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
@@ -14,6 +15,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
   josephus: "조세퍼스",
   pancake: "팬케이크",
   woodcut: "나무 자르기",
+  maxbox: "상자 속 사과",
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
@@ -22,6 +24,7 @@ export const PROBLEM_ICONS: Record<ProblemType, string> = {
   josephus: "🔄",
   pancake: "🥞",
   woodcut: "🪚",
+  maxbox: "🍎",
 };
 
 export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
@@ -34,6 +37,8 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
     "크기가 서로 다른 팬케이크 N장이 위에서부터 뒤죽박죽 쌓여 있습니다. \"위에서부터 k장을 통째로 뒤집는다\"는 행동만 사용해서 맨 아래가 가장 크고 맨 위가 가장 작도록 정렬하는 알고리즘을 쓰세요.",
   woodcut:
     "나무 N그루의 높이가 모두 주어집니다(각각 1~100 사이의 정수). 벌목기의 절단 높이를 H로 설정하면, 높이가 H보다 큰 나무는 초과분만큼만 잘려 목재로 쌓입니다(높이가 H 이하인 나무는 목재를 내지 않습니다). 목표 목재량 M 이상을 확보하면서 나무를 최대한 적게 건드리도록, 절단 높이 H를 가능한 한 높게 설정하는 알고리즘을 쓰세요. 절단 높이 후보는 0~100까지 101가지나 되어 하나씩 다 확인할 수는 없으므로, 특정 절단 높이를 제시하면 그 높이로 잘랐을 때의 총 목재량을 알려주는 질문을 최대한 적게 사용해서 찾아야 합니다.",
+  maxbox:
+    "상자 N개가 일렬로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자를 하나씩 열어보기 전까지는 안에 사과가 몇 개인지 알 수 없습니다. 상자를 순서대로 열어보면서, 지금까지 열어본 것 중 사과가 가장 많이 든 상자의 개수를 계속 기록해 두었다가, 모든 상자를 다 열어본 뒤 그 최댓값을 답으로 내는 알고리즘을 쓰세요.",
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
@@ -60,6 +65,11 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
   woodcut: [
     "절단 높이 h(0~100)를 제시해서 그 높이로 자를 때의 총 목재량 확인하기",
     "최종 답으로 절단 높이(0~100) 입력",
+  ],
+  maxbox: [
+    "특정 위치의 상자를 열어 사과 개수 확인하기",
+    "지금까지 확인한 것 중 최댓값을 메모지에 기록하기",
+    "최종 답으로 사과 개수(최댓값) 입력",
   ],
 };
 
@@ -89,6 +99,11 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
     "탐색 범위의 하한/상한을 어떻게 갱신하는지 구체적인 갱신 규칙을 적으세요 (예: 목재량이 충분하면 하한을 현재 값으로, 부족하면 상한을 현재 값-1로).",
     "하한과 상한이 얼마나 좁혀졌을 때 반복을 멈추고 무엇을 최종 답으로 낼지 종료 조건을 적으세요.",
   ],
+  maxbox: [
+    "상자를 여는 순서와, 새로 확인한 값을 지금까지의 최댓값과 비교하는 조건을 빠짐없이 적으세요.",
+    "처음 상자를 열었을 때(비교 대상이 아직 없을 때) 어떻게 시작하는지 명확히 적으세요.",
+    "모든 상자를 다 확인했는지 판단하는 종료 조건을 적으세요.",
+  ],
 };
 
 export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
@@ -97,6 +112,7 @@ export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
   josephus: "제거된 사람 포함 여부 혼동, 원형 순환 처리 누락, 종료 조건 누락",
   pancake: "반복 시 k값 재계산 누락, 정렬 완료된 바닥 제외 조건 누락, 종료 조건 모호",
   woodcut: "목재량이 목표와 정확히 같을 때 절단 높이를 더 올릴 수 있는지 확인 누락, 상한/하한 갱신 방향 혼동, 종료 조건 누락",
+  maxbox: "첫 상자를 열었을 때 비교 없이 바로 최댓값으로 기록하는 시작 조건 누락, 매번 비교하지 않고 가끔만 비교하는 논리 누락, 모든 상자를 다 확인했는지 종료 조건 누락",
 };
 
 export const WRITING_GUIDANCE =

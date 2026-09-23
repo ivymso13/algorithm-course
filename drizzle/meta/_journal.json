@@ -85,6 +85,20 @@
       "when": 1789366380356,
       "tag": "0011_bouncy_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790141375686,
+      "tag": "0012_aromatic_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790145998525,
+      "tag": "0013_massive_kang",
+      "breakpoints": true
     }
   ]
 }

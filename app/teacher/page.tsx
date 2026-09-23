@@ -18,12 +18,15 @@ type WarmupRoundSummary = {
   title: string;
   prompt: string;
   status: WarmupRoundStatus;
+  problemId: string | null;
   reviewOpenedAt: string | null;
   submissionCount: number;
   voteCount: number;
   experienceCount: number;
   evaluatedCount: number;
 };
+
+type JevBatchRunResult = { totalSubmissions: number; ran: number; skipped: number };
 
 type WarmupProblem = { id: string; title: string; prompt: string };
 
@@ -167,6 +170,10 @@ export default function TeacherPage() {
   // fast repeat click can still fire before React re-renders. This ref flips
   // synchronously, closing that gap.
   const warmupBusyRef = useRef(false);
+  // Last "AI 일괄 실행" outcome per round, so the teacher sees a result even
+  // after the round list has re-rendered — keyed by roundId since more than
+  // one closed round can exist.
+  const [jevRunResults, setJevRunResults] = useState<Record<number, JevBatchRunResult>>({});
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
   const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
   const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
@@ -326,6 +333,25 @@ export default function TeacherPage() {
       await loadWarmupRounds();
       if (roundDetailId === roundId) await loadRoundDetail(roundId);
     }, "종료에 실패했습니다.");
+  }
+
+  async function handleRunJevBatch(round: WarmupRoundSummary) {
+    if (
+      !confirm(
+        `"${round.title}" 라운드의 제출 ${round.submissionCount}건에 대해 AI(Jev) 일괄 실행을 시작할까요?\n학생 수에 따라 몇 분 정도 걸릴 수 있습니다.`
+      )
+    )
+      return;
+    await runWarmupAction(async () => {
+      const res = await fetch("/api/teacher/warmup/jev-batch-run", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ roundId: round.id }),
+      });
+      const data = (await res.json()) as JevBatchRunResult & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "AI 일괄 실행에 실패했습니다.");
+      setJevRunResults((prev) => ({ ...prev, [round.id]: data }));
+    }, "AI 일괄 실행에 실패했습니다.");
   }
 
   async function handleDeleteRound(round: WarmupRoundSummary) {
@@ -1105,6 +1131,16 @@ export default function TeacherPage() {
                               ⏹️ 라운드 종료
                             </button>
                           )}
+                          {round.status === "closed" && round.problemId === "max-box" && (
+                            <button
+                              type="button"
+                              onClick={() => handleRunJevBatch(round)}
+                              disabled={warmupBusy}
+                              className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                            >
+                              🤖 AI 일괄 실행
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDeleteRound(round)}
@@ -1131,6 +1167,13 @@ export default function TeacherPage() {
                       </div>
 
                       <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+
+                      {jevRunResults[round.id] && (
+                        <p className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1.5">
+                          🤖 AI 일괄 실행 완료 — {jevRunResults[round.id].ran}명 실행
+                          {jevRunResults[round.id].skipped > 0 && `, ${jevRunResults[round.id].skipped}명은 제출한 알고리즘이 없어 건너뜀`}
+                        </p>
+                      )}
 
                       {previewRoundId === round.id && (
                         <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">

@@ -27,6 +27,11 @@ export const WARMUP_PROBLEMS = [
     title: "나무 자르기로 목표 목재량 채우기",
     prompt: "나무 N그루의 높이가 모두 주어집니다(각각 1~100 사이 정수). 절단 높이 H로 자르면 H보다 높은 나무는 초과분만큼만 목재로 쌓입니다. 절단 높이 후보가 101가지나 되어 하나씩 다 확인할 수는 없으니, 목표 목재량 M 이상을 확보하면서 절단 높이를 최대한 높게 설정하는 알고리즘을 최소한의 확인 횟수로 작성하세요.",
   },
+  {
+    id: "max-box",
+    title: "상자 속 사과 — 가장 많은 사과가 든 상자 찾기",
+    prompt: "상자를 하나씩 확인하며, 지금까지 확인한 것 중 사과가 가장 많이 든 상자의 개수를 메모지에 기록해서 찾아내는 절차를 자연어 알고리즘으로 작성하세요.",
+  },
 ] as const;
 
 export type WarmupProblem = (typeof WARMUP_PROBLEMS)[number];
@@ -43,6 +48,7 @@ export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemTy
   josephus: "josephus",
   "pancake-sort": "pancake",
   "tree-cutting": "woodcut",
+  "max-box": "maxbox",
 };
 
 /**

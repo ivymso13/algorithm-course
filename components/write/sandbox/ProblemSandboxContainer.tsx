@@ -8,6 +8,7 @@ import { CardsSandbox } from "./CardsSandbox";
 import { JosephusSandbox } from "./JosephusSandbox";
 import { PancakeSandbox } from "./PancakeSandbox";
 import { WoodcutSandbox } from "./WoodcutSandbox";
+import { MaxBoxSandbox } from "./MaxBoxSandbox";
 
 interface ProblemSandboxContainerProps {
   problemType: ProblemType;
@@ -55,6 +56,10 @@ export function ProblemSandboxContainer({
       {problemType === "woodcut" && (
         <WoodcutSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
+
+      {problemType === "maxbox" && (
+        <MaxBoxSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} embedded />
+      )}
     </div>
   );
 
@@ -73,16 +78,9 @@ export function ProblemSandboxContainer({
             {icon}
           </span>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-slate-900">
-                {label} 직접 풀어보기 & 알고리즘 규칙 탐색 (인터랙티브 샌드박스)
-              </h3>
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
-                실습 모드
-              </span>
-            </div>
+            <h3 className="text-sm font-bold text-slate-900">직접 풀어보기</h3>
             <p className="text-[11px] text-slate-500">
-              글로 작성하기 전에 실제 문제를 직접 조작해보며 문제 해결 규칙과 단계를 찾아보세요.
+              {label} — 글로 작성하기 전에 직접 조작해보며 문제 해결 규칙을 찾아보세요.
             </p>
           </div>
         </div>

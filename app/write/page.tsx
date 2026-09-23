@@ -5,12 +5,22 @@
  * after a next/link soft navigation, the destination page's client
  * components did not reliably hydrate, leaving buttons unresponsive. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
+import { JevResultCard } from "@/components/jev/JevResultCard";
+
+interface JevResult {
+  roundTitle: string | null;
+  submissionText: string | null;
+  totalTrials: number;
+  correctCount: number;
+  incorrectCount: number;
+  errorCount: number;
+}
 
 export default function WriteProblemPage() {
   const {
@@ -28,6 +38,26 @@ export default function WriteProblemPage() {
   } = useWarmupSession();
 
   const [sandboxCopyNotice, setSandboxCopyNotice] = useState(false);
+  const [jevResult, setJevResult] = useState<JevResult | null>(null);
+
+  // Independent of `round` — a teacher's AI batch run happens after a round
+  // closes, at which point this page no longer has that round loaded at
+  // all (see useWarmupSession, which only tracks the currently *open*
+  // round). This is the only way a student ever sees the result; there's no
+  // self-run button.
+  useEffect(() => {
+    if (!loggedIn) return;
+    let ignore = false;
+    fetch("/api/warmup/jev-result")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!ignore && data?.result) setJevResult(data.result);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, [loggedIn]);
 
   /**
    * Only ever runs when the student clicks the sandbox's own "기록 복사"
@@ -216,6 +246,21 @@ export default function WriteProblemPage() {
               )}
             </div>
           </>
+        )}
+
+        {/* AI 실행 결과 — teacher-triggered, read-only. Shown whenever one
+            exists, regardless of whether a round is currently open (this is
+            how a closed round's result reaches the student at all, since
+            the round itself stops loading above once it closes). */}
+        {jevResult && (
+          <JevResultCard
+            roundTitle={jevResult.roundTitle}
+            submissionText={jevResult.submissionText}
+            totalTrials={jevResult.totalTrials}
+            correctCount={jevResult.correctCount}
+            incorrectCount={jevResult.incorrectCount}
+            errorCount={jevResult.errorCount}
+          />
         )}
       </main>
     </div>

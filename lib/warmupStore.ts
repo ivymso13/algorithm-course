@@ -297,6 +297,18 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
   return { round, participants, items };
 }
 
+/** Real (non-demo) submissions for a round, for the teacher's Jev batch run
+ * — leaner than `teacherWarmupRoundDetail`, which also joins votes/
+ * experiences/versions that a batch run has no use for. */
+export async function listWarmupSubmissionsForRound(roundId: number) {
+  const db = await getDb();
+  return db
+    .select()
+    .from(warmupSubmissions)
+    .where(and(eq(warmupSubmissions.roundId, roundId), eq(warmupSubmissions.isDemo, false)))
+    .orderBy(warmupSubmissions.id);
+}
+
 function tallyVotes(votes: { voteType: string }[]): Record<WarmupVoteType, number> {
   const counts = Object.fromEntries(WARMUP_VOTE_TYPES.map((t) => [t, 0])) as Record<WarmupVoteType, number>;
   for (const vote of votes) {

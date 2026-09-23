@@ -407,3 +407,48 @@ export const warmupReflections = sqliteTable(
   },
   (table) => ({ executionIdx: uniqueIndex("warmup_reflections_execution_idx").on(table.executionId) })
 );
+
+// ---------------------------------------------------------------------------
+// Jev AI executor (lib/jev/*). A warm-up round's final, peer-reviewed
+// submissions get replayed by Jev against many independently randomized
+// instances of the activity (lib/jev/batchEvaluate.ts) once the teacher
+// closes the round — not self-triggered by students, and not just the one
+// instance they solved by hand.
+// ---------------------------------------------------------------------------
+
+/**
+ * One batch-evaluation run for one student's submission in one round.
+ * Per-trial detail (which random instance, what Jev did with it) is kept as
+ * JSON on the row rather than its own table — it's read-only diagnostic
+ * detail nobody queries or joins across rows, not a first-class record the
+ * way the run itself is.
+ */
+export const jevBatchEvaluations = sqliteTable(
+  "jev_batch_evaluations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    courseId: integer("course_id").notNull(),
+    // Nullable: rows created before this column existed (or a future ad-hoc
+    // run not tied to any round) simply aren't shown by the round-scoped
+    // student result lookup.
+    roundId: integer("round_id"),
+    studentKey: text("student_key").notNull(),
+    studentId: text("student_id").notNull(),
+    studentName: text("student_name").notNull(),
+    // "max-finding" today; a second activity's evaluations land in this same
+    // table under their own problemId once lib/jev/problems/*.json grows.
+    problemId: text("problem_id").notNull(),
+    algorithmSteps: text("algorithm_steps", { mode: "json" }).notNull(),
+    totalTrials: integer("total_trials").notNull(),
+    correctCount: integer("correct_count").notNull(),
+    incorrectCount: integer("incorrect_count").notNull(),
+    errorCount: integer("error_count").notNull(),
+    trials: text("trials", { mode: "json" }).notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    studentIdx: index("jev_batch_evaluations_student_idx").on(table.studentKey),
+    courseIdx: index("jev_batch_evaluations_course_idx").on(table.courseId),
+    roundIdx: index("jev_batch_evaluations_round_idx").on(table.roundId),
+  })
+);

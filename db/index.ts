@@ -156,6 +156,74 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS warmup_experiences_unique_idx ON warmup_experiences (submission_id, executor_student_key)`,
   `CREATE INDEX IF NOT EXISTS warmup_experiences_submission_idx ON warmup_experiences (submission_id)`,
+  // Added with the research-cycle feature (warmup_versions/executions/
+  // reflections) — this bootstrap list wasn't updated when that feature was
+  // merged, so any environment that never ran drizzle's migrations directly
+  // was silently missing these three tables until now.
+  `CREATE TABLE IF NOT EXISTS warmup_versions (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    submission_id integer NOT NULL,
+    round_id integer NOT NULL,
+    version integer NOT NULL,
+    algorithm_text text NOT NULL,
+    revision_reason text,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS warmup_versions_submission_version_idx ON warmup_versions (submission_id, version)`,
+  `CREATE INDEX IF NOT EXISTS warmup_versions_round_idx ON warmup_versions (round_id)`,
+  `CREATE TABLE IF NOT EXISTS warmup_executions (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    version_id integer NOT NULL,
+    submission_id integer NOT NULL,
+    round_id integer NOT NULL,
+    executor_student_key text NOT NULL,
+    executor_id text NOT NULL,
+    executor_name text NOT NULL,
+    result text NOT NULL,
+    solved_status text DEFAULT 'uncertain' NOT NULL,
+    problem_location text,
+    execution_note text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS warmup_executions_version_executor_idx ON warmup_executions (version_id, executor_student_key)`,
+  `CREATE INDEX IF NOT EXISTS warmup_executions_submission_idx ON warmup_executions (submission_id)`,
+  `CREATE TABLE IF NOT EXISTS warmup_reflections (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    execution_id integer NOT NULL,
+    version_id integer NOT NULL,
+    submission_id integer NOT NULL,
+    expected_match text NOT NULL,
+    problem_location text,
+    cause text NOT NULL,
+    planned_revision text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS warmup_reflections_execution_idx ON warmup_reflections (execution_id)`,
+  // Jev AI executor — batch evaluations (see lib/jev/batchEvaluate.ts).
+  `CREATE TABLE IF NOT EXISTS jev_batch_evaluations (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    course_id integer NOT NULL,
+    round_id integer,
+    student_key text NOT NULL,
+    student_id text NOT NULL,
+    student_name text NOT NULL,
+    problem_id text NOT NULL,
+    algorithm_steps text NOT NULL,
+    total_trials integer NOT NULL,
+    correct_count integer NOT NULL,
+    incorrect_count integer NOT NULL,
+    error_count integer NOT NULL,
+    trials text NOT NULL,
+    created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS jev_batch_evaluations_student_idx ON jev_batch_evaluations (student_key)`,
+  `CREATE INDEX IF NOT EXISTS jev_batch_evaluations_course_idx ON jev_batch_evaluations (course_id)`,
+  // jev_batch_evaluations_round_idx is NOT here — see ensureRetrofittedColumns
+  // below. A database that already has this table from before round_id
+  // existed would hit this CREATE INDEX in the same batch as the (no-op)
+  // CREATE TABLE, before ensureColumn ever gets a chance to add the column —
+  // "no such column: round_id". Creating the index only after the retrofit
+  // avoids that ordering trap.
 ];
 
 // Some columns were added to tables that predate them, so a database that
@@ -177,6 +245,8 @@ async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
   await ensureColumn(d1, "warmup_rounds", "problem_id", "text");
   await ensureColumn(d1, "warmup_rounds", "review_opened_at", "text");
   await ensureColumn(d1, "warmup_submissions", "is_demo", "integer DEFAULT false NOT NULL");
+  await ensureColumn(d1, "jev_batch_evaluations", "round_id", "integer");
+  await d1.prepare(`CREATE INDEX IF NOT EXISTS jev_batch_evaluations_round_idx ON jev_batch_evaluations (round_id)`).run();
 }
 
 let schemaReady: Promise<void> | null = null;
