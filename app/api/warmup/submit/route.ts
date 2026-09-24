@@ -2,6 +2,8 @@ import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStud
 import { getAssignment } from "@/lib/roster";
 import { ValidationError, validateAlgorithmText } from "@/lib/validation";
 import { getOpenWarmupRound, upsertWarmupSubmission, WarmupStateError } from "@/lib/warmupStore";
+import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
+import { saveMaxboxSubmission } from "@/lib/jevAuto";
 
 export async function POST(request: Request) {
   const session = await requireStudentSession(request);
@@ -25,13 +27,17 @@ export async function POST(request: Request) {
   if (!assignment) return Response.json({ error: "알 수 없는 학생입니다" }, { status: 404 });
 
   try {
-    const submission = await upsertWarmupSubmission({
+    const input = {
       roundId: round.id,
       studentKey: session.studentKey,
       studentId: assignment.studentId,
       studentName: assignment.name,
       algorithmText,
-    });
+    };
+    // Maxbox submissions are saved together with their automatic AI grading run.
+    const submission = resolveWarmupSandboxProblemType(round) === "maxbox"
+      ? await saveMaxboxSubmission({ ...input, courseId: session.courseId })
+      : await upsertWarmupSubmission(input);
     return Response.json({
       ok: true,
       round: { id: round.id, title: round.title, prompt: round.prompt, status: round.status },

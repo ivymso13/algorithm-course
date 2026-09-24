@@ -3,6 +3,7 @@ import { getOrCreateDefaultCourse } from "@/lib/store";
 import { getWarmupRound } from "@/lib/warmupStore";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { advanceJevJob, cancelJevJob, createJevJob, getJevJob, listJevJobs, resumeJevJob } from "@/lib/jevJobs";
+import { advanceAutoRuns, autoRoundSummary, cancelAutoRuns, resumeAutoRuns } from "@/lib/jevAuto";
 import { JevRequestError, jevErrorResponse, positiveId, readJevBody, validateTrials } from "@/lib/jevRequest";
 
 const headers = { "Cache-Control": "no-store" };
@@ -27,6 +28,18 @@ export async function POST(request: Request) {
       if (round.status !== "closed") throw new JevRequestError("종료된 라운드에서만 실행할 수 있습니다.", 409);
       if (resolveWarmupSandboxProblemType(round) !== "maxbox") throw new JevRequestError("현재 상자 문제만 AI 실행을 지원합니다.");
       return Response.json({ job: await createJevJob(course.id, roundId, trials) }, { status: 202, headers });
+    }
+    if (typeof action === "string" && action.startsWith("auto-")) {
+      // Automatic per-submission grading of one maxbox round (open or closed).
+      const roundId = positiveId(body.roundId);
+      const round = await getWarmupRound(roundId);
+      if (!round || round.courseId !== course.id) throw new JevRequestError("라운드를 찾을 수 없습니다.", 404);
+      if (resolveWarmupSandboxProblemType(round) !== "maxbox") throw new JevRequestError("현재 상자 문제만 AI 실행을 지원합니다.");
+      if (action === "auto-advance") await advanceAutoRuns({ courseId: course.id, roundId });
+      else if (action === "auto-cancel") await cancelAutoRuns(course.id, roundId);
+      else if (action === "auto-resume") await resumeAutoRuns(course.id, roundId);
+      else if (action !== "auto-status") throw new JevRequestError("지원하지 않는 작업입니다.");
+      return Response.json({ auto: await autoRoundSummary(course.id, roundId) }, { headers });
     }
     const id = positiveId(body.jobId);
     await getJevJob(course.id, id);

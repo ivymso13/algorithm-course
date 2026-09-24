@@ -15,7 +15,7 @@ export function positiveId(value: unknown): number {
   return id;
 }
 export function validateTrials(value: unknown): number {
-  if (value === undefined) return 20;
+  if (value === undefined) return 10;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 50)
     throw new JevRequestError("실행 횟수는 1~50 사이 정수여야 합니다.");
   return value;

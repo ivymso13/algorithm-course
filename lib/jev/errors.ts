@@ -44,6 +44,20 @@ export class JevApiError extends Error {
   }
 }
 
+/**
+ * A runner stopped a trial before its next API call: the trial's deadline
+ * passed ("deadline", retried later like an outage), or its lease/submission
+ * revision is no longer current ("stale", dropped without writing anything).
+ * Never an algorithm failure.
+ */
+export class JevTrialAbortedError extends Error {
+  readonly code = "JEV_TRIAL_ABORTED" as const;
+  constructor(readonly reason: "deadline" | "stale") {
+    super(reason === "deadline" ? "AI 실행 제한 시간을 넘었습니다." : "더 이상 유효하지 않은 실행입니다.");
+    this.name = "JevTrialAbortedError";
+  }
+}
+
 export function isJevInfrastructureError(error: unknown): error is JevConfigurationError | JevApiError {
   return error instanceof JevConfigurationError || error instanceof JevApiError;
 }

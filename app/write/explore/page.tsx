@@ -11,6 +11,7 @@ import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
+import { JevAutoGradeStatus } from "@/components/jev/JevAutoGradeStatus";
 import {
   WARMUP_VOTE_ICONS,
   WARMUP_VOTE_LABELS,
@@ -246,6 +247,10 @@ export default function WriteExplorePage() {
                 </a>
               </div>
             </section>
+
+            {round.problemType === "maxbox" && (
+              <JevAutoGradeStatus roundId={round.id} revisionKey={`${mySubmission.id}:${mySubmission.updatedAt}`} />
+            )}
 
             {!round.reviewOpenedAt ? (
               /* Submitted, but the teacher hasn't opened the review phase

@@ -2,249 +2,11 @@
 // Miniflare. Every outbound request is answered by a local fake of the
 // TypeSafe System One endpoint — no real network, no API cost, no real key.
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { Miniflare, Response as MfResponse } from "miniflare";
-
-const serverRoot = path.resolve("dist/server");
-const teacherPassword = "jev-flow-test";
-const FAKE_KEY = "fake-typesafe-key-for-tests";
-const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-const JOBS = "/api/teacher/warmup/jev-batch-run";
-
-const CORRECT_ALGORITHM = [
-  "1. 상자를 확인한다.",
-  "2. 메모지에 기록한다.",
-  "3. 오른쪽으로 이동한다.",
-  "4. 상자를 확인한다.",
-  "5. 방금 확인한 상자가 메모지보다 크면 메모지에 기록한다.",
-  "6. 확인하지 않은 상자가 있으면 3단계부터 반복한다.",
-  "7. 메모지에 적힌 사과 개수를 정답으로 제출한다.",
-].join("\n");
-
-// Loop never compares: the memo keeps the first box, so it is (almost always) wrong.
-const NO_COMPARE_ALGORITHM = [
-  "1. 상자를 확인한다.",
-  "2. 메모지에 기록한다.",
-  "3. 오른쪽으로 이동한다.",
-  "4. 상자를 확인한다.",
-  "5. 확인하지 않은 상자가 있으면 3단계부터 반복한다.",
-  "6. 메모지에 적힌 사과 개수를 정답으로 제출한다.",
-].join("\n");
-
-const STUDENTS = [
-  { school: "서해고", studentId: "10401" },
-  { school: "서해고", studentId: "10403" },
-  { school: "서해고", studentId: "10432" },
-];
-
-// ---------- fake Jev upstream ----------
-
-/** Picks the schema action a clear student sentence names, like the real `choice` question would. */
-function chooseAction(stepText) {
-  if (stepText.includes("크면")) return "UPDATE_MEMO_IF_GREATER";
-  if (stepText.includes("반복")) return "REPEAT_STUDENT_STEPS";
-  if (stepText.includes("제출")) return "SUBMIT_ANSWER";
-  if (stepText.includes("오른쪽으로 이동")) return "MOVE_RIGHT_BOX";
-  if (stepText.includes("상자를 확인")) return "CHECK_SELECTED_BOX";
-  if (stepText.includes("메모지에 기록")) return "WRITE_MEMO";
-  return "NONE_OF_THESE";
-}
-
-function createFakeJev() {
-  const fake = {
-    calls: 0,
-    /** When set, every call returns this HTTP status instead of an answer. */
-    failWithStatus: null,
-    unexpected: [],
-    badAuth: 0,
-    /** Set by holdNextCall(): the next upstream call blocks until released. */
-    held: null,
-    /** Blocks the next Jev call mid-flight; returns { reached, release }. */
-    holdNextCall() {
-      let release;
-      let reached;
-      const gate = new Promise((resolve) => (release = resolve));
-      const reachedPromise = new Promise((resolve) => (reached = resolve));
-      fake.held = { gate, reached };
-      return { reached: reachedPromise, release };
-    },
-    async handle(request) {
-      if (request.url !== JEV_ENDPOINT || request.method !== "POST") {
-        fake.unexpected.push(`${request.method} ${request.url}`);
-        return new MfResponse("unexpected outbound request", { status: 599 });
-      }
-      if (request.headers.get("authorization") !== `Bearer ${FAKE_KEY}`) {
-        fake.badAuth++;
-        return new MfResponse("unauthorized", { status: 401 });
-      }
-      fake.calls++;
-      if (fake.held) {
-        const { gate, reached } = fake.held;
-        fake.held = null;
-        reached();
-        await gate;
-      }
-      if (fake.failWithStatus) {
-        return new MfResponse("upstream secret stack trace", { status: fake.failWithStatus });
-      }
-      const body = await request.json();
-      const stepText = /다음 지시: "([\s\S]*)"$/.exec(body.state)?.[1] ?? "";
-      const criteria = body.questions?.action_id?.criteria ?? {};
-      const wanted = chooseAction(stepText);
-      const choice = wanted in criteria ? wanted : "NONE_OF_THESE";
-      return MfResponse.json({
-        model: "fake-jev",
-        answers: {
-          executable: { type: "noul", noul: choice === "NONE_OF_THESE" ? 0.05 : 0.9 },
-          action_id: { type: "choice", choice, confidence: 0.97 },
-        },
-      });
-    },
-  };
-  return fake;
-}
-
-// ---------- app harness (same built-worker pattern as classroom-flow) ----------
-
-async function collectJavaScriptModules(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await collectJavaScriptModules(fullPath)));
-    else if (entry.name.endsWith(".js")) files.push(fullPath);
-  }
-  return files;
-}
-
-async function createTestApp({ bindings = { TYPESAFE_API_KEY: FAKE_KEY }, fake = createFakeJev() } = {}) {
-  const files = await collectJavaScriptModules(serverRoot);
-  const mainPath = path.join(serverRoot, "index.js");
-  const modules = [mainPath, ...files.filter((file) => file !== mainPath)].map((file) => ({
-    type: "ESModule",
-    path: file,
-  }));
-
-  const app = new Miniflare({
-    modules,
-    modulesRoot: serverRoot,
-    compatibilityDate: "2026-05-15",
-    compatibilityFlags: ["nodejs_compat"],
-    d1Databases: ["DB"],
-    bindings: {
-      TEACHER_PASSWORD: teacherPassword,
-      COURSE_CODE: "JEVFLOW2026",
-      SESSION_TTL_SECONDS: "28800",
-      ...bindings,
-    },
-    outboundService: (request) => fake.handle(request),
-  });
-  app.fake = fake;
-  return app;
-}
-
-async function withApp(options, fn) {
-  const app = await createTestApp(options);
-  try {
-    await fn(app);
-    assert.deepEqual(app.fake.unexpected, [], "worker must not call anything but the fake Jev endpoint");
-    assert.equal(app.fake.badAuth, 0, "worker must send the configured key");
-  } finally {
-    await app.dispose();
-  }
-}
-
-async function requestJson(app, pathname, { method = "GET", body, rawBody, cookie, teacher = false, password } = {}) {
-  const headers = new Headers();
-  if (body !== undefined || rawBody !== undefined) headers.set("content-type", "application/json");
-  if (cookie) headers.set("cookie", cookie);
-  if (teacher) headers.set("x-teacher-password", teacherPassword);
-  if (password) headers.set("x-teacher-password", password);
-  const response = await app.dispatchFetch(`http://localhost${pathname}`, {
-    method,
-    headers,
-    body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-  return { response, data };
-}
-
-async function expectStatus(app, pathname, options, expectedStatus) {
-  const result = await requestJson(app, pathname, options);
-  assert.equal(result.response.status, expectedStatus, `${options?.method ?? "GET"} ${pathname}: ${JSON.stringify(result.data)}`);
-  return result;
-}
-
-async function d1All(app, sql, ...params) {
-  const db = await app.getD1Database("DB");
-  const { results } = await db.prepare(sql).bind(...params).all();
-  return results;
-}
-
-async function login(app, student) {
-  const res = await expectStatus(app, "/api/student/login", { method: "POST", body: { ...student, consent: true } }, 200);
-  const setCookie = res.response.headers.get("set-cookie");
-  assert.ok(setCookie, "student login must issue a session cookie");
-  return setCookie.split(";", 1)[0];
-}
-
-async function createRound(app, problemId = "max-box") {
-  const created = await expectStatus(app, "/api/teacher/warmup/rounds", { method: "POST", teacher: true, body: { problemId } }, 200);
-  const roundId = created.data.round.id;
-  await expectStatus(app, "/api/teacher/warmup/publish", { method: "POST", teacher: true, body: { roundId } }, 200);
-  return roundId;
-}
-
-async function closeRound(app, roundId) {
-  const closed = await expectStatus(app, "/api/teacher/warmup/close", { method: "POST", teacher: true, body: { roundId } }, 200);
-  assert.equal(closed.data.round.status, "closed");
-}
-
-async function submit(app, cookie, algorithmText) {
-  const res = await expectStatus(app, "/api/warmup/submit", { method: "POST", cookie, body: { algorithmText } }, 200);
-  return res.data.mySubmission.id;
-}
-
-/**
- * A closed max-box round with the given students' submissions.
- * Returns { roundId, students: [{ cookie, submissionId, text }] }.
- */
-async function closedMaxBoxRound(app, texts) {
-  const roundId = await createRound(app);
-  const students = [];
-  for (const [index, text] of texts.entries()) {
-    const cookie = await login(app, STUDENTS[index]);
-    const submissionId = await submit(app, cookie, text);
-    students.push({ cookie, submissionId, text });
-  }
-  await closeRound(app, roundId);
-  return { roundId, students };
-}
-
-const startJob = (app, roundId, trials) =>
-  expectStatus(app, JOBS, { method: "POST", teacher: true, body: { action: "start", roundId, trials } }, 202);
-const jobAction = (app, action, jobId, status = 200) =>
-  expectStatus(app, JOBS, { method: "POST", teacher: true, body: { action, jobId } }, status);
-
-async function advanceUntilSettled(app, jobId, limit = 50) {
-  let job;
-  for (let i = 0; i < limit; i++) {
-    job = (await jobAction(app, "advance", jobId)).data.job;
-    if (!["queued", "running"].includes(job.status)) return job;
-  }
-  assert.fail(`job ${jobId} did not settle within ${limit} advances: ${JSON.stringify(job)}`);
-}
-
-const studentResult = async (app, cookie) =>
-  (await expectStatus(app, "/api/warmup/jev-result", { cookie }, 200)).data.result;
+import {
+  FAKE_KEY, JOBS, CORRECT_ALGORITHM, NO_COMPARE_ALGORITHM, STUDENTS, withApp, requestJson, expectStatus, d1All,
+  login, createRound, closeRound, submit, closedMaxBoxRound, startJob, jobAction, advanceUntilSettled, studentResult, autoAction,
+} from "./support/jevHarness.mjs";
 
 // ---------- tests ----------
 
@@ -331,9 +93,9 @@ test("start validates round eligibility (closed, max-box, same course) and input
     assert.deepEqual(await d1All(app, "SELECT id FROM jev_jobs"), [], "no ineligible request may reserve a job");
     assert.equal(app.fake.calls, 0);
 
-    // Omitted trials defaults to 20.
+    // Omitted trials defaults to 10, the same count students get automatically.
     const started = await startJob(app, openRound);
-    assert.equal(started.data.job.trialsPerStudent, 20);
+    assert.equal(started.data.job.trialsPerStudent, 10);
     // Unknown actions are rejected once the job itself exists.
     await expectStatus(app, JOBS, { method: "POST", teacher: true, body: { action: "explode", jobId: started.data.job.id } }, 400);
   });
@@ -365,7 +127,7 @@ test("duplicate starts (sequential and concurrent) share one job per round", asy
   });
 });
 
-test("full run: exactly one trial per advance, checkpointed; students see only their own teacher/API snapshot", async () => {
+test("full run: one student's trials in parallel per advance, checkpointed; students see only their own teacher/API snapshot", async () => {
   await withApp({}, async (app) => {
     const roundId = await createRound(app);
     const correct = { cookie: await login(app, STUDENTS[0]) };
@@ -377,6 +139,7 @@ test("full run: exactly one trial per advance, checkpointed; students see only t
     assert.equal(await submit(app, correct.cookie, CORRECT_ALGORITHM), correct.submissionId);
     wrong.submissionId = await submit(app, wrong.cookie, NO_COMPARE_ALGORITHM);
     await closeRound(app, roundId);
+    await autoAction(app, "auto-cancel", roundId);
 
     const TRIALS = 2;
     const start = await startJob(app, roundId, TRIALS);
@@ -390,13 +153,14 @@ test("full run: exactly one trial per advance, checkpointed; students see only t
     assert.equal(snapshot.submission_version, 2);
     assert.equal(snapshot.algorithm_text, CORRECT_ALGORITHM);
 
-    // Checkpoints: each advance persists exactly one more trial.
-    for (let expected = 1; expected <= 2 * TRIALS; expected++) {
+    // Checkpoints: each advance runs the current student's remaining trials
+    // (up to the 5 global slots) in parallel and persists them.
+    for (let expected = TRIALS; expected <= 2 * TRIALS; expected += TRIALS) {
       const callsBefore = app.fake.calls;
       const job = (await jobAction(app, "advance", job0.id)).data.job;
       assert.equal(job.completedTrials, expected, `after advance ${expected}`);
-      const perTrialCalls = app.fake.calls - callsBefore;
-      assert.ok(perTrialCalls > 0 && perTrialCalls <= 60, `one trial made ${perTrialCalls} API calls`);
+      const waveCalls = app.fake.calls - callsBefore;
+      assert.ok(waveCalls > 0 && waveCalls <= 60 * TRIALS, `one wave made ${waveCalls} API calls`);
       assert.equal(job.status, expected === 2 * TRIALS ? "completed" : "running");
       if (expected === TRIALS) {
         // First student finished → their result is visible before the whole job is done.
@@ -446,32 +210,31 @@ test("full run: exactly one trial per advance, checkpointed; students see only t
 test("cancel fences further work; resume keeps completed trials and runs only the rest", async () => {
   await withApp({}, async (app) => {
     const { roundId, students } = await closedMaxBoxRound(app, [CORRECT_ALGORITHM]);
-    const jobId = (await startJob(app, roundId, 3)).data.job.id;
+    const jobId = (await startJob(app, roundId, 8)).data.job.id;
 
-    await jobAction(app, "advance", jobId);
-    await jobAction(app, "advance", jobId);
+    assert.equal((await jobAction(app, "advance", jobId)).data.job.completedTrials, 5, "one wave = 5 global slots");
     const cancelled = (await jobAction(app, "cancel", jobId)).data.job;
     assert.equal(cancelled.status, "cancelled");
-    assert.equal(cancelled.completedTrials, 2);
+    assert.equal(cancelled.completedTrials, 5);
 
     const calls = app.fake.calls;
     const stillCancelled = (await jobAction(app, "advance", jobId)).data.job;
     assert.equal(stillCancelled.status, "cancelled");
-    assert.equal(stillCancelled.completedTrials, 2);
+    assert.equal(stillCancelled.completedTrials, 5);
     assert.equal(app.fake.calls, calls, "a cancelled job makes no API calls");
     assert.equal(await studentResult(app, students[0].cookie), null, "partial trials are not a student result");
 
     const resumed = (await jobAction(app, "resume", jobId)).data.job;
     assert.equal(resumed.status, "queued");
-    assert.equal(resumed.completedTrials, 2);
+    assert.equal(resumed.completedTrials, 5);
 
     const done = await advanceUntilSettled(app, jobId);
     assert.equal(done.status, "completed");
-    assert.equal(done.completedTrials, 3);
+    assert.equal(done.completedTrials, 8);
 
     const [item] = await d1All(app, "SELECT trials FROM jev_job_items WHERE job_id = ?", jobId);
-    assert.deepEqual(JSON.parse(item.trials).map((t) => t.trialIndex), [0, 1, 2]);
-    assert.equal((await studentResult(app, students[0].cookie)).totalTrials, 3);
+    assert.deepEqual(JSON.parse(item.trials).map((t) => t.trialIndex), [0, 1, 2, 3, 4, 5, 6, 7]);
+    assert.equal((await studentResult(app, students[0].cookie)).totalTrials, 8);
 
     // Cancel/resume on a finished job are no-ops.
     assert.equal((await jobAction(app, "cancel", jobId)).data.job.status, "completed");
@@ -482,15 +245,21 @@ test("cancel fences further work; resume keeps completed trials and runs only th
 test("upstream 503 pauses the job as failed without scoring the student; retry finishes only remaining trials", async () => {
   await withApp({}, async (app) => {
     const { roundId, students } = await closedMaxBoxRound(app, [CORRECT_ALGORITHM, NO_COMPARE_ALGORITHM]);
-    const jobId = (await startJob(app, roundId, 2)).data.job.id;
+    const jobId = (await startJob(app, roundId, 7)).data.job.id;
 
-    assert.equal((await jobAction(app, "advance", jobId)).data.job.completedTrials, 1);
+    // One of the five parallel trials hits an outage: the other four are kept.
+    app.fake.failNextCalls = 1;
+    const partial = (await jobAction(app, "advance", jobId)).data.job;
+    assert.equal(partial.status, "failed");
+    assert.equal(partial.completedTrials, 4, "successful trials of a failing wave are persisted");
+    app.fake.failNextCalls = 0;
+    assert.equal((await jobAction(app, "resume", jobId)).data.job.status, "queued");
 
     app.fake.failWithStatus = 503;
     const failed = (await jobAction(app, "advance", jobId)).data.job;
     assert.equal(failed.status, "failed");
     assert.equal(failed.failedStudents, 1);
-    assert.equal(failed.completedTrials, 1, "the failed trial is not recorded");
+    assert.equal(failed.completedTrials, 4, "the failed trials are not recorded");
     assert.ok(failed.lastError && !failed.lastError.includes("upstream secret"), `safe error: ${failed.lastError}`);
     assert.equal(await studentResult(app, students[0].cookie), null, "an outage is never shown as the student's score");
     assert.deepEqual(await d1All(app, "SELECT id FROM jev_batch_evaluations"), []);
@@ -507,13 +276,13 @@ test("upstream 503 pauses the job as failed without scoring the student; retry f
 
     const done = await advanceUntilSettled(app, jobId);
     assert.equal(done.status, "completed");
-    assert.equal(done.completedTrials, 4, "2 students × 2 trials, the pre-failure trial kept");
+    assert.equal(done.completedTrials, 14, "2 students × 7 trials, the pre-failure trials kept");
 
     const first = await studentResult(app, students[0].cookie);
-    assert.equal(first.totalTrials, 2);
+    assert.equal(first.totalTrials, 7);
     assert.equal(first.errorCount, 0);
-    assert.equal(first.correctCount, 2);
-    assert.equal((await studentResult(app, students[1].cookie)).totalTrials, 2);
+    assert.equal(first.correctCount, 7);
+    assert.equal((await studentResult(app, students[1].cookie)).totalTrials, 7);
   });
 });
 
@@ -579,7 +348,7 @@ test("deleting a submission or round cleans up jobs and hides results", async ()
 
     await expectStatus(app, `/api/teacher/warmup/round?id=${roundId}`, { method: "DELETE", teacher: true }, 200);
     assert.equal(await studentResult(app, students[0].cookie), null);
-    for (const table of ["jev_jobs", "jev_job_items", "jev_batch_evaluations"]) {
+    for (const table of ["jev_jobs", "jev_job_items", "jev_batch_evaluations", "jev_auto_runs", "jev_auto_trials"]) {
       assert.deepEqual(await d1All(app, `SELECT * FROM ${table}`), [], `${table} cleaned up`);
     }
     await jobAction(app, "advance", jobId, 404);
@@ -616,7 +385,7 @@ test("a submission the engine cannot accept (e.g. 41+ steps) is skipped, not an 
 test("race: a concurrent advance while a trial is in flight makes no calls and writes nothing", async () => {
   await withApp({}, async (app) => {
     const { roundId, students } = await closedMaxBoxRound(app, [CORRECT_ALGORITHM]);
-    const jobId = (await startJob(app, roundId, 2)).data.job.id;
+    const jobId = (await startJob(app, roundId, 1)).data.job.id;
 
     const hold = app.fake.holdNextCall();
     const first = jobAction(app, "advance", jobId);
@@ -632,13 +401,11 @@ test("race: a concurrent advance while a trial is in flight makes no calls and w
     hold.release();
     const afterFirst = (await first).data.job;
     assert.equal(afterFirst.completedTrials, 1, "exactly one trial from the two overlapping advances");
+    assert.equal(afterFirst.status, "completed");
 
     const [item] = await d1All(app, "SELECT trials FROM jev_job_items WHERE job_id = ?", jobId);
     assert.deepEqual(JSON.parse(item.trials).map((t) => t.trialIndex), [0]);
-
-    const done = await advanceUntilSettled(app, jobId);
-    assert.equal(done.completedTrials, 2);
-    assert.equal((await studentResult(app, students[0].cookie)).totalTrials, 2);
+    assert.equal((await studentResult(app, students[0].cookie)).totalTrials, 1);
     assert.equal((await d1All(app, "SELECT count(*) AS n FROM jev_batch_evaluations"))[0].n, 1);
   });
 });

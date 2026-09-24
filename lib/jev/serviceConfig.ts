@@ -18,7 +18,18 @@ export interface JevServiceEnv {
  * throws JevConfigurationError, so a misconfigured deploy fails loudly
  * instead of grading students with regexes.
  */
-export function createJevService(env: JevServiceEnv = process.env): IJevService {
+/** The mode createJevService would use, without requiring the key to be present. */
+export function configuredJevMode(env: JevServiceEnv = process.env): IJevService["mode"] {
+  const isProduction = process.env.NODE_ENV === "production" || env.NODE_ENV === "production";
+  return env.USE_JEV_MOCK === "true" && !isProduction ? "mock" : "jev-api";
+}
+
+export interface CreateJevServiceOptions {
+  /** Called before every upstream call (every evaluateStep for the mock). */
+  beforeRequest?: () => Promise<void>;
+}
+
+export function createJevService(env: JevServiceEnv = process.env, options: CreateJevServiceOptions = {}): IJevService {
   const isProduction = process.env.NODE_ENV === "production" || env.NODE_ENV === "production";
   const wantsMock = env.USE_JEV_MOCK === "true";
 
@@ -26,12 +37,18 @@ export function createJevService(env: JevServiceEnv = process.env): IJevService 
     if (isProduction) {
       throw new JevConfigurationError("운영 환경에서는 Jev 모의(mock) 서비스를 사용할 수 없습니다.");
     }
-    return new MockJevService();
+    const mock = new MockJevService();
+    const { beforeRequest } = options;
+    if (!beforeRequest) return mock;
+    return {
+      mode: mock.mode,
+      evaluateStep: async (params) => { await beforeRequest(); return mock.evaluateStep(params); },
+    };
   }
 
   const apiKey = env.TYPESAFE_API_KEY?.trim();
   if (!apiKey) {
     throw new JevConfigurationError("Jev 서비스가 설정되지 않았습니다 (TYPESAFE_API_KEY 없음). 관리자에게 문의하세요.");
   }
-  return new JevService(apiKey);
+  return new JevService(apiKey, { beforeRequest: options.beforeRequest });
 }

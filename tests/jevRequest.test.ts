@@ -40,8 +40,8 @@ test("positiveId accepts only positive safe integers", () => {
   }
 });
 
-test("validateTrials defaults to 20 and accepts only integers 1..50", () => {
-  assert.equal(validateTrials(undefined), 20);
+test("validateTrials defaults to 10 and accepts only integers 1..50", () => {
+  assert.equal(validateTrials(undefined), 10);
   assert.equal(validateTrials(1), 1);
   assert.equal(validateTrials(50), 50);
   for (const bad of [0, 51, 2.5, "5", null, Number.NaN]) {

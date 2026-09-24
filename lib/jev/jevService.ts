@@ -12,6 +12,13 @@ export interface JevServiceOptions {
   timeoutMs?: number;
   /** Injectable for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * Runs before every upstream call, including follow-up questions inside
+   * one step. A runner uses it to stop a trial whose lease, deadline or
+   * submission revision is no longer current; whatever it throws propagates
+   * unchanged instead of being mapped to a JevApiError.
+   */
+  beforeRequest?: () => Promise<void>;
 }
 
 function isProbability(value: unknown): value is number {
@@ -49,6 +56,7 @@ export class JevService implements IJevService {
   private readonly endpoint: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly beforeRequest?: () => Promise<void>;
 
   /**
    * Throws JevConfigurationError without a key. Never retries: a failed or
@@ -64,10 +72,12 @@ export class JevService implements IJevService {
     this.endpoint = options.endpoint ?? DEFAULT_JEV_ENDPOINT;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS;
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
+    this.beforeRequest = options.beforeRequest;
   }
 
   /** POSTs with a hard timeout; maps every transport problem to a safe JevApiError. */
   private async post(requestBody: unknown): Promise<TypeSafeSystemOneResponse> {
+    await this.beforeRequest?.();
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {

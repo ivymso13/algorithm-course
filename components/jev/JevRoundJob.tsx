@@ -24,7 +24,7 @@ export function JevRoundJob({ roundId, password }: { roundId: number; password: 
     return () => controller.abort();
   }, [password, roundId]);
 
-  // Each request checkpoints one trial. Closing the tab pauses dispatch;
+  // Each request checkpoints one wave (up to 5 parallel trials). Closing the tab pauses dispatch;
   // reopening it resumes the same persisted job after any live lease expires.
   const activeId = job && ["queued", "running"].includes(job.status) ? job.id : null;
   useEffect(() => {

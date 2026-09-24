@@ -1,11 +1,13 @@
 import { getD1 } from "@/db";
 import { parseAlgorithmSteps } from "./algorithmSteps";
-import { batchEvaluate, createJevService, isJevInfrastructureError, type BatchTrialResult } from "./jev";
-import { maxBoxProblem, type MaxBoxInput } from "./problems/maxbox";
+import { createJevService, type BatchTrialResult } from "./jev";
+import { advanceAutoRuns } from "./jevAuto";
+import { claimTrialSlot, releaseTrialSlot, runGuardedTrial, settleTrial, GLOBAL_TRIAL_SLOTS, SLOT_HELD_SQL, TRIAL_LEASE_MS, type TrialSlot } from "./jevRunner";
 import { JevRequestError, validateJevSteps } from "./jevRequest";
 import type { JevJobSummary } from "./jevJobTypes";
 
-const LEASE_MS = 10 * 60 * 1000;
+// A job lease covers one advance, which is at most one wave of trials.
+const LEASE_MS = TRIAL_LEASE_MS;
 const SELECT_SUMMARY = `SELECT j.id, j.round_id AS roundId, j.status, j.mode, j.last_error AS lastError,
  j.trials_per_student AS trialsPerStudent, count(i.id) AS totalStudents,
  coalesce(sum(i.status = 'completed'), 0) AS completedStudents,
@@ -86,8 +88,10 @@ interface JobItem {
  id:number; submission_id:number; submission_version:number; student_key:string; student_id:string;
  student_name:string; algorithm_text:string; trials:string;
 }
-/** One persisted trial per request. A lease and fencing token prevent overlapping tabs,
- * stale requests and cancelled runs from committing results. No untracked waitUntil work. */
+/** One bounded step per request: up to GLOBAL_TRIAL_SLOTS trials of the current student
+ * in parallel, under the global slots. A job lease plus fencing token keeps overlapping
+ * tabs, stale requests and cancelled runs from committing; every API call re-checks it.
+ * A student's automatic result for the same revision and mode is reused, not paid twice. */
 export async function advanceJevJob(courseId:number,id:number) {
   const db=await getD1(); const job=await getJevJob(courseId,id);
   if (!["queued","running"].includes(job.status)) return job;
@@ -101,49 +105,7 @@ export async function advanceJevJob(courseId:number,id:number) {
   try {
     const item=await db.prepare("SELECT * FROM jev_job_items WHERE job_id=? AND status='pending' ORDER BY id LIMIT 1")
       .bind(id).first<JobItem>();
-    if(item) {
-      let trials:BatchTrialResult[]=JSON.parse(item.trials);
-      let status="pending"; let lastError:string|null=null;
-      try {
-        const steps=parseAlgorithmSteps(item.algorithm_text);
-        if(!steps.length) status="skipped";
-        else {
-          validateJevSteps(steps);
-          const result=await batchEvaluate(steps,1,()=>{
-            const instance=maxBoxProblem.generate();
-            return {numbers:(instance.input as MaxBoxInput).counts,correctAnswer:instance.correctAnswer as number};
-          },{service,concurrency:1});
-          trials=[...trials,{...result.trials[0],trialIndex:trials.length}];
-          if(trials.length>=job.trialsPerStudent) status="completed";
-        }
-      } catch(error) {
-        if (error instanceof JevRequestError) {
-          status="skipped";
-          lastError=error.message;
-        } else {
-          status="failed";
-          lastError=isJevInfrastructureError(error)
-            ? "AI 서비스 응답을 받지 못했습니다. 학생 알고리즘의 오답으로 처리하지 않았습니다."
-            : "실행 처리 중 내부 오류가 발생했습니다. 완료한 결과는 보존되며 관리자 확인이 필요합니다.";
-        }
-      }
-      const statements=[db.prepare(`UPDATE jev_job_items SET trials=?,status=?,last_error=? WHERE id=?
-        AND EXISTS(SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running')`)
-        .bind(JSON.stringify(trials),status,lastError,item.id,id,token)];
-      if(status==="completed") {
-        statements.push(db.prepare(`INSERT INTO jev_batch_evaluations
-          (course_id,round_id,student_key,student_id,student_name,problem_id,job_item_id,submission_id,submission_version,submission_text,mode,source,algorithm_steps,total_trials,correct_count,incorrect_count,error_count,trials,created_at)
-          SELECT ?,?,?,?,?,'max-finding',?,?,?,?,?,'teacher',?,?,?,?,?,?,?
-          FROM jev_job_items i JOIN jev_jobs j ON j.id=i.job_id
-          WHERE i.id=? AND i.status='completed' AND j.lease_token=? AND j.status='running'
-          ON CONFLICT(job_item_id) DO NOTHING`)
-          .bind(courseId,job.roundId,item.student_key,item.student_id,item.student_name,item.id,item.submission_id,item.submission_version,item.algorithm_text,job.mode,
-            JSON.stringify(parseAlgorithmSteps(item.algorithm_text)),trials.length,trials.filter(r=>r.correct===true).length,trials.filter(r=>r.correct===false).length,trials.filter(r=>!r.executable).length,JSON.stringify(trials),new Date().toISOString(),item.id,token));
-      }
-      // Infrastructure failures pause the job. Retry resumes only unfinished work.
-      if(status==="failed") statements.push(db.prepare("UPDATE jev_jobs SET status='failed',last_error=? WHERE id=? AND lease_token=? AND status='running'").bind(lastError,id,token));
-      await db.batch(statements);
-    }
+    if(item) await advanceJobItem(courseId,job,item,token);
     await db.prepare(`UPDATE jev_jobs SET status=CASE
       WHEN status!='running' THEN status
       WHEN EXISTS(SELECT 1 FROM jev_job_items WHERE job_id=? AND status='pending') THEN 'running'
@@ -154,4 +116,71 @@ export async function advanceJevJob(courseId:number,id:number) {
   } finally {
     await db.prepare("UPDATE jev_jobs SET lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").bind(id,token).run();
   }
+}
+
+async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,token:string) {
+  const db=await getD1(); const id=job.id;
+  let trials:BatchTrialResult[]=JSON.parse(item.trials);
+  const before=trials.length;
+  let status="pending"; let lastError:string|null=null;
+  const steps=parseAlgorithmSteps(item.algorithm_text);
+  try {
+    if(!steps.length) status="skipped";
+    else validateJevSteps(steps);
+  } catch(error) {
+    if(!(error instanceof JevRequestError)) throw error;
+    status="skipped"; lastError=error.message;
+  }
+  if(status==="pending" && trials.length===0) {
+    const auto=await db.prepare("SELECT id,status FROM jev_auto_runs WHERE submission_id=? AND submission_version=? AND mode=?")
+      .bind(item.submission_id,item.submission_version,job.mode).first<{id:number;status:string}>();
+    if(auto && ["queued","running"].includes(auto.status)) {
+      // Drive the student's own run instead of paying for the same trials twice.
+      await advanceAutoRuns({courseId,onlyRunId:auto.id,ignoreBackoff:true});
+      return;
+    }
+    if(auto) {
+      const {results}=await db.prepare("SELECT result FROM jev_auto_trials WHERE run_id=? AND status='done' ORDER BY trial_index LIMIT ?")
+        .bind(auto.id,job.trialsPerStudent).all<{result:string}>();
+      trials=results.map((r,i)=>({...(JSON.parse(r.result) as BatchTrialResult),trialIndex:i}));
+    }
+  }
+  const need=status==="pending" ? job.trialsPerStudent-trials.length : 0;
+  if(need>0) {
+    const slots:TrialSlot[]=[];
+    try {
+      while(slots.length<Math.min(need,GLOBAL_TRIAL_SLOTS)) {
+        const slot=await claimTrialSlot(`job:${id}`);
+        if(!slot) break;
+        slots.push(slot);
+      }
+      if(!slots.length && trials.length===before) return; // Every slot is busy; nothing to save yet.
+      const outcomes=await Promise.all(slots.map((slot,k)=>settleTrial(()=>runGuardedTrial(steps,before+k,async()=>Boolean(
+        await db.prepare(`SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running' AND lease_until>? AND ${SLOT_HELD_SQL}`)
+          .bind(id,token,Date.now(),slot.slotId,slot.token,Date.now()).first())))));
+      for(const outcome of outcomes) {
+        if(outcome.kind==="done") trials.push({...outcome.result,trialIndex:trials.length});
+        else if(outcome.kind==="retry") { status="failed"; lastError=outcome.message; }
+      }
+    } finally {
+      await Promise.all(slots.map(releaseTrialSlot));
+    }
+  }
+  if(status==="pending" && trials.length>=job.trialsPerStudent) status="completed";
+  const statements=[db.prepare(`UPDATE jev_job_items SET trials=?,status=?,last_error=? WHERE id=?
+    AND EXISTS(SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running')`)
+    .bind(JSON.stringify(trials),status,lastError,item.id,id,token)];
+  if(status==="completed") {
+    statements.push(db.prepare(`INSERT INTO jev_batch_evaluations
+      (course_id,round_id,student_key,student_id,student_name,problem_id,job_item_id,submission_id,submission_version,submission_text,mode,source,algorithm_steps,total_trials,correct_count,incorrect_count,error_count,trials,created_at)
+      SELECT ?,?,?,?,?,'max-finding',?,?,?,?,?,'teacher',?,?,?,?,?,?,?
+      FROM jev_job_items i JOIN jev_jobs j ON j.id=i.job_id
+      WHERE i.id=? AND i.status='completed' AND j.lease_token=? AND j.status='running'
+      ON CONFLICT(job_item_id) DO NOTHING`)
+      .bind(courseId,job.roundId,item.student_key,item.student_id,item.student_name,item.id,item.submission_id,item.submission_version,item.algorithm_text,job.mode,
+        JSON.stringify(steps),trials.length,trials.filter(r=>r.correct===true).length,trials.filter(r=>r.correct===false).length,trials.filter(r=>!r.executable).length,JSON.stringify(trials),new Date().toISOString(),item.id,token));
+  }
+  // Infrastructure failures pause the job; saved trials stay. Retry resumes only unfinished work.
+  if(status==="failed") statements.push(db.prepare("UPDATE jev_jobs SET status='failed',last_error=? WHERE id=? AND lease_token=? AND status='running'").bind(lastError,id,token));
+  await db.batch(statements);
 }

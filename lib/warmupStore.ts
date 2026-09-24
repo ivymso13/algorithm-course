@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { jevBatchEvaluations, jevJobItems, jevJobs, warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
+import { jevAutoRuns, jevAutoTrials, jevBatchEvaluations, jevJobItems, jevJobs, warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 import { fullyEvaluatedStudentKeys } from "@/lib/warmupEvaluation";
@@ -199,6 +199,8 @@ export async function deleteWarmupRound(id: number, courseId: number) {
     db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.roundId, id)),
     db.delete(jevJobItems).where(sql`${jevJobItems.jobId} in (select id from jev_jobs where round_id = ${id})`),
     db.delete(jevJobs).where(eq(jevJobs.roundId, id)),
+    db.delete(jevAutoTrials).where(sql`${jevAutoTrials.runId} in (select id from jev_auto_runs where round_id = ${id})`),
+    db.delete(jevAutoRuns).where(eq(jevAutoRuns.roundId, id)),
     db.delete(warmupVotes).where(eq(warmupVotes.roundId, id)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.roundId, id)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.roundId, id)),
@@ -225,6 +227,8 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   await db.batch([
     db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.submissionId, submissionId)),
     db.delete(jevJobItems).where(eq(jevJobItems.submissionId, submissionId)),
+    db.delete(jevAutoTrials).where(sql`${jevAutoTrials.runId} in (select id from jev_auto_runs where submission_id = ${submissionId})`),
+    db.delete(jevAutoRuns).where(eq(jevAutoRuns.submissionId, submissionId)),
     db.delete(warmupVotes).where(eq(warmupVotes.submissionId, submissionId)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.submissionId, submissionId)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId)),

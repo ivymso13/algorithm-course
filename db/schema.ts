@@ -437,3 +437,62 @@ export const jevJobItems = sqliteTable("jev_job_items", {
 }, (t) => ({
   jobSubmissionIdx: uniqueIndex("jev_job_items_job_submission_idx").on(t.jobId, t.submissionId),
 }));
+
+/**
+ * Automatic grading of one maxbox submission revision (lib/jevAuto.ts),
+ * enqueued in the same D1 batch that saves the submission. Unique per
+ * (submission, revision): an identical resubmit does not bump the revision,
+ * so it lands on the existing run instead of paying for a second one.
+ */
+export const jevAutoRuns = sqliteTable("jev_auto_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  courseId: integer("course_id").notNull(),
+  roundId: integer("round_id").notNull(),
+  submissionId: integer("submission_id").notNull(),
+  submissionVersion: integer("submission_version").notNull(),
+  studentKey: text("student_key").notNull(),
+  studentId: text("student_id").notNull(),
+  studentName: text("student_name").notNull(),
+  algorithmText: text("algorithm_text").notNull(),
+  mode: text("mode").notNull(),
+  targetTrials: integer("target_trials").notNull(),
+  status: text("status").notNull().default("queued"),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  nextAttemptAt: integer("next_attempt_at").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  completedAt: text("completed_at"),
+}, (t) => ({
+  submissionVersionIdx: uniqueIndex("jev_auto_runs_submission_version_idx").on(t.submissionId, t.submissionVersion),
+  courseStatusIdx: index("jev_auto_runs_course_status_idx").on(t.courseId, t.status),
+  roundStudentIdx: index("jev_auto_runs_round_student_idx").on(t.roundId, t.studentKey),
+}));
+
+/** One randomized trial of an auto run; a row per trial so parallel commits never lose updates. */
+export const jevAutoTrials = sqliteTable("jev_auto_trials", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  runId: integer("run_id").notNull(),
+  trialIndex: integer("trial_index").notNull(),
+  status: text("status").notNull().default("pending"),
+  leaseToken: text("lease_token"),
+  leaseUntil: integer("lease_until"),
+  committedBy: text("committed_by"),
+  attempts: integer("attempts").notNull().default(0),
+  result: text("result"),
+  updatedAt: text("updated_at"),
+}, (t) => ({
+  runTrialIdx: uniqueIndex("jev_auto_trials_run_trial_idx").on(t.runId, t.trialIndex),
+}));
+
+/**
+ * The global concurrency limit for Jev trials across every course and every
+ * runner (auto and teacher). A fixed set of rows; a trial may only call the
+ * API while it holds an unexpired lease on one of them.
+ */
+export const jevTrialSlots = sqliteTable("jev_trial_slots", {
+  id: integer("id").primaryKey(),
+  leaseToken: text("lease_token"),
+  leaseUntil: integer("lease_until"),
+  holder: text("holder"),
+});
