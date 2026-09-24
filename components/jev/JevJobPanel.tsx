@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { jevJobProgress } from "@/lib/jevJobProgress";
 
 export interface JevJobSummaryProp {
   id: number;
@@ -9,6 +10,8 @@ export interface JevJobSummaryProp {
   completedStudents: number;
   failedStudents: number;
   skippedStudents: number;
+  trialsPerStudent: number;
+  completedTrials: number;
   mode: string;
   lastError?: string | null;
 }
@@ -55,8 +58,10 @@ export function JevJobPanel({
   const skipped = job?.skippedStudents ?? 0;
   const processed = completed + failed + skipped;
 
-  // Guard against division by zero
-  const progressPct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  // Measured in trials so the bar moves with every saved result (see jevJobProgress).
+  const { doneTrials, totalTrials, percent: progressPct } = job
+    ? jevJobProgress(job)
+    : { doneTrials: 0, totalTrials: 0, percent: 0 };
 
   // Infrastructure / system error indicator (network transport, API rate limit, auth, timeout)
   const apiError = error || job?.lastError;
@@ -185,7 +190,7 @@ export function JevJobPanel({
         <div className="space-y-2 rounded-xl bg-slate-50/70 p-3.5 border border-slate-100">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
             <span id={progressId}>
-              전체 진행률 ({processed} / {total}명 처리)
+              전체 진행률 (실행 {doneTrials} / {totalTrials}회 · 학생 {processed} / {total}명 처리)
             </span>
             <span className="font-mono text-indigo-700 font-bold">{progressPct}%</span>
           </div>
@@ -195,8 +200,8 @@ export function JevJobPanel({
             id={`${panelId}-progress-bar`}
             aria-labelledby={progressId}
             className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 [&::-webkit-progress-bar]:bg-slate-200 [&::-webkit-progress-value]:bg-indigo-600 [&::-moz-progress-bar]:bg-indigo-600 transition-all"
-            value={processed}
-            max={total > 0 ? total : 100}
+            value={doneTrials}
+            max={totalTrials > 0 ? totalTrials : 100}
             aria-valuenow={progressPct}
             aria-valuemin={0}
             aria-valuemax={100}

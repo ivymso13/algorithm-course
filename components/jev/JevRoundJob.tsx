@@ -81,7 +81,7 @@ export function JevRoundJob({ roundId, password }: { roundId: number; password: 
         </button>
       )}
       {activeId && <p className="text-xs text-slate-500">이 화면을 열어두면 실행이 이어집니다. 화면을 닫아도 저장된 진행 상황은 유지되며, 다시 열면 이어서 실행합니다.</p>}
-      {job && <p className="text-xs text-slate-500">저장된 실행 {job.completedTrials}회 · 학생당 {job.trialsPerStudent}회</p>}
+      {job && <p className="text-xs text-slate-500">학생당 {job.trialsPerStudent}회 실행</p>}
     </div>
   );
 }
