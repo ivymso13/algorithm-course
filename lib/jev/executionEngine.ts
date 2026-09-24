@@ -2,6 +2,7 @@ import type { ActionType, AlgorithmExecutionState, ExecutionResult, IJevService,
 import { DEFAULT_INITIAL_STATE, JEV_EXECUTION_THRESHOLD } from "./types";
 import { MockJevService } from "./mockService";
 import { evaluateExpr } from "./effectEngine";
+import { splitCompoundStep } from "./compoundStep";
 import { applyProblemAction, asScope, isReplayAction, resolveAction, schema, type ProblemAction } from "./problemSchema";
 
 /** Hard cap on loop iterations. Hitting it is an algorithm failure, never a silent success. */
@@ -172,12 +173,14 @@ export async function executeAlgorithm(
     };
   }
 
+  const stepClauses = nonBlankSteps.map(splitCompoundStep);
+
   const budgetExhausted = () => evaluations.length >= maxEvaluations;
 
-  async function evaluate(stepNumber: number, current: AlgorithmExecutionState): Promise<JevStepEvaluation> {
+  async function evaluate(stepNumber: number, clause: number, current: AlgorithmExecutionState): Promise<JevStepEvaluation> {
     const evaluation = await service.evaluateStep({
       stepIndex: stepNumber,
-      stepText: nonBlankSteps[stepNumber - 1],
+      stepText: stepClauses[stepNumber - 1][clause],
       allSteps: nonBlankSteps,
       currentState: current,
       threshold,
@@ -226,6 +229,56 @@ export async function executeAlgorithm(
     });
   }
 
+  type StepRun =
+    | { kind: "done" | "stop"; state: AlgorithmExecutionState }
+    | { kind: "fail"; state: AlgorithmExecutionState; reason: string }
+    | { kind: "repeat"; state: AlgorithmExecutionState; action: ProblemAction; evaluation: JevStepEvaluation };
+
+  /**
+   * Runs one student step: each of its clauses (see splitCompoundStep) is
+   * judged and applied in order under the same step number. A REPEAT is
+   * handed back to the caller, and only allowed as a step of its own.
+   */
+  async function runStep(stepNumber: number, current: AlgorithmExecutionState, iteration?: number): Promise<StepRun> {
+    const clauses = stepClauses[stepNumber - 1];
+    for (let clause = 0; clause < clauses.length; clause++) {
+      const before = { ...current };
+      if (budgetExhausted()) {
+        budgetTrace(stepNumber, before, iteration);
+        return { kind: "fail", state: current, reason: budgetReason };
+      }
+      const evaluation = await evaluate(stepNumber, clause, current);
+      const plan = planStep(evaluation, current, threshold);
+
+      if (plan.kind === "repeat" && clauses.length === 1) {
+        return { kind: "repeat", state: current, action: plan.action, evaluation };
+      }
+      if (plan.kind === "fail" || plan.kind === "repeat") {
+        const reason = plan.kind === "fail" ? plan.reason : "반복은 다른 행동과 나눠 한 단계로 따로 써야 합니다.";
+        failTrace(stepNumber, evaluation.action, before, reason, iteration);
+        return { kind: "fail", state: current, reason };
+      }
+      if (plan.kind === "stop") {
+        current = { ...current, isTerminated: true };
+        stopTrace(stepNumber, evaluation, before, current, iteration);
+        return { kind: "stop", state: current };
+      }
+
+      const applied = applyProblemAction(plan.action, current);
+      current = applied.state;
+      pushTrace({
+        stepNumber,
+        action: evaluation.action,
+        status: "success",
+        logMessage: iteration ? `→ [반복 ${iteration}회차] ${applied.logMessage.replace(/^→ /, "")}` : applied.logMessage,
+        stateBefore: before,
+        stateAfter: { ...current },
+        iteration,
+      });
+    }
+    return { kind: "done", state: current };
+  }
+
   /**
    * Replays steps [startStep, repeatStepNumber - 1] until the schema's
    * `until` holds. Fails (never silently succeeds) when a loop cannot
@@ -270,35 +323,15 @@ export async function executeAlgorithm(
 
       for (let stepNumber = spec.startStep; stepNumber < repeatStepNumber; stepNumber++) {
         const before = { ...current };
-        if (budgetExhausted()) {
-          budgetTrace(stepNumber, before, iteration);
-          return { status: "failed", state: current, failedStep: stepNumber, reason: budgetReason };
-        }
-        const evaluation = await evaluate(stepNumber, current);
-        const plan = planStep(evaluation, current, threshold);
-
-        if (plan.kind === "fail" || plan.kind === "repeat") {
-          const reason = plan.kind === "fail" ? plan.reason : "반복 안에서 또 반복을 참조하는 단계는 지원하지 않습니다.";
-          failTrace(stepNumber, evaluation.action, before, reason, iteration);
+        const run = await runStep(stepNumber, current, iteration);
+        current = run.state;
+        if (run.kind === "fail") return { status: "failed", state: current, failedStep: stepNumber, reason: run.reason };
+        if (run.kind === "repeat") {
+          const reason = "반복 안에서 또 반복을 참조하는 단계는 지원하지 않습니다.";
+          failTrace(stepNumber, run.evaluation.action, before, reason, iteration);
           return { status: "failed", state: current, failedStep: stepNumber, reason };
         }
-        if (plan.kind === "stop") {
-          current = { ...current, isTerminated: true };
-          stopTrace(stepNumber, evaluation, before, current, iteration);
-          return { status: "stopped", state: current };
-        }
-
-        const applied = applyProblemAction(plan.action, current);
-        current = applied.state;
-        pushTrace({
-          stepNumber,
-          action: evaluation.action,
-          status: "success",
-          logMessage: `→ [반복 ${iteration}회차] ${applied.logMessage.replace(/^→ /, "")}`,
-          stateBefore: before,
-          stateAfter: { ...current },
-          iteration,
-        });
+        if (run.kind === "stop") return { status: "stopped", state: current };
       }
     }
     return { status: "done", state: current };
@@ -320,32 +353,18 @@ export async function executeAlgorithm(
   for (let i = 0; i < nonBlankSteps.length && !state.isTerminated; i++) {
     const stepNumber = i + 1;
     const stateBefore: AlgorithmExecutionState = { ...state };
-    if (budgetExhausted()) {
-      budgetTrace(stepNumber, stateBefore);
-      return failure(stepNumber, i, budgetReason);
-    }
-    const evaluation = await evaluate(stepNumber, state);
-    const plan = planStep(evaluation, state, threshold);
+    const run = await runStep(stepNumber, state);
+    state = run.state;
 
-    if (plan.kind === "fail") {
-      failTrace(stepNumber, evaluation.action, stateBefore, plan.reason);
-      return failure(stepNumber, i, plan.reason);
-    }
+    if (run.kind === "fail") return failure(stepNumber, i, run.reason);
 
-    if (plan.kind === "stop") {
-      state = { ...state, isTerminated: true };
-      stopTrace(stepNumber, evaluation, stateBefore, state);
-      executedSteps = stepNumber;
-      break;
-    }
-
-    if (plan.kind === "repeat") {
-      const outcome = await runLoop(stepNumber, plan.action, state);
+    if (run.kind === "repeat") {
+      const outcome = await runLoop(stepNumber, run.action, state);
       state = outcome.state;
       if (outcome.status === "failed") {
         // The REPEAT step's own failures (bad loop spec, nontermination)
         // have no inner trace entry yet — record one.
-        if (outcome.failedStep === stepNumber) failTrace(stepNumber, evaluation.action, { ...state }, outcome.reason);
+        if (outcome.failedStep === stepNumber) failTrace(stepNumber, run.evaluation.action, { ...state }, outcome.reason);
         return failure(outcome.failedStep, i, outcome.reason);
       }
       if (outcome.status === "stopped") {
@@ -354,39 +373,38 @@ export async function executeAlgorithm(
       }
       pushTrace({
         stepNumber,
-        action: evaluation.action,
+        action: run.evaluation.action,
         status: "success",
-        logMessage: plan.action.logTemplate,
+        logMessage: run.action.logTemplate,
         stateBefore,
         stateAfter: { ...state },
       });
-      executedSteps = stepNumber;
-      continue;
     }
-
-    const applied = applyProblemAction(plan.action, state);
-    state = applied.state;
-    pushTrace({
-      stepNumber,
-      action: evaluation.action,
-      status: "success",
-      logMessage: applied.logMessage,
-      stateBefore,
-      stateAfter: { ...state },
-    });
     executedSteps = stepNumber;
+    if (run.kind === "stop") break;
   }
 
   // Graded only on the explicitly submitted answer; the memo is never used
-  // as a stand-in for a missing submission.
+  // as a stand-in for a missing submission. A run that never outputs is an
+  // execution failure (no single step is at fault), not a wrong answer.
+  if (state.output === null) {
+    return {
+      executable: false,
+      correct: null,
+      failedStep: null,
+      failureReason: NO_OUTPUT_REASON,
+      finalState: state,
+      trace,
+      diagnostics: diagnostics(executedSteps),
+    };
+  }
+
   const trueMax = Math.max(...state.numbers);
-  const hasOutput = state.output !== null;
 
   return {
     executable: true,
-    correct: hasOutput && state.output === trueMax,
+    correct: state.output === trueMax,
     failedStep: null,
-    ...(hasOutput ? {} : { failureReason: NO_OUTPUT_REASON }),
     finalState: state,
     trace,
     diagnostics: diagnostics(executedSteps),

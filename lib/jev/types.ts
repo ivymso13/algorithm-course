@@ -66,9 +66,9 @@ export interface ExecutionResult {
   correct: boolean | null;
   failedStep: number | null;
   /**
-   * Why the run is not a correct result, when there is a specific reason:
-   * the failed step's reason when `executable` is false, or a missing
-   * submission when the algorithm ran but never output an answer.
+   * Why the run failed (`executable` false): the failed step's reason, or
+   * a missing submission (with `failedStep` null) when the algorithm ran
+   * to the end but never output an answer.
    */
   failureReason?: string;
   finalState: AlgorithmExecutionState;

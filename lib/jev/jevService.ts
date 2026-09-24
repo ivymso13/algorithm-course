@@ -1,6 +1,6 @@
 import type { AlgorithmExecutionState, IJevService, JevStepEvaluation } from "./types";
 import { JEV_EXECUTION_THRESHOLD } from "./types";
-import { candidateActions, schema } from "./problemSchema";
+import { candidateActions, schema, type ProblemAction } from "./problemSchema";
 import { JevConfigurationError, JevApiError } from "./errors";
 
 export const DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -203,6 +203,29 @@ export class JevService implements IJevService {
     const confidence = noul < 0.15 ? noul : choiceConf;
     const executable = confidence >= threshold && Boolean(matchedAction);
 
+    // The first question only offers actions that apply now, so a clear
+    // sentence naming an action that is impossible here (e.g. moving left
+    // from the first box) comes back as NONE_OF_THESE. Only in that case —
+    // never on the success path, whose prompt stays unchanged — ask once
+    // more among the currently impossible actions so the student is told
+    // "지금은 할 수 없는 행동" instead of "애매하다". Genuinely vague steps
+    // (the noul veto) skip the follow-up and keep the unclear reason.
+    if (!matchedAction && noul >= 0.15) {
+      const impossible = await this.matchImpossibleAction(stateText, candidates, threshold);
+      if (impossible) {
+        return {
+          stepIndex,
+          stepText,
+          executable: false,
+          confidence: impossible.confidence,
+          action: impossible.action.category,
+          actionId: impossible.action.id,
+          reason: `지금 상태에서는 이 행동을 할 수 없습니다: ${impossible.action.description}`,
+          rawResponse: data,
+        };
+      }
+    }
+
     return {
       stepIndex,
       stepText,
@@ -213,5 +236,40 @@ export class JevService implements IJevService {
       reason: executable ? undefined : "이 단계만으로는 실행할 행동을 하나로 결정하기 어렵습니다.",
       rawResponse: data,
     };
+  }
+
+  /** The schema action (not offered in `offered`) the step clearly names, or null. One extra call. */
+  private async matchImpossibleAction(
+    stateText: string,
+    offered: ProblemAction[],
+    threshold: number
+  ): Promise<{ action: ProblemAction; confidence: number } | null> {
+    const impossible = schema.actions.filter((a) => !offered.includes(a));
+    if (impossible.length === 0) return null;
+
+    const criteria: Record<string, string> = {};
+    for (const a of impossible) criteria[a.id] = a.description;
+    criteria.NONE_OF_THESE = "학생의 문장이 위 어떤 구체적 행동과도 명확히 일치하지 않는다.";
+
+    const data = await this.post({
+      model: "jev-latest",
+      state: stateText,
+      questions: {
+        action_id: {
+          type: "choice",
+          instructions:
+            "현재 상태와 상관없이, 학생의 문장이 아래 정의된 구체적 행동 중 정확히 어느 것을 하라는 뜻인지 고르시오. 애매하면 NONE_OF_THESE를 고르시오.",
+          criteria,
+        },
+      },
+    });
+
+    const choiceId = data.answers?.action_id?.choice;
+    const choiceConf = data.answers?.action_id?.confidence;
+    if (!isProbability(choiceConf) || typeof choiceId !== "string") {
+      throw new JevApiError("invalid_response", "Jev API 응답에 유효한 판단 결과 또는 확신도가 없습니다.");
+    }
+    const action = impossible.find((a) => a.id === choiceId);
+    return action && choiceConf >= threshold ? { action, confidence: choiceConf } : null;
   }
 }

@@ -102,14 +102,18 @@ test("fails closed when a service reports executable without a valid confidence"
 
 // ---------- output & termination ----------
 
-test("no explicit output means not correct — the memo is never used as a fallback answer", async () => {
+test("no explicit output is an execution failure, not a wrong answer — the memo is never used as a fallback", async () => {
   const steps = CORRECT_ALGORITHM.slice(0, 6); // everything except the submit step
   const result = await executeAlgorithm(steps);
-  assert.equal(result.executable, true);
   assert.equal(result.finalState.maxVal, 12, "memo holds the max...");
   assert.equal(result.finalState.output, null);
-  assert.equal(result.correct, false, "...but nothing was submitted");
+  assert.equal(result.executable, false, "...but nothing was submitted");
+  assert.equal(result.correct, null);
+  assert.equal(result.failedStep, null, "no single step is at fault");
   assert.equal(result.failureReason, NO_OUTPUT_REASON);
+
+  const batch = await batchEvaluate(steps, 3, () => ({ numbers: [5, 11, 9], correctAnswer: 11 }));
+  assert.deepEqual([batch.correctCount, batch.incorrectCount, batch.errorCount], [0, 0, 3]);
 });
 
 test("STOP terminates execution: later steps are neither evaluated nor applied", async () => {
@@ -346,6 +350,79 @@ test("JevService: offers REPEAT as a choice even when its loop guard is already 
   const res = await service.evaluateStep({ ...EVAL_PARAMS, currentState: atRightEdge });
   assert.ok("REPEAT_STUDENT_STEPS" in criteria);
   assert.equal(res.actionId, "REPEAT_STUDENT_STEPS");
+});
+
+/** Fake fetch answering the n-th call with answers[n], recording each request's action_id criteria. */
+function scriptedJev(answers: unknown[]) {
+  const offered: string[][] = [];
+  const service = new JevService(SECRET_KEY, {
+    fetchImpl: async (_url, init) => {
+      offered.push(Object.keys(JSON.parse(String(init?.body)).questions.action_id.criteria));
+      return jsonResponse({ answers: answers[offered.length - 1] });
+    },
+  });
+  return { service, offered };
+}
+
+test("JevService: a clear step naming an impossible action is reported as impossible, not unclear", async () => {
+  const { service, offered } = scriptedJev([
+    { executable: { noul: 0.48 }, action_id: { choice: "NONE_OF_THESE", confidence: 0.9 } },
+    { action_id: { choice: "MOVE_LEFT_BOX", confidence: 0.97 } },
+  ]);
+  const res = await service.evaluateStep({ ...EVAL_PARAMS, stepText: "왼쪽 상자로 이동한다" });
+  assert.equal(res.executable, false);
+  assert.equal(res.actionId, "MOVE_LEFT_BOX");
+  assert.match(res.reason ?? "", /^지금 상태에서는 이 행동을 할 수 없습니다: /);
+  assert.equal(offered.length, 2);
+  // The follow-up offers only what the first question could not: no applicable action, no REPEAT.
+  assert.ok(offered[1].includes("MOVE_LEFT_BOX") && offered[1].includes("SUBMIT_ANSWER"));
+  assert.ok(!offered[1].includes("CHECK_SELECTED_BOX") && !offered[1].includes("REPEAT_STUDENT_STEPS"));
+  // The success-path question is unchanged: impossible actions are never offered first.
+  assert.ok(!offered[0].includes("MOVE_LEFT_BOX"));
+
+  const result = await executeAlgorithm(["왼쪽 상자로 이동한다"], undefined, {
+    service: scriptedJev([
+      { executable: { noul: 0.48 }, action_id: { choice: "NONE_OF_THESE", confidence: 0.9 } },
+      { action_id: { choice: "MOVE_LEFT_BOX", confidence: 0.97 } },
+    ]).service,
+  });
+  assert.equal(result.executable, false);
+  assert.equal(result.failedStep, 1);
+  assert.match(result.failureReason ?? "", /할 수 없습니다/);
+});
+
+test("JevService: unclear steps keep the unclear reason; the follow-up call is only for NONE_OF_THESE", async () => {
+  const unclear = "이 단계만으로는 실행할 행동을 하나로 결정하기 어렵습니다.";
+
+  // Vague (noul veto): no follow-up, so no impossible-action guess.
+  const vague = scriptedJev([{ executable: { noul: 0.1 }, action_id: { choice: "NONE_OF_THESE", confidence: 0.9 } }]);
+  const vagueRes = await vague.service.evaluateStep({ ...EVAL_PARAMS, stepText: "메모지보다 크면 바꾼다" });
+  assert.equal(vagueRes.reason, unclear);
+  assert.equal(vague.offered.length, 1);
+
+  // Follow-up finds nothing (or is unsure): still unclear.
+  for (const followUp of [
+    { action_id: { choice: "NONE_OF_THESE", confidence: 0.95 } },
+    { action_id: { choice: "MOVE_LEFT_BOX", confidence: 0.4 } },
+  ]) {
+    const { service, offered } = scriptedJev([
+      { executable: { noul: 0.5 }, action_id: { choice: "NONE_OF_THESE", confidence: 0.9 } },
+      followUp,
+    ]);
+    const res = await service.evaluateStep(EVAL_PARAMS);
+    assert.equal(res.reason, unclear, JSON.stringify(followUp));
+    assert.equal(res.actionId, undefined);
+    assert.equal(offered.length, 2);
+  }
+
+  // Low confidence on an applicable action: unclear, no follow-up.
+  const unsure = scriptedJev([{ executable: { noul: 0.4 }, action_id: { choice: "CHECK_SELECTED_BOX", confidence: 0.37 } }]);
+  assert.equal((await unsure.service.evaluateStep(EVAL_PARAMS)).reason, unclear);
+  assert.equal(unsure.offered.length, 1);
+
+  // A malformed follow-up is an API problem, not a student failure.
+  const broken = scriptedJev([{ executable: { noul: 0.5 }, action_id: { choice: "NONE_OF_THESE", confidence: 0.9 } }, {}]);
+  await assert.rejects(broken.service.evaluateStep(EVAL_PARAMS), (e) => e instanceof JevApiError && e.kind === "invalid_response");
 });
 
 test("JevService: missing or invalid confidence fails closed as invalid_response", async () => {
