@@ -46,7 +46,7 @@ export function ProblemPrompt({
         </p>
 
         {/* Concrete Example Visualizer */}
-        {exampleInput && typeof exampleInput === "object" && (
+        {Boolean(exampleInput) && typeof exampleInput === "object" && (
           <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-950">
             <span className="font-bold block mb-1">🔍 실행 시 주어질 입력 예시:</span>
             {renderConcreteExample(problemType, exampleInput as Record<string, unknown>)}
@@ -83,7 +83,7 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
     case "card":
       return (
         <div className="space-y-1 font-mono text-slate-700">
-          <p>카드 개수: {i.n}장</p>
+          <p>카드 개수: {String(i.n)}장</p>
           <p>
             배열 예시: [{Array.isArray(i.array) ? (i.array as number[]).slice(0, 10).join(", ") + "..." : ""}]
           </p>
@@ -126,13 +126,9 @@ function renderConcreteExample(type: ProblemType, i: Record<string, unknown>) {
       );
     case "maxbox":
       return (
-        <div className="space-y-1 font-mono text-slate-700">
-          <p>상자 개수: {String(i.n)}개</p>
-          <p>
-            사과 개수 예시(왼쪽부터):{" "}
-            {Array.isArray(i.counts) ? (i.counts as number[]).join(", ") : ""}
-          </p>
-        </div>
+        <p className="font-mono text-slate-700">
+          상자 {String(i.n)}개 (각 상자 속 사과 개수는 열어보기 전까지 비공개)
+        </p>
       );
     default:
       return null;

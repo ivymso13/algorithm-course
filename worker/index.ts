@@ -8,6 +8,8 @@ interface Env {
   TEACHER_PASSWORD?: string;
   COURSE_CODE?: string;
   SESSION_TTL_SECONDS?: string;
+  TYPESAFE_API_KEY?: string;
+  USE_JEV_MOCK?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -17,7 +19,7 @@ interface Env {
   };
 }
 
-const RUNTIME_ENV_KEYS = ["TEACHER_PASSWORD", "COURSE_CODE", "SESSION_TTL_SECONDS"] as const;
+const RUNTIME_ENV_KEYS = ["TEACHER_PASSWORD", "COURSE_CODE", "SESSION_TTL_SECONDS", "TYPESAFE_API_KEY", "USE_JEV_MOCK"] as const;
 
 function syncRuntimeEnvironment(env: Env): void {
   for (const key of RUNTIME_ENV_KEYS) {

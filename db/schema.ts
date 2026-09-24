@@ -278,6 +278,7 @@ export const warmupSubmissions = sqliteTable(
     studentId: text("student_id").notNull(),
     studentName: text("student_name").notNull(),
     anonLabel: text("anon_label").notNull(),
+    revision: integer("revision").notNull().default(1),
     algorithmText: text("algorithm_text").notNull(),
     isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -348,3 +349,91 @@ export const warmupExperiences = sqliteTable(
     submissionIdx: index("warmup_experiences_submission_idx").on(table.submissionId),
   })
 );
+
+// Jev AI executor (lib/jev/*). A warm-up round's final, peer-reviewed
+// submissions get replayed by Jev against many independently randomized
+// instances of the activity (lib/jev/batchEvaluate.ts) once the teacher
+// closes the round — not self-triggered by students, and not just the one
+// instance they solved by hand.
+// ---------------------------------------------------------------------------
+
+/**
+ * One batch-evaluation run for one student's submission in one round.
+ * Per-trial detail (which random instance, what Jev did with it) is kept as
+ * JSON on the row rather than its own table — it's read-only diagnostic
+ * detail nobody queries or joins across rows, not a first-class record the
+ * way the run itself is.
+ */
+export const jevBatchEvaluations = sqliteTable(
+  "jev_batch_evaluations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    courseId: integer("course_id").notNull(),
+    // Nullable: rows created before this column existed (or a future ad-hoc
+    // run not tied to any round) simply aren't shown by the round-scoped
+    // student result lookup.
+    roundId: integer("round_id"),
+    studentKey: text("student_key").notNull(),
+    studentId: text("student_id").notNull(),
+    studentName: text("student_name").notNull(),
+    // "max-finding" today; a second activity's evaluations land in this same
+    // table under their own problemId once lib/jev/problems/*.json grows.
+    problemId: text("problem_id").notNull(),
+    jobItemId: integer("job_item_id"),
+    submissionId: integer("submission_id"),
+    submissionVersion: integer("submission_version"),
+    submissionText: text("submission_text"),
+    mode: text("mode").notNull().default("legacy"),
+    source: text("source").notNull().default("legacy"),
+    algorithmSteps: text("algorithm_steps", { mode: "json" }).notNull(),
+    totalTrials: integer("total_trials").notNull(),
+    correctCount: integer("correct_count").notNull(),
+    incorrectCount: integer("incorrect_count").notNull(),
+    errorCount: integer("error_count").notNull(),
+    trials: text("trials", { mode: "json" }).$type<import("@/lib/jev/batchEvaluate").BatchTrialResult[]>().notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    jobItemIdx: uniqueIndex("jev_batch_evaluations_job_item_idx").on(table.jobItemId),
+    studentIdx: index("jev_batch_evaluations_student_idx").on(table.studentKey),
+    courseIdx: index("jev_batch_evaluations_course_idx").on(table.courseId),
+    roundIdx: index("jev_batch_evaluations_round_idx").on(table.roundId),
+  })
+);
+
+/** A resumable teacher run. A partial unique index prevents double starts. */
+export const jevJobs = sqliteTable("jev_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  requestKey: text("request_key").notNull().unique(),
+  courseId: integer("course_id").notNull(),
+  roundId: integer("round_id").notNull(),
+  status: text("status").notNull().default("queued"),
+  mode: text("mode").notNull(),
+  trialsPerStudent: integer("trials_per_student").notNull(),
+  leaseToken: text("lease_token"),
+  leaseUntil: integer("lease_until"),
+  lastError: text("last_error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => ({
+  activeRoundIdx: uniqueIndex("jev_jobs_active_round_idx").on(t.courseId, t.roundId)
+    .where(sql`${t.status} in ('queued', 'running')`),
+  courseIdx: index("jev_jobs_course_idx").on(t.courseId, t.id),
+}));
+
+/** Immutable submission snapshot plus checkpointed randomized trials. */
+export const jevJobItems = sqliteTable("jev_job_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobId: integer("job_id").notNull(),
+  submissionId: integer("submission_id").notNull(),
+  submissionVersion: integer("submission_version").notNull(),
+  studentKey: text("student_key").notNull(),
+  studentId: text("student_id").notNull(),
+  studentName: text("student_name").notNull(),
+  algorithmText: text("algorithm_text").notNull(),
+  status: text("status").notNull().default("pending"),
+  trials: text("trials").notNull().default("[]"),
+  lastError: text("last_error"),
+}, (t) => ({
+  jobSubmissionIdx: uniqueIndex("jev_job_items_job_submission_idx").on(t.jobId, t.submissionId),
+}));

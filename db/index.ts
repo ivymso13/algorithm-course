@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+import { JEV_TABLES, JEV_INDEXES } from "./jevSchema";
 
 // Mirrors drizzle/0000_*.sql with `IF NOT EXISTS` added. Drizzle migrations
 // are the source of truth (regenerate with `npm run db:generate` after
@@ -156,6 +157,7 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS warmup_experiences_unique_idx ON warmup_experiences (submission_id, executor_student_key)`,
   `CREATE INDEX IF NOT EXISTS warmup_experiences_submission_idx ON warmup_experiences (submission_id)`,
+  ...JEV_TABLES,
 ];
 
 // Some columns were added to tables that predate them, so a database that
@@ -177,6 +179,13 @@ async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
   await ensureColumn(d1, "warmup_rounds", "problem_id", "text");
   await ensureColumn(d1, "warmup_rounds", "review_opened_at", "text");
   await ensureColumn(d1, "warmup_submissions", "is_demo", "integer DEFAULT false NOT NULL");
+  await ensureColumn(d1, "warmup_submissions", "revision", "integer DEFAULT 1 NOT NULL");
+  for (const [column, definition] of Object.entries({
+    round_id: "integer", job_item_id: "integer", submission_id: "integer",
+    submission_version: "integer", submission_text: "text",
+    mode: "text DEFAULT 'legacy' NOT NULL", source: "text DEFAULT 'legacy' NOT NULL",
+  })) await ensureColumn(d1, "jev_batch_evaluations", column, definition);
+  await d1.batch(JEV_INDEXES.map((statement) => d1.prepare(statement)));
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -203,4 +212,9 @@ export async function getDb() {
 
   await ensureSchema(env.DB);
   return drizzle(env.DB, { schema });
+}
+
+export async function getD1() {
+  await getDb();
+  return env.DB as D1Database;
 }

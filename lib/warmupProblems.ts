@@ -33,9 +33,9 @@ export const WARMUP_PROBLEMS = [
     prompt: "좌표평면 위에 별 N개가 흩어져 있고, 모든 별의 좌표는 처음부터 공개되어 있습니다. 별과 별 사이를 선으로 이어 모든 별이 서로 연결되도록 만들되, 이미 연결된 두 별을 또 잇는 것은 낭비이므로 피해야 합니다. 사용한 모든 선의 길이 합이 최소가 되도록 별들을 연결하는 알고리즘을 작성하세요.",
   },
   {
-    id: "max-apple-box",
-    title: "상자 속 사과 개수 중 최댓값 찾기",
-    prompt: "상자 N개가 왼쪽에서 오른쪽으로 한 줄로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자는 왼쪽부터 순서대로 한 번에 하나씩만 열어볼 수 있고, 한 번 닫은 상자는 다시 열어 개수를 확인할 수 없습니다. 모든 상자를 다 확인한 뒤, 그중 가장 많았던 사과 개수를 찾는 알고리즘을 작성하세요.",
+    id: "max-box",
+    title: "상자 속 사과 — 가장 많은 사과가 든 상자 찾기",
+    prompt: "상자를 하나씩 확인하며, 지금까지 확인한 것 중 사과가 가장 많이 든 상자의 개수를 메모지에 기록해서 찾아내는 절차를 자연어 알고리즘으로 작성하세요.",
   },
 ] as const;
 
@@ -43,7 +43,7 @@ export type WarmupProblem = (typeof WARMUP_PROBLEMS)[number];
 
 export function getWarmupProblem(id: unknown): WarmupProblem | undefined {
   if (typeof id !== "string") return undefined;
-  return WARMUP_PROBLEMS.find((problem) => problem.id === id);
+  return WARMUP_PROBLEMS.find((problem) => problem.id === (id === "max-apple-box" ? "max-box" : id));
 }
 
 /** Which interactive sandbox (see components/write/sandbox) matches each source problem. */
@@ -54,7 +54,7 @@ export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemTy
   "pancake-sort": "pancake",
   "tree-cutting": "woodcut",
   constellation: "constellation",
-  "max-apple-box": "maxbox",
+  "max-box": "maxbox",
 };
 
 /**

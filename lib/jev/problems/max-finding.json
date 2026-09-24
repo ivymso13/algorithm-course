@@ -1,0 +1,103 @@
+{
+  "problemId": "max-finding",
+  "title": "상자 속 사과 — 가장 많은 사과가 든 상자 찾기",
+  "prompt": "상자를 하나씩 확인하며, 지금까지 확인한 것 중 사과가 가장 많이 든 상자의 개수를 메모지에 기록해서 찾아내는 절차를 자연어 알고리즘으로 작성하세요.",
+  "input": { "numbers": [7, 3, 12, 5, 9] },
+
+  "state": {
+    "maxVal": null,
+    "currentIndex": 0,
+    "currentValue": null,
+    "output": null
+  },
+
+  "actions": [
+    {
+      "id": "MOVE_LEFT_BOX",
+      "category": "MOVE",
+      "description": "로봇이 왼쪽 상자로 한 칸 이동한다 (이동하면 확인 전 상태로 돌아간다)",
+      "buttonLabel": "◀ 왼쪽으로 이동",
+      "playable": true,
+      "appliesWhen": "currentIndex > 0",
+      "effect": {
+        "set": { "currentIndex": "$currentIndex - 1", "currentValue": "null" }
+      },
+      "logTemplate": "→ 로봇이 왼쪽으로 이동: {{currentIndexDisplay}}번째 상자"
+    },
+    {
+      "id": "MOVE_RIGHT_BOX",
+      "category": "MOVE",
+      "description": "로봇이 오른쪽 상자로 한 칸 이동한다 (이동하면 확인 전 상태로 돌아간다)",
+      "buttonLabel": "오른쪽으로 이동 ▶",
+      "playable": true,
+      "appliesWhen": "currentIndex < numbers.length - 1",
+      "effect": {
+        "set": { "currentIndex": "$currentIndex + 1", "currentValue": "null" }
+      },
+      "logTemplate": "→ 로봇이 오른쪽으로 이동: {{currentIndexDisplay}}번째 상자"
+    },
+    {
+      "id": "CHECK_SELECTED_BOX",
+      "category": "MOVE",
+      "description": "로봇이 지금 서 있는(선택한) 상자를 확인해 사과 개수를 본다. 이동 없이 같은 자리에서 몇 번이든 다시 확인할 수 있다",
+      "buttonLabel": "🔍 상자 확인하기",
+      "playable": true,
+      "appliesWhen": "currentIndex >= 0",
+      "effect": {
+        "set": { "currentValue": "$numbers[$currentIndex]" }
+      },
+      "logTemplate": "→ {{currentIndexDisplay}}번째 상자를 확인함: 사과 {{currentValue}}개"
+    },
+    {
+      "id": "WRITE_MEMO",
+      "category": "ASSIGN",
+      "description": "방금 확인한 상자의 사과 개수를 메모지에 기록한다 (이전 메모는 무조건 덮어씀 — 언제 기록할지는 학생이 직접 판단한다)",
+      "buttonLabel": "📝 메모지에 기록하기",
+      "playable": true,
+      "appliesWhen": "currentValue != null",
+      "effect": {
+        "set": { "maxVal": "$currentValue" }
+      },
+      "logTemplate": "→ 메모지에 기록: {{maxVal}}"
+    },
+    {
+      "id": "UPDATE_MEMO_IF_GREATER",
+      "category": "COMPARE",
+      "description": "방금 확인한 상자의 사과 개수가 메모지의 숫자보다 크면 메모지를 그 숫자로 갱신하고, 아니면 그대로 둔다 (학생이 '~보다 크면 기록한다'처럼 조건을 붙여 쓴 문장에 대응)",
+      "playable": false,
+      "playableNote": "게임에는 별도 '갱신' 버튼이 없다 — 학생이 비교 결과를 스스로 판단해서 '메모지에 기록하기' 버튼을 누를지 말지 정한다. 이 액션은 학생이 조건문을 포함해 쓴 자연어 단계를 분류/실행하기 위한 것.",
+      "appliesWhen": "currentValue != null && maxVal != null",
+      "effect": {
+        "conditionalSet": { "if": "$currentValue > $maxVal", "then": { "maxVal": "$currentValue" } }
+      },
+      "logTemplate": "→ 조건 {{condResult}}: 방금 확인한 상자({{currentValue}}) vs 메모지({{maxVal}})"
+    },
+    {
+      "id": "REPEAT_STUDENT_STEPS",
+      "category": "REPEAT",
+      "description": "학생이 지목한 자신의 이전 단계 범위(예: '3단계부터')를, 확인하지 않은 상자가 남아있는 동안 학생이 쓴 그대로 다시 실행한다. 시스템이 대신 비교/갱신 로직을 채워넣지 않는다 — 학생이 그 범위 안에 조건 비교를 안 썼다면 메모는 갱신되지 않는다",
+      "playable": false,
+      "playableNote": "반복은 게임에서 버튼으로 따로 없음 — 플레이어가 이동/확인/기록 버튼을 직접 여러 번 눌러서 반복을 스스로 체감하게 한다.",
+      "appliesWhen": "currentIndex < numbers.length - 1",
+      "effect": {
+        "replayFromReferencedStep": true,
+        "until": "currentIndex >= numbers.length - 1"
+      },
+      "logTemplate": "→ 모든 상자 확인 완료 (반복 종료)"
+    },
+    {
+      "id": "SUBMIT_ANSWER",
+      "category": "OUTPUT",
+      "description": "메모지에 적힌 사과 개수를 최종 정답으로 제출한다",
+      "buttonLabel": "✅ 정답 제출",
+      "playable": true,
+      "appliesWhen": "maxVal != null",
+      "effect": {
+        "set": { "output": "$maxVal" }
+      },
+      "logTemplate": "→ 정답 제출: {{output}}개"
+    }
+  ],
+
+  "correctness": { "formula": "max(numbers)", "compareField": "output" }
+}

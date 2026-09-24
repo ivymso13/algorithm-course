@@ -41,7 +41,8 @@ export function WoodcutSandbox({ onCopyHistory, presentationMode = false }: Wood
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setInstance(woodcutProblem.generate());
+    const timer = window.setTimeout(() => setInstance(woodcutProblem.generate()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   if (!instance) {
@@ -95,6 +96,7 @@ export function WoodcutSandbox({ onCopyHistory, presentationMode = false }: Wood
   }
 
   function handleCheckAnswer() {
+    if (!instance) return;
     const h = Number(guessHeight.trim());
     if (!Number.isFinite(h)) return;
     const isCorrect = h === instance.correctAnswer;
@@ -204,7 +206,7 @@ export function WoodcutSandbox({ onCopyHistory, presentationMode = false }: Wood
             나무 높이가 H <strong className="text-rose-700">이하</strong>면 → 그 나무에서는 목재가 나오지 않습니다.
           </li>
           <li>
-            모든 나무의 목재를 합한 값이 <strong>"총 목재량"</strong>입니다.
+            모든 나무의 목재를 합한 값이 <strong>&quot;총 목재량&quot;</strong>입니다.
           </li>
         </ul>
         <p className="border-t border-amber-200 pt-2 text-sm sm:text-base font-bold text-amber-900">

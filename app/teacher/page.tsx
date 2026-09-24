@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { JevRoundJob } from "@/components/jev/JevRoundJob";
+import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
@@ -18,6 +20,7 @@ type WarmupRoundSummary = {
   title: string;
   prompt: string;
   status: WarmupRoundStatus;
+  problemId: string | null;
   reviewOpenedAt: string | null;
   submissionCount: number;
   voteCount: number;
@@ -448,7 +451,7 @@ export default function TeacherPage() {
     let ignore = false;
     if (password && !authed) {
       fetch("/api/teacher/dashboard", { headers: { "x-teacher-password": password } })
-        .then((res) => res.json())
+        .then((res) => res.json() as Promise<DashboardResponse>)
         .then((data: DashboardResponse) => {
           if (!ignore) {
             if (!data.error) {
@@ -1040,6 +1043,7 @@ export default function TeacherPage() {
                               ⏹️ 라운드 종료
                             </button>
                           )}
+
                           <button
                             type="button"
                             onClick={() => handleDeleteRound(round)}
@@ -1066,6 +1070,9 @@ export default function TeacherPage() {
                       </div>
 
                       <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+                      {round.status === "closed" && resolveWarmupSandboxProblemType(round) === "maxbox" && (
+                        <JevRoundJob key={`${round.id}:${password}`} roundId={round.id} password={password} />
+                      )}
 
                       <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
                         <span className="font-semibold text-slate-700">제출 {round.submissionCount}건</span>

@@ -5,12 +5,25 @@
  * after a next/link soft navigation, the destination page's client
  * components did not reliably hydrate, leaving buttons unresponsive. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
+import { JevResultCard } from "@/components/jev/JevResultCard";
+
+interface JevResult {
+  roundTitle: string | null;
+  submissionText: string | null;
+  totalTrials: number;
+  correctCount: number;
+  incorrectCount: number;
+  errorCount: number;
+  createdAt: string;
+  submissionVersion: number | null;
+  examples: import("@/lib/jev/batchEvaluate").BatchTrialResult[];
+}
 
 export default function WriteProblemPage() {
   const {
@@ -28,6 +41,28 @@ export default function WriteProblemPage() {
   } = useWarmupSession();
 
   const [sandboxCopyNotice, setSandboxCopyNotice] = useState(false);
+  const [jevResultState, setJevResultState] = useState<{owner: string | null; result: JevResult | null} | null>(null);
+  const jevResult = loggedIn && jevResultState?.owner === studentLabel ? jevResultState.result : null;
+
+  // Independent of `round` — a teacher's AI batch run happens after a round
+  // closes, at which point this page no longer has that round loaded at
+  // all (see useWarmupSession, which only tracks the currently *open*
+  // round). This is the only way a student ever sees the result; there's no
+  // self-run button.
+  useEffect(() => {
+    if (!loggedIn) return;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const res = await fetch("/api/warmup/jev-result", { signal: controller.signal });
+        const data = res.ok ? await res.json() as {result?: JevResult | null} : null;
+        if (!controller.signal.aborted) setJevResultState({owner: studentLabel, result: data?.result ?? null});
+      } catch { /* Retry on the next refresh; never show another student's cached result. */ }
+    }
+    void load();
+    const interval = window.setInterval(load, 20000);
+    return () => { controller.abort(); window.clearInterval(interval); };
+  }, [loggedIn, studentLabel]);
 
   /**
    * Only ever runs when the student clicks the sandbox's own "기록 복사"
@@ -216,6 +251,26 @@ export default function WriteProblemPage() {
               )}
             </div>
           </>
+        )}
+
+        {/* AI 실행 결과 — teacher-triggered, read-only. Only shown when no
+            round is currently open: this is how a *closed* round's result
+            reaches the student at all (the round itself stops loading above
+            once it closes), but once a new round opens, an old result from
+            a different, unrelated activity would just be confusing clutter
+            next to whatever the student is currently doing. */}
+        {!round && jevResult && (
+          <JevResultCard
+            roundTitle={jevResult.roundTitle}
+            submissionText={jevResult.submissionText}
+            totalTrials={jevResult.totalTrials}
+            correctCount={jevResult.correctCount}
+            incorrectCount={jevResult.incorrectCount}
+            errorCount={jevResult.errorCount}
+            createdAt={jevResult.createdAt}
+            submissionVersion={jevResult.submissionVersion}
+            examples={jevResult.examples}
+          />
         )}
       </main>
     </div>

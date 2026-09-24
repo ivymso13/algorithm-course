@@ -60,8 +60,7 @@ export async function seedRosterForCourse(courseId: number): Promise<void> {
   // student's fields are bound, so use one statement per student inside a
   // single atomic batch. onConflictDoNothing also makes concurrent first
   // requests safe when two isolates try to seed at the same time.
-  await db.batch(
-    DEFAULT_ROSTER.map((student, index) =>
+  const statements = DEFAULT_ROSTER.map((student, index) =>
       db
         .insert(rosterTable)
         .values({
@@ -76,8 +75,8 @@ export async function seedRosterForCourse(courseId: number): Promise<void> {
           updatedAt: now,
         })
         .onConflictDoNothing()
-    )
-  );
+    );
+  if (statements.length) await db.batch([statements[0], ...statements.slice(1)]);
 }
 
 /**

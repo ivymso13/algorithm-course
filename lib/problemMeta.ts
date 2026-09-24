@@ -1,4 +1,5 @@
 import type { ProblemType } from "@/lib/assignments";
+export type { ProblemType } from "@/lib/assignments";
 
 export const PROBLEM_LABELS: Record<ProblemType, string> = {
   "12coins": "12개의 동전 중 가짜 찾기",
@@ -7,7 +8,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
   pancake: "팬케이크 정렬",
   woodcut: "나무 자르기 — 목표 목재량을 채우는 최대 절단 높이 찾기",
   constellation: "별자리 만들기 — 모든 별을 최소 비용으로 연결하기",
-  maxbox: "상자 속 사과 개수 중 최댓값 찾기",
+  maxbox: "가장 많은 사과가 든 상자 찾기",
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
@@ -17,7 +18,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
   pancake: "팬케이크",
   woodcut: "나무 자르기",
   constellation: "별자리 만들기",
-  maxbox: "사과 최댓값",
+  maxbox: "상자 속 사과",
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
@@ -43,7 +44,7 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
   constellation:
     "좌표평면 위에 별 N개가 흩어져 있습니다(모든 별의 좌표가 처음부터 공개되어 있습니다). 별과 별 사이를 선(전선)으로 이어 모든 별이 서로 연결되도록 만들되, 이미 (간접적으로라도) 연결된 두 별을 또 잇는 것은 낭비이므로 허용되지 않습니다. 사용한 모든 선의 길이 합이 최소가 되도록 별들을 연결하는 알고리즘을 쓰세요.",
   maxbox:
-    "상자 N개가 왼쪽에서 오른쪽으로 한 줄로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자는 왼쪽부터 순서대로 한 번에 하나씩만 열어볼 수 있고, 한 번 닫은 상자는 다시 열어 개수를 확인할 수 없습니다. 모든 상자를 다 확인한 뒤, 그중 가장 많았던 사과 개수를 찾는 알고리즘을 쓰세요.",
+    "상자 N개가 일렬로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자를 하나씩 열어보기 전까지는 안에 사과가 몇 개인지 알 수 없습니다. 상자를 순서대로 열어보면서, 지금까지 열어본 것 중 사과가 가장 많이 든 상자의 개수를 계속 기록해 두었다가, 모든 상자를 다 열어본 뒤 그 최댓값을 답으로 내는 알고리즘을 쓰세요.",
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
@@ -76,8 +77,9 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
     "최종 답으로 모든 별을 연결하는 데 드는 최소 총 길이 입력",
   ],
   maxbox: [
-    "왼쪽부터 순서대로 다음 상자 열어보기 (한 번 연 상자는 다시 열 수 없음)",
-    "최종 답으로 가장 많았던 사과 개수 입력",
+    "특정 위치의 상자를 열어 사과 개수 확인하기",
+    "지금까지 확인한 것 중 최댓값을 메모지에 기록하기",
+    "최종 답으로 사과 개수(최댓값) 입력",
   ],
 };
 
@@ -113,9 +115,9 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
     "별이 N개일 때 정확히 몇 개의 선을 이었을 때 모든 별이 연결된 것으로 보고 종료할지 적으세요.",
   ],
   maxbox: [
-    "지금까지 확인한 것 중 가장 큰 값을 어떻게 계속 저장해 둘지 적으세요.",
-    "새 상자를 열었을 때 그 값과 저장해둔 값을 비교해서 언제 갱신할지 구체적인 기준을 적으세요.",
-    "몇 번째 상자까지 확인했을 때 반복을 멈추고 저장해둔 값을 최종 답으로 낼지 종료 조건을 적으세요.",
+    "상자를 여는 순서와, 새로 확인한 값을 지금까지의 최댓값과 비교하는 조건을 빠짐없이 적으세요.",
+    "처음 상자를 열었을 때(비교 대상이 아직 없을 때) 어떻게 시작하는지 명확히 적으세요.",
+    "모든 상자를 다 확인했는지 판단하는 종료 조건을 적으세요.",
   ],
 };
 
@@ -126,7 +128,7 @@ export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
   pancake: "반복 시 k값 재계산 누락, 정렬 완료된 바닥 제외 조건 누락, 종료 조건 모호",
   woodcut: "목재량이 목표와 정확히 같을 때 절단 높이를 더 올릴 수 있는지 확인 누락, 상한/하한 갱신 방향 혼동, 종료 조건 누락",
   constellation: "가장 짧은 선부터 순서대로 고려하지 않고 임의 순서로 연결, 이미 연결된 그룹인지 확인하는 기준 누락, 별이 N개일 때 필요한 선의 개수(N-1개)를 명시하지 않음",
-  maxbox: "첫 상자 값을 저장해두지 않고 시작해서 비교 기준이 없음, 더 큰 값이 나왔을 때 갱신하는 조건 누락, 마지막 상자까지 확인하지 않고 중간에 종료",
+  maxbox: "첫 상자를 열었을 때 비교 없이 바로 최댓값으로 기록하는 시작 조건 누락, 매번 비교하지 않고 가끔만 비교하는 논리 누락, 모든 상자를 다 확인했는지 종료 조건 누락",
 };
 
 export const WRITING_GUIDANCE =

@@ -146,8 +146,9 @@ export function ConstellationSandbox({ onCopyHistory, presentationMode = false }
   }
 
   useEffect(() => {
-    setInstance(constellationProblem.generate());
+    const timer = window.setTimeout(() => setInstance(constellationProblem.generate()), 0);
     return () => {
+      window.clearTimeout(timer);
       clearTimer(toastTimerRef);
       clearTimer(flashTimerRef);
       clearTimer(connectingTimerRef);
@@ -281,6 +282,7 @@ export function ConstellationSandbox({ onCopyHistory, presentationMode = false }
   }
 
   function handleCheckAnswer() {
+    if (!instance) return;
     if (!spanningTreeDone) return;
     const val = Number(guessTotal.trim());
     if (!Number.isFinite(val)) return;

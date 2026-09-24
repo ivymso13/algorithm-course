@@ -59,7 +59,7 @@ export default function ExecutePage() {
   useEffect(() => {
     let ignore = false;
     fetch("/api/student/me")
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then((res) => (res.json() as Promise<{studentKey?: string}>).then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }: { ok: boolean; data: { studentKey?: string } }) => {
         if (ignore) return;
         if (ok && data.studentKey) {
@@ -84,10 +84,10 @@ export default function ExecutePage() {
     setLoadError(null);
     Promise.all([
       fetch(`/api/warmup/submission?id=${id}`).then((res) =>
-        res.json().then((data) => ({ ok: res.ok, data }))
+        (res.json() as Promise<{submission?: SubmissionView; error?: string}>).then((data) => ({ ok: res.ok, data }))
       ),
       fetch(`/api/warmup/experience?submissionId=${id}`).then((res) =>
-        res.json().then((data) => ({ ok: res.ok, data }))
+        (res.json() as Promise<{experience?: (Experience & {checkedSteps: unknown}) | null}>).then((data) => ({ ok: res.ok, data }))
       ),
     ])
       .then(
@@ -124,7 +124,7 @@ export default function ExecutePage() {
         setBoardLoading(true);
         setBoardListError(null);
         fetch("/api/warmup/board")
-          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .then((res) => (res.json() as Promise<{entries?: BoardItem[]; error?: string}>).then((data) => ({ ok: res.ok, data })))
           .then(({ ok, data }: { ok: boolean; data: { entries?: BoardItem[]; error?: string } }) => {
             if (ignore) return;
             if (!ok) {

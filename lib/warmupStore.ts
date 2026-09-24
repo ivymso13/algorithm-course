@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
+import { jevBatchEvaluations, jevJobItems, jevJobs, warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
 import { fullyEvaluatedStudentKeys } from "@/lib/warmupEvaluation";
@@ -196,6 +196,9 @@ export async function deleteWarmupRound(id: number, courseId: number) {
 
   const db = await getDb();
   await db.batch([
+    db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.roundId, id)),
+    db.delete(jevJobItems).where(sql`${jevJobItems.jobId} in (select id from jev_jobs where round_id = ${id})`),
+    db.delete(jevJobs).where(eq(jevJobs.roundId, id)),
     db.delete(warmupVotes).where(eq(warmupVotes.roundId, id)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.roundId, id)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.roundId, id)),
@@ -220,6 +223,8 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.submissionId, submissionId)),
+    db.delete(jevJobItems).where(eq(jevJobItems.submissionId, submissionId)),
     db.delete(warmupVotes).where(eq(warmupVotes.submissionId, submissionId)),
     db.delete(warmupExperiences).where(eq(warmupExperiences.submissionId, submissionId)),
     db.delete(warmupSubmissions).where(eq(warmupSubmissions.id, submissionId)),
@@ -252,6 +257,18 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
   }));
 
   return { round, items };
+}
+
+/** Real (non-demo) submissions for a round, for the teacher's Jev batch run
+ * — leaner than `teacherWarmupRoundDetail`, which also joins votes/
+ * experiences/versions that a batch run has no use for. */
+export async function listWarmupSubmissionsForRound(roundId: number) {
+  const db = await getDb();
+  return db
+    .select()
+    .from(warmupSubmissions)
+    .where(and(eq(warmupSubmissions.roundId, roundId), eq(warmupSubmissions.isDemo, false)))
+    .orderBy(warmupSubmissions.id);
 }
 
 function tallyVotes(votes: { voteType: string }[]): Record<WarmupVoteType, number> {
@@ -295,7 +312,7 @@ export async function upsertWarmupSubmission(input: {
   if (existing) {
     const [updated] = await db
       .update(warmupSubmissions)
-      .set({ algorithmText: input.algorithmText, updatedAt: now })
+      .set({ algorithmText: input.algorithmText, updatedAt: now, revision: sql`${warmupSubmissions.revision} + 1` })
       .where(eq(warmupSubmissions.id, existing.id))
       .returning();
     return updated;
