@@ -8,7 +8,7 @@ import test from "node:test";
 import {
   JOBS, CORRECT_ALGORITHM, NO_COMPARE_ALGORITHM, STUDENTS, withApp, requestJson, expectStatus, d1All,
   login, createRound, closeRound, submit, startJob, jobAction, advanceUntilSettled, studentResult,
-  autoAction, AUTO, autoAdvance, autoStatus, openMaxBoxRound, autoUntilSettled, blockCalls,
+  autoAction, AUTO, autoAdvance, autoStatus, openMaxBoxRound, autoUntilSettled, blockCalls, closedMaxBoxRound,
 } from "./support/jevHarness.mjs";
 
 const runsOf = (app, roundId) =>
@@ -194,9 +194,15 @@ test("auth and isolation: session required, own course only, other courses' runs
     await expectStatus(app, AUTO, { method: "POST", cookie: students[0].cookie, body: { roundId: 9001 } }, 404);
     await expectStatus(app, AUTO, { method: "POST", cookie: students[0].cookie, body: { roundId, action: "explode" } }, 400);
 
-    // My advances drive my course's runs (mine first), and only ever report mine.
+    // My advances drive only my own run and only ever report mine — even when
+    // my run has fewer pending trials than there are free slots.
+    const fake = JSON.stringify({ trialIndex: 0, numbers: [3, 1], executable: true, correct: true, failedStep: null, finalAnswer: 3, correctAnswer: 3 });
+    await db.prepare(`UPDATE jev_auto_trials SET status = 'done', result = ? WHERE trial_index < 8
+      AND run_id = (SELECT id FROM jev_auto_runs WHERE submission_id = ?)`).bind(fake, students[0].submissionId).run();
     const view = await autoUntilSettled(app, students[0].cookie, roundId);
     assert.equal(view.result.submissionText, CORRECT_ALGORITHM);
+    const classmate = await autoStatus(app, students[1].cookie, roundId);
+    assert.deepEqual([classmate.status, classmate.doneTrials], ["queued", 0], "a classmate's run is never driven by my requests");
     const response = await autoAdvance(app, students[0].cookie, roundId);
     assert.deepEqual(Object.keys(response).sort(), ["run", "serviceUnavailable"]);
     assert.equal((await d1All(app, "SELECT status FROM jev_auto_trials WHERE run_id = 9001"))[0].status, "pending", "another course's work is never claimed");
@@ -362,5 +368,201 @@ test("without a configured service the submission still saves and grading waits 
     assert.equal(response.run.status, "queued");
     assert.equal(app.fake.calls, 0);
     assert.equal(await leasedSlots(app), 0);
+  });
+});
+
+const doneCount = async (app, roundId) =>
+  (await d1All(app, "SELECT count(*) AS n FROM jev_auto_trials t JOIN jev_auto_runs r ON r.id = t.run_id WHERE r.round_id = ? AND t.status = 'done'", roundId))[0].n;
+const setRun = async (app, sql, ...params) => (await app.getD1Database("DB")).prepare(sql).bind(...params).run();
+
+test("race: cancel then immediate resume never lets a pre-cancel trial commit, even after its trial is re-run", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const { cookie } = students[0];
+    const block = await blockCalls(app, 5);
+    const stale = autoAdvance(app, cookie, roundId);
+    await block.reached();
+
+    await autoAction(app, "auto-cancel", roundId);
+    await autoAction(app, "auto-resume", roundId);
+    block.open();
+    // The old requests still hold all 5 slots: nothing new can start yet.
+    const calls = app.fake.calls;
+    assert.equal((await autoAdvance(app, cookie, roundId)).run.doneTrials, 0);
+    assert.equal(app.fake.calls, calls, "held slots are not handed out while old workers still run");
+
+    block.release();
+    await stale;
+    assert.equal(await doneCount(app, roundId), 0, "no pre-cancel trial committed after the resume");
+    assert.equal(app.fake.calls, calls, "old workers stop before their next call");
+    assert.equal(await leasedSlots(app), 0);
+    const done = await autoUntilSettled(app, cookie, roundId);
+    assert.equal(done.result.totalTrials, 10);
+    assert.equal(await doneCount(app, roundId), 10);
+  });
+});
+
+test("race: a pre-cancel trial reclaimed after resume is committed once, by the new holder only", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const { cookie } = students[0];
+    const held = app.fake.holdNextCall();
+    const stale = autoAdvance(app, cookie, roundId);
+    await held.reached;
+    for (let i = 0; i < 200 && (await doneCount(app, roundId)) < 4; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(await doneCount(app, roundId), 4);
+
+    await autoAction(app, "auto-cancel", roundId);
+    await autoAction(app, "auto-resume", roundId);
+    await autoAdvance(app, cookie, roundId); // 4 free slots: reclaims the held trial's work too
+    const before = await doneCount(app, roundId);
+    assert.equal(before, 8);
+    held.release();
+    await stale;
+    assert.equal(await doneCount(app, roundId), before, "the old call's result is discarded");
+    const rows = await d1All(app, "SELECT trial_index AS i, count(*) AS n FROM jev_auto_trials GROUP BY run_id, trial_index HAVING n > 1");
+    assert.deepEqual(rows, []);
+  });
+});
+
+test("a failing final wave keeps siblings' successes; a retry fences the previous attempt's in-flight trial", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const { cookie } = students[0];
+    // One failed wave left in the budget.
+    await setRun(app, "UPDATE jev_auto_runs SET consecutive_failures = ? WHERE round_id = ?", 3, roundId);
+
+    const block = await blockCalls(app, 5);
+    const wave = autoAdvance(app, cookie, roundId);
+    await block.reached();
+    app.fake.failNextCalls = 1;           // the first released call fails → run 'failed'
+    const held = app.fake.holdNextCall(); // the second stays in flight
+    block.release();
+    await held.reached;
+    for (let i = 0; i < 300 && (await doneCount(app, roundId)) < 3; i++) await new Promise((r) => setTimeout(r, 10));
+    const failed = await autoStatus(app, cookie, roundId);
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.doneTrials, 3, "successes finishing after the failure are kept");
+
+    // Retry starts a new attempt: the still-running trial of the old one must not commit.
+    await autoAdvance(app, cookie, roundId, "retry"); // new epoch; this wave re-runs the held trial's work
+    const afterRetry = await doneCount(app, roundId);
+    const callsAfterRetry = app.fake.calls;
+    held.release();
+    await wave;
+    assert.equal(await doneCount(app, roundId), afterRetry, "the previous attempt's trial never commits into the retry");
+    assert.equal(app.fake.calls, callsAfterRetry, "and makes no further calls");
+    const [run] = await d1All(app, "SELECT epoch FROM jev_auto_runs WHERE round_id = ?", roundId);
+    assert.ok(run.epoch >= 1);
+    const done = await autoUntilSettled(app, cookie, roundId);
+    assert.equal(done.status, "completed");
+    assert.equal(done.result.totalTrials, 10);
+    assert.deepEqual(await d1All(app, "SELECT trial_index FROM jev_auto_trials WHERE status != 'done'"), []);
+  });
+});
+
+test("successes never refill the outage budget", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    app.fake.failNextCalls = 1;
+    await autoAdvance(app, students[0].cookie, roundId);
+    await clearBackoff(app);
+    await autoAdvance(app, students[0].cookie, roundId);
+    const [run] = await d1All(app, "SELECT consecutive_failures AS n, last_error AS err, status FROM jev_auto_runs WHERE round_id = ?", roundId);
+    assert.equal(run.n, 1, "a later successful wave does not reset the failed-wave count");
+    assert.equal(run.err, null, "but the outage message clears once calls succeed");
+  });
+});
+
+test("teacher job honours the auto run as the single executor: failed runs are frozen and only the rest is paid for", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const { cookie } = students[0];
+    app.fake.failNextCalls = 1;
+    await autoAdvance(app, cookie, roundId); // 4 done, backoff pending
+    // Active auto run in backoff: the teacher drives it but does not bypass the backoff.
+    await closeRound(app, roundId);
+    const jobId = (await startJob(app, roundId, 12)).data.job.id;
+    const calls = app.fake.calls;
+    assert.equal((await jobAction(app, "advance", jobId)).data.job.completedTrials, 0);
+    assert.equal(app.fake.calls, calls, "teacher advance respects the auto run's backoff");
+
+    // The auto run gives up; the teacher job then takes over atomically.
+    await setRun(app, "UPDATE jev_auto_runs SET status = 'failed' WHERE round_id = ?", roundId);
+    const job = await advanceUntilSettled(app, jobId);
+    assert.equal(job.status, "completed");
+    assert.equal(job.completedTrials, 12);
+    const [run] = await d1All(app, "SELECT id, status FROM jev_auto_runs WHERE round_id = ?", roundId);
+    assert.equal(run.status, "transferred");
+    const [item] = await d1All(app, "SELECT trials FROM jev_job_items WHERE job_id = ?", jobId);
+    const trials = JSON.parse(item.trials);
+    const autoDone = (await trialsOf(app, run.id)).filter((t) => t.status === "done").map((t) => JSON.parse(t.result).numbers);
+    assert.equal(autoDone.length, 4);
+    assert.deepEqual(trials.slice(0, 4).map((t) => t.numbers), autoDone, "the 4 paid auto trials are reused");
+
+    // Nothing can revive the frozen run: no second payment for the same trials.
+    const after = app.fake.calls;
+    await autoAdvance(app, cookie, roundId, "retry");
+    await autoAction(app, "auto-resume", roundId);
+    await autoAction(app, "auto-advance", roundId);
+    assert.equal((await d1All(app, "SELECT status FROM jev_auto_runs WHERE id = ?", run.id))[0].status, "transferred");
+    assert.equal(app.fake.calls, after);
+    assert.equal((await studentResult(app, cookie)).totalTrials, 12, "the teacher result is the student's result");
+  });
+});
+
+test("student results: completed real auto results are shown for the current revision only; mock runs never", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM, NO_COMPARE_ALGORITHM]);
+    const [me, other] = students;
+    await autoUntilSettled(app, me.cookie, roundId);
+    const mine = await studentResult(app, me.cookie);
+    assert.equal(mine.totalTrials, 10);
+    assert.equal(mine.submissionText, CORRECT_ALGORITHM);
+    assert.equal(mine.submissionVersion, 1);
+    assert.equal(await studentResult(app, other.cookie), null, "never another student's result");
+
+    // A changed resubmit hides the old revision's result until the new one completes.
+    await submit(app, me.cookie, NO_COMPARE_ALGORITHM);
+    assert.equal(await studentResult(app, me.cookie), null);
+    await autoUntilSettled(app, me.cookie, roundId);
+    assert.equal((await studentResult(app, me.cookie)).submissionVersion, 2);
+
+    // A completed mock-mode run is never presented as AI feedback.
+    await autoUntilSettled(app, other.cookie, roundId);
+    await setRun(app, "UPDATE jev_auto_runs SET mode = 'mock' WHERE student_key = (SELECT student_key FROM warmup_submissions WHERE id = ?)", other.submissionId);
+    const view = await autoStatus(app, other.cookie, roundId);
+    assert.equal(view.status, "completed");
+    assert.equal(view.result, null);
+    assert.equal(view.resultHidden, true);
+    assert.equal(await studentResult(app, other.cookie), null);
+  });
+});
+
+test("a round that closes inside the save batch changes nothing and reports failure (identical and changed text)", async () => {
+  await withApp({}, async (app) => {
+    const { roundId, students } = await openMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const { cookie, submissionId } = students[0];
+    const db = await app.getD1Database("DB");
+    // Closes the round in the same transaction, right as the upsert runs —
+    // after the route's own open-round check already passed.
+    await db.prepare(`CREATE TRIGGER close_during_save BEFORE INSERT ON warmup_submissions
+      BEGIN UPDATE warmup_rounds SET status = 'closed' WHERE id = NEW.round_id; END`).run();
+    for (const text of [CORRECT_ALGORITHM, NO_COMPARE_ALGORITHM]) {
+      await expectStatus(app, "/api/warmup/submit", { method: "POST", cookie, body: { algorithmText: text } }, 400);
+      await db.prepare("UPDATE warmup_rounds SET status = 'open' WHERE id = ?").bind(roundId).run();
+    }
+    const [sub] = await d1All(app, "SELECT revision, algorithm_text AS text FROM warmup_submissions WHERE id = ?", submissionId);
+    assert.deepEqual(sub, { revision: 1, text: CORRECT_ALGORITHM }, "the closed round's submission is untouched");
+    assert.deepEqual((await runsOf(app, roundId)).map((r) => [r.version, r.status]), [[1, "queued"]]);
+  });
+});
+
+test("teacher-job tests' helper still works with frozen auto runs", async () => {
+  await withApp({}, async (app) => {
+    const { roundId } = await closedMaxBoxRound(app, [CORRECT_ALGORITHM]);
+    const job = await advanceUntilSettled(app, (await startJob(app, roundId, 3)).data.job.id);
+    assert.equal(job.completedTrials, 3);
+    assert.equal((await runsOf(app, roundId))[0].status, "transferred", "a cancelled auto run is frozen, not resumed behind the teacher's back");
   });
 });

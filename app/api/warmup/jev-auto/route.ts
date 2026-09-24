@@ -23,9 +23,9 @@ export async function GET(request: Request) {
 }
 
 /**
- * `advance` runs one bounded wave of trials in this request (own run first,
- * then other queued runs of the same course, whose results are never
- * returned here). `retry` requeues the caller's own run after it gave up.
+ * `advance` runs one bounded wave of the caller's OWN latest run in this
+ * request; classmates' runs are driven only by their own pages and the
+ * teacher panel. `retry` requeues the caller's own run after it gave up.
  */
 export async function POST(request: Request) {
   const session = await requireStudentSession(request);
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     let serviceUnavailable = false;
     if (own && ["queued", "running", "retrying"].includes(own.status)) {
       try {
-        await advanceAutoRuns({ courseId: session.courseId, preferRunId: own.runId });
+        await advanceAutoRuns({ courseId: session.courseId, onlyRunId: own.runId });
       } catch (error) {
         if (!(error instanceof Error && error.name === "JevConfigurationError")) throw error;
         serviceUnavailable = true;

@@ -11,6 +11,7 @@ import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
+import { JevAutoGradeStatus } from "@/components/jev/JevAutoGradeStatus";
 import { JevResultCard } from "@/components/jev/JevResultCard";
 
 interface JevResult {
@@ -185,6 +186,10 @@ export default function WriteProblemPage() {
                 {round.prompt}
               </p>
             </section>
+
+            {round.problemType === "maxbox" && mySubmission && (
+              <JevAutoGradeStatus roundId={round.id} revisionKey={`${mySubmission.id}:${mySubmission.updatedAt}`} />
+            )}
 
             {/* Sandbox Copy Notification */}
             {sandboxCopyNotice && (

@@ -11,6 +11,7 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
+import { JevAutoGradeStatus } from "@/components/jev/JevAutoGradeStatus";
 import { parseAlgorithmSteps, serializeAlgorithmSteps } from "@/lib/algorithmSteps";
 
 function ensureAtLeastOneStep(steps: string[]): string[] {
@@ -235,6 +236,10 @@ export default function AlgorithmWritePage() {
           </section>
         ) : (
           <>
+            {round.problemType === "maxbox" && mySubmission && (
+              <JevAutoGradeStatus roundId={round.id} revisionKey={`${mySubmission.id}:${mySubmission.updatedAt}`} />
+            )}
+
             {/* Problem Summary Card (Focused on writing) */}
             <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-xs space-y-2">
               <div className="flex items-center justify-between gap-2">

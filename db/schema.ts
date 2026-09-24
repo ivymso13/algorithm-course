@@ -457,7 +457,10 @@ export const jevAutoRuns = sqliteTable("jev_auto_runs", {
   mode: text("mode").notNull(),
   targetTrials: integer("target_trials").notNull(),
   status: text("status").notNull().default("queued"),
+  /** Failed waves since the run was created, resumed or retried (not reset by successes). */
   consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  /** Bumped by cancel/resume/retry/transfer: trials claimed under an older epoch can never commit. */
+  epoch: integer("epoch").notNull().default(0),
   nextAttemptAt: integer("next_attempt_at").notNull().default(0),
   lastError: text("last_error"),
   createdAt: text("created_at").notNull(),
@@ -478,6 +481,7 @@ export const jevAutoTrials = sqliteTable("jev_auto_trials", {
   leaseToken: text("lease_token"),
   leaseUntil: integer("lease_until"),
   committedBy: text("committed_by"),
+  epoch: integer("epoch").notNull().default(0),
   attempts: integer("attempts").notNull().default(0),
   result: text("result"),
   updatedAt: text("updated_at"),

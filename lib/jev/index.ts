@@ -6,3 +6,4 @@ export * from "./compoundStep";
 export * from "./batchEvaluate";
 export * from "./errors";
 export * from "./serviceConfig";
+export * from "./trialGuard";

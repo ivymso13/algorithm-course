@@ -1,7 +1,7 @@
 import { getD1 } from "@/db";
 import { parseAlgorithmSteps } from "./algorithmSteps";
 import { createJevService, type BatchTrialResult } from "./jev";
-import { advanceAutoRuns } from "./jevAuto";
+import { advanceAutoRuns, loadAutoTrials, transferAutoRun } from "./jevAuto";
 import { claimTrialSlot, releaseTrialSlot, runGuardedTrial, settleTrial, GLOBAL_TRIAL_SLOTS, SLOT_HELD_SQL, TRIAL_LEASE_MS, type TrialSlot } from "./jevRunner";
 import { JevRequestError, validateJevSteps } from "./jevRequest";
 import type { JevJobSummary } from "./jevJobTypes";
@@ -105,7 +105,7 @@ export async function advanceJevJob(courseId:number,id:number) {
   try {
     const item=await db.prepare("SELECT * FROM jev_job_items WHERE job_id=? AND status='pending' ORDER BY id LIMIT 1")
       .bind(id).first<JobItem>();
-    if(item) await advanceJobItem(courseId,job,item,token);
+    if(item) await advanceJobItem(courseId,job,item,token,now+LEASE_MS);
     await db.prepare(`UPDATE jev_jobs SET status=CASE
       WHEN status!='running' THEN status
       WHEN EXISTS(SELECT 1 FROM jev_job_items WHERE job_id=? AND status='pending') THEN 'running'
@@ -118,7 +118,14 @@ export async function advanceJevJob(courseId:number,id:number) {
   }
 }
 
-async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,token:string) {
+/**
+ * For a (submission, revision) the student's automatic run is the canonical
+ * executor of its first trials: completed → reuse; active → drive it (with its
+ * own backoff) instead of paying for the same trials twice; stopped (failed,
+ * cancelled, superseded) → atomically freeze it as 'transferred' so nothing
+ * can resume it, reuse its finished trials, and run only the rest here.
+ */
+async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,token:string,jobLeaseUntil:number) {
   const db=await getD1(); const id=job.id;
   let trials:BatchTrialResult[]=JSON.parse(item.trials);
   const before=trials.length;
@@ -135,14 +142,12 @@ async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,tok
     const auto=await db.prepare("SELECT id,status FROM jev_auto_runs WHERE submission_id=? AND submission_version=? AND mode=?")
       .bind(item.submission_id,item.submission_version,job.mode).first<{id:number;status:string}>();
     if(auto && ["queued","running"].includes(auto.status)) {
-      // Drive the student's own run instead of paying for the same trials twice.
-      await advanceAutoRuns({courseId,onlyRunId:auto.id,ignoreBackoff:true});
+      await advanceAutoRuns({courseId,onlyRunId:auto.id});
       return;
     }
-    if(auto) {
-      const {results}=await db.prepare("SELECT result FROM jev_auto_trials WHERE run_id=? AND status='done' ORDER BY trial_index LIMIT ?")
-        .bind(auto.id,job.trialsPerStudent).all<{result:string}>();
-      trials=results.map((r,i)=>({...(JSON.parse(r.result) as BatchTrialResult),trialIndex:i}));
+    if(auto && ["failed","cancelled","superseded"].includes(auto.status) && !(await transferAutoRun(auto.id))) return; // Changed meanwhile; re-read next advance.
+    if(auto && auto.status!=="skipped") {
+      trials=(await loadAutoTrials(auto.id,job.trialsPerStudent)).map((t,i)=>({...t,trialIndex:i}));
     }
   }
   const need=status==="pending" ? job.trialsPerStudent-trials.length : 0;
@@ -155,7 +160,8 @@ async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,tok
         slots.push(slot);
       }
       if(!slots.length && trials.length===before) return; // Every slot is busy; nothing to save yet.
-      const outcomes=await Promise.all(slots.map((slot,k)=>settleTrial(()=>runGuardedTrial(steps,before+k,async()=>Boolean(
+      // Each trial's deadline comes from the earlier of the job and slot leases.
+      const outcomes=await Promise.all(slots.map((slot,k)=>settleTrial(()=>runGuardedTrial(steps,trials.length+k,Math.min(jobLeaseUntil,slot.leaseUntil),async()=>Boolean(
         await db.prepare(`SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running' AND lease_until>? AND ${SLOT_HELD_SQL}`)
           .bind(id,token,Date.now(),slot.slotId,slot.token,Date.now()).first())))));
       for(const outcome of outcomes) {
@@ -168,8 +174,8 @@ async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,tok
   }
   if(status==="pending" && trials.length>=job.trialsPerStudent) status="completed";
   const statements=[db.prepare(`UPDATE jev_job_items SET trials=?,status=?,last_error=? WHERE id=?
-    AND EXISTS(SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running')`)
-    .bind(JSON.stringify(trials),status,lastError,item.id,id,token)];
+    AND EXISTS(SELECT 1 FROM jev_jobs WHERE id=? AND lease_token=? AND status='running' AND lease_until>?)`)
+    .bind(JSON.stringify(trials),status,lastError,item.id,id,token,Date.now())];
   if(status==="completed") {
     statements.push(db.prepare(`INSERT INTO jev_batch_evaluations
       (course_id,round_id,student_key,student_id,student_name,problem_id,job_item_id,submission_id,submission_version,submission_text,mode,source,algorithm_steps,total_trials,correct_count,incorrect_count,error_count,trials,created_at)

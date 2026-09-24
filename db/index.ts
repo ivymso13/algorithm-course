@@ -185,6 +185,8 @@ async function ensureRetrofittedColumns(d1: D1Database): Promise<void> {
     submission_version: "integer", submission_text: "text",
     mode: "text DEFAULT 'legacy' NOT NULL", source: "text DEFAULT 'legacy' NOT NULL",
   })) await ensureColumn(d1, "jev_batch_evaluations", column, definition);
+  await ensureColumn(d1, "jev_auto_runs", "epoch", "integer DEFAULT 0 NOT NULL");
+  await ensureColumn(d1, "jev_auto_trials", "epoch", "integer DEFAULT 0 NOT NULL");
   await d1.batch(JEV_INDEXES.map((statement) => d1.prepare(statement)));
 }
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JevService, JevTrialAbortedError, createJevService, DEFAULT_INITIAL_STATE } from "../lib/jev";
+import { JevService, JevTrialAbortedError, createJevService, createTrialGuard, DEFAULT_INITIAL_STATE } from "../lib/jev";
 
 const params = {
   stepIndex: 1,
@@ -43,4 +43,23 @@ test("the mock service honours the guard too, outside production only", async ()
   assert.equal(mock.mode, "mock");
   await assert.rejects(mock.evaluateStep(params), JevTrialAbortedError);
   assert.equal(guards, 1);
+});
+
+test("a fence that returns after the deadline still prevents the call", async () => {
+  let clock = 1_000;
+  let fetches = 0;
+  const guard = createTrialGuard(5_000, async () => { clock = 5_001; return true; }, () => clock);
+  const service = new JevService("k", { beforeRequest: guard, fetchImpl: async () => { fetches++; return answer({}); } });
+  await assert.rejects(service.evaluateStep(params), (error: unknown) => error instanceof JevTrialAbortedError && error.reason === "deadline");
+  assert.equal(fetches, 0);
+});
+
+test("the guard refuses past the deadline without touching the fence, and reports a stale fence as stale", async () => {
+  let fenced = 0;
+  const late = createTrialGuard(10, async () => { fenced++; return true; }, () => 11);
+  await assert.rejects(late(), (error: unknown) => error instanceof JevTrialAbortedError && error.reason === "deadline");
+  assert.equal(fenced, 0);
+  const stale = createTrialGuard(10, async () => false, () => 5);
+  await assert.rejects(stale(), (error: unknown) => error instanceof JevTrialAbortedError && error.reason === "stale");
+  await createTrialGuard(10, async () => true, () => 5)();
 });

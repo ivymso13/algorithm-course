@@ -17,7 +17,9 @@ export function JevAutoRoundStatus({ roundId, password }: { roundId: number; pas
   const generation = useRef(0);
 
   const pending = auto ? auto.queued + auto.running + auto.retrying : 0;
+  // Polling pauses entirely while a cancel/resume is in flight, then restarts.
   useEffect(() => {
+    if (busy) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
@@ -45,8 +47,15 @@ export function JevAutoRoundStatus({ roundId, password }: { roundId: number; pas
     return () => { stopped = true; clearTimeout(timer); controller.abort(); };
   }, [password, roundId, busy]);
 
+  const target = useRef({ roundId, password });
+  useEffect(() => { target.current = { roundId, password }; }, [roundId, password]);
+
   async function act(action: "auto-cancel" | "auto-resume") {
-    generation.current++;
+    if (busy) return;
+    const epoch = ++generation.current;
+    const sent = { roundId, password };
+    // Apply a response only if nothing (another action, another round or password) replaced it.
+    const current = () => epoch === generation.current && target.current.roundId === sent.roundId && target.current.password === sent.password;
     setBusy(true);
     try {
       const res = await fetch(endpoint, {
@@ -55,10 +64,11 @@ export function JevAutoRoundStatus({ roundId, password }: { roundId: number; pas
       });
       const data = await res.json() as { auto?: AutoRoundSummary; error?: string };
       if (!res.ok || !data.auto) throw new Error(data.error ?? "요청을 처리하지 못했습니다.");
+      if (!current()) return;
       setAuto(data.auto);
       setError(null);
-    } catch (err) { setError(err instanceof Error ? err.message : "다시 시도하세요."); }
-    finally { setBusy(false); }
+    } catch (err) { if (current()) setError(err instanceof Error ? err.message : "다시 시도하세요."); }
+    finally { if (epoch === generation.current) setBusy(false); }
   }
 
   if (!auto || auto.total === 0) return error ? <p className="text-xs text-rose-700">{error}</p> : null;
@@ -75,6 +85,7 @@ export function JevAutoRoundStatus({ roundId, password }: { roundId: number; pas
         {auto.failed > 0 && <> · 실패 {auto.failed}명</>}
         {auto.cancelled > 0 && <> · 중단 {auto.cancelled}명</>}
         {auto.skipped > 0 && <> · 건너뜀 {auto.skipped}명</>}
+        {auto.transferred > 0 && <> · 교사 실행으로 이관 {auto.transferred}명</>}
       </p>
       {pending > 0 && <p className="text-slate-500">학생이나 이 화면이 열려 있는 동안 실행이 이어집니다. 모든 화면이 닫히면 멈췄다가 다시 열면 이어서 실행합니다.</p>}
       {error && <p className="text-rose-700">{error}</p>}
