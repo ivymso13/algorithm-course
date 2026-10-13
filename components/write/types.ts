@@ -8,6 +8,7 @@ export type RoundInfo = {
   status: "draft" | "open" | "closed";
   reviewOpenedAt: string | null;
   problemType: ProblemType | null;
+  canRevise?: boolean;
 };
 
 export type MySubmission = {

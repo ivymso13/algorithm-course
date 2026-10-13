@@ -11,7 +11,7 @@ import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
-import { JevAutoGradeStatus } from "@/components/jev/JevAutoGradeStatus";
+import { ResearchPanel } from "@/components/write/ResearchPanel";
 import {
   WARMUP_VOTE_ICONS,
   WARMUP_VOTE_LABELS,
@@ -161,7 +161,7 @@ export default function WriteExplorePage() {
   // each entry, so it survives a refresh instead of relying on client-only
   // view tracking, and it's the same definition the teacher's roster/round
   // views use server-side (see lib/warmupEvaluation.ts).
-  const evaluatedCount = board ? board.filter((e) => e.myVotes.length > 0).length : 0;
+  const evaluatedCount = board ? board.filter((e) => e.experienced).length : 0;
   const allEvaluated = board !== null && board.length > 0 && evaluatedCount === board.length;
   // The practice sandbox is the "다음 기능" gated behind full evaluation —
   // only while the round is actually open for review; a closed round must
@@ -218,7 +218,7 @@ export default function WriteExplorePage() {
               </div>
               <div className="pt-2">
                 <a
-                  href="/write/algorithm"
+                  href={round.canRevise ? "/write/algorithm" : "#research-status"}
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition"
                 >
                   <span>알고리즘 작성하러 가기 ➔</span>
@@ -243,14 +243,12 @@ export default function WriteExplorePage() {
                   href="/write/algorithm"
                   className="shrink-0 text-xs font-bold text-slate-700 hover:text-blue-600 transition"
                 >
-                  ✏️ 수정하기
+                  {round.canRevise ? "✏️ 수정하기" : "🔒 동료 평가 대기"}
                 </a>
               </div>
             </section>
 
-            {round.problemType === "maxbox" && (
-              <JevAutoGradeStatus roundId={round.id} revisionKey={`${mySubmission.id}:${mySubmission.updatedAt}`} />
-            )}
+            <div id="research-status"><ResearchPanel roundId={round.id} /></div>
 
             {!round.reviewOpenedAt ? (
               /* Submitted, but the teacher hasn't opened the review phase
@@ -526,7 +524,7 @@ export default function WriteExplorePage() {
                         {evaluatedCount} / {board.length}개 알고리즘 평가 완료
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        위 목록에서 아직 추천 태그를 누르지 않은 알고리즘을 모두 평가해주세요.
+                        위 목록에서 배정된 알고리즘을 직접 따라 실행하고 피드백을 제출해 주세요.
                       </p>
                     </div>
                   ) : round.problemType ? (

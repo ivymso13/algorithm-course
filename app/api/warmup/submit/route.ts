@@ -4,12 +4,13 @@ import { ValidationError, validateAlgorithmText } from "@/lib/validation";
 import { getOpenWarmupRound, upsertWarmupSubmission, WarmupStateError } from "@/lib/warmupStore";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { saveMaxboxSubmission } from "@/lib/jevAuto";
+import { saveResearchSubmission } from "@/lib/researchStore";
 
 export async function POST(request: Request) {
   const session = await requireStudentSession(request);
   if (!session) return SESSION_ERROR_RESPONSE();
 
-  const body = (await request.json().catch(() => ({}))) as { algorithmText?: string };
+  const body = (await request.json().catch(() => ({}))) as { algorithmText?: string; reason?: string };
   let algorithmText: string;
   try {
     algorithmText = validateAlgorithmText(body.algorithmText);
@@ -34,10 +35,8 @@ export async function POST(request: Request) {
       studentName: assignment.name,
       algorithmText,
     };
-    // Maxbox submissions are saved together with their automatic AI grading run.
-    const submission = resolveWarmupSandboxProblemType(round) === "maxbox"
-      ? await saveMaxboxSubmission({ ...input, courseId: session.courseId })
-      : await upsertWarmupSubmission(input);
+    const submission = await saveResearchSubmission({ ...input, courseId: session.courseId, reason: typeof body.reason === "string" ? body.reason.slice(0,2000) : "" });
+    if(resolveWarmupSandboxProblemType(round)==="maxbox") await saveMaxboxSubmission({...input,courseId:session.courseId});
     return Response.json({
       ok: true,
       round: { id: round.id, title: round.title, prompt: round.prompt, status: round.status },

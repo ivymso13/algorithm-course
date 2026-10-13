@@ -80,7 +80,7 @@ export function useWarmupSession() {
   useEffect(() => {
     if (checkingSession || !loggedIn) return;
     const waitingForRound = roundId === null;
-    const waitingForReview = roundStatus === "open" && hasSubmission && !reviewOpenedAt;
+    const waitingForReview = roundStatus === "open" && hasSubmission;
     if (!waitingForRound && !waitingForReview) return;
     const interval = window.setInterval(() => {
       loadRound().catch(() => {});

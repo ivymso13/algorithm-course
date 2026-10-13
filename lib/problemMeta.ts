@@ -2,6 +2,7 @@ import type { ProblemType } from "@/lib/assignments";
 export type { ProblemType } from "@/lib/assignments";
 
 export const PROBLEM_LABELS: Record<ProblemType, string> = {
+  evencount: "상자 속 짝수 세기",
   "12coins": "12개의 동전 중 가짜 찾기",
   card: "정렬된 뒤집힌 카드에서 목표 숫자 찾기",
   josephus: "조세퍼스 — 원형으로 매 k번째 제거",
@@ -12,6 +13,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
+  evencount: "짝수 세기",
   "12coins": "동전 찾기",
   card: "카드 찾기",
   josephus: "조세퍼스",
@@ -22,6 +24,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
+  evencount: "📦",
   "12coins": "⚖️",
   card: "🎴",
   josephus: "🔄",
@@ -32,6 +35,7 @@ export const PROBLEM_ICONS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
+  evencount: "상자 5개에는 0~10 사이의 숫자가 들어 있습니다. 첫 상자부터 하나씩 확인하여 짝수가 든 상자의 개수를 구하세요. 메모지는 0으로 시작하며 0도 짝수입니다.",
   "12coins":
     "동전 12개(1~12번) 중 정확히 1개만 무게가 다릅니다. 더 무거운지 가벼운지는 알 수 없습니다. 양팔저울을 사용해서 무게가 다른 동전의 번호를 찾는 알고리즘을 쓰세요. (어느 동전인지만 찾으면 됩니다 — 무겁다/가볍다까지는 몰라도 됩니다.)",
   card: "카드 N장이 왼쪽에서 오른쪽으로 오름차순 정렬되어 있으나 전부 뒤집혀 있습니다. 목표 숫자가 몇 번째 카드에 있는지 찾는 알고리즘을 쓰세요. 목표 숫자가 배열에 아예 없을 수도 있습니다 — 이 경우 0을 출력해야 합니다.",
@@ -48,6 +52,7 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
+  evencount: ["상자를 열어 숫자 확인하기", "메모지에 1 더하기", "오른쪽 상자로 이동하기", "메모지의 수 제출하기"],
   "12coins": [
     "왼쪽 저울에 동전 번호(들)를 선택해서 올리기",
     "오른쪽 저울에 동전 번호(들)를 선택해서 올리기",
@@ -84,6 +89,7 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
 };
 
 export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
+  evencount: ["짝수인지 확인한 뒤 메모지를 언제 늘릴지 쓰세요.", "마지막 상자도 확인하고 종료하도록 조건과 이동 순서를 점검하세요."],
   "12coins": [
     "저울질 결과가 '평형'일 때와 '기울어짐'일 때 어떤 동전들을 다음에 달아야 하는지 경우(case)를 나누어 적으세요.",
     "동전을 나눌 때 몇 개씩 몇 묶음으로 나누는지 구체적인 번호나 개수를 명시하세요.",
@@ -122,6 +128,7 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
 };
 
 export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
+  evencount: "마지막 상자를 세지 않음, 조건 없이 증가, 출력 누락",
   "12coins": "평형일 때 남은 동전에 답이 있다는 논리 누락, 저울질 결과별 분기 미작성",
   card: "목표 숫자가 없을 때 종료 조건 누락, 범위 좁히기 판단 기준 불명확",
   josephus: "제거된 사람 포함 여부 혼동, 원형 순환 처리 누락, 종료 조건 누락",

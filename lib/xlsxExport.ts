@@ -1,3 +1,4 @@
+import { appendResearchSheets } from "./researchExport";
 import * as XLSX from "xlsx";
 import { getDb } from "@/db";
 import { attempts, submissions } from "@/db/schema";
@@ -104,6 +105,7 @@ export async function buildExportWorkbook(): Promise<Uint8Array> {
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stageRows), "단계_상태");
 
+  await appendResearchSheets(wb,stage.id);
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   return new Uint8Array(out as ArrayBuffer);
 }

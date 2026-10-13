@@ -128,7 +128,7 @@ test("교사 라운드 생성부터 학생 평가·결과 확인·종료까지 �
 
     for (const student of students) {
       const board = await expectStatus(app, "/api/warmup/board", { cookie: student.cookie }, 200);
-      assert.equal(board.data.entries.length, students.length - 1);
+      assert.equal(board.data.entries.length, 2);
       assert.ok(board.data.entries.every((entry) => entry.id !== student.submissionId));
 
       for (const entry of board.data.entries) {
@@ -145,7 +145,7 @@ test("교사 라운드 생성부터 학생 평가·결과 확인·종료까지 �
         assert.equal(vote.data.voted, true);
       }
 
-      const target = board.data.entries[0];
+      for (const target of board.data.entries) {
       const experience = await expectStatus(
         app,
         "/api/warmup/experience",
@@ -162,6 +162,7 @@ test("교사 라운드 생성부터 학생 평가·결과 확인·종료까지 �
         200
       );
       assert.equal(experience.data.experience.executable, true);
+      }
     }
 
     const rounds = await expectStatus(app, "/api/teacher/warmup/rounds", { teacher: true }, 200);
@@ -173,7 +174,7 @@ test("교사 라운드 생성부터 학생 평가·결과 확인·종료까지 �
         experienceCount: summary.experienceCount,
         evaluatedCount: summary.evaluatedCount,
       },
-      { submissionCount: 4, voteCount: 12, experienceCount: 4, evaluatedCount: 4 }
+      { submissionCount: 4, voteCount: 8, experienceCount: 8, evaluatedCount: 4 }
     );
 
     const detail = await expectStatus(
@@ -183,9 +184,9 @@ test("교사 라운드 생성부터 학생 평가·결과 확인·종료까지 �
       200
     );
     assert.equal(detail.data.items.length, 4);
-    assert.equal(detail.data.items.flatMap((item) => item.experiences).length, 4);
+    assert.equal(detail.data.items.flatMap((item) => item.experiences).length, 8);
     for (const item of detail.data.items) {
-      assert.equal(Object.values(item.voteCounts).reduce((sum, count) => sum + count, 0), 3);
+      assert.equal(Object.values(item.voteCounts).reduce((sum, count) => sum + count, 0), 2);
     }
 
     const closed = await expectStatus(

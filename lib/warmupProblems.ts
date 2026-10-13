@@ -2,6 +2,7 @@ import type { ProblemType } from "@/lib/assignments";
 
 /** Source-controlled warm-up problem bank. Add one object to publish a new option. */
 export const WARMUP_PROBLEMS = [
+  { id: "even-count", title: "상자 속 짝수 세기", prompt: "상자 5개에는 0~10 사이의 숫자가 들어 있습니다. 첫 상자부터 하나씩 확인하여 짝수가 든 상자의 개수를 구하는 자연어 알고리즘을 작성하세요. 로봇은 첫 상자에 있고 메모지는 0으로 시작합니다. 0도 짝수입니다." },
   {
     id: "fake-coin",
     title: "12개의 동전 중 가짜 찾기",
@@ -55,6 +56,7 @@ export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemTy
   "tree-cutting": "woodcut",
   constellation: "constellation",
   "max-box": "maxbox",
+  "even-count": "evencount",
 };
 
 /**

@@ -1,5 +1,6 @@
 "use client";
 
+import { EvenCountSandbox } from "../EvenCountActivity";
 import { useState } from "react";
 import type { ProblemType } from "@/lib/assignments";
 import { PROBLEM_LABELS, PROBLEM_ICONS } from "@/lib/problemMeta";
@@ -62,6 +63,7 @@ export function ProblemSandboxContainer({
         <ConstellationSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
 
+      {problemType === "evencount" && <EvenCountSandbox writingSupport />}
       {problemType === "maxbox" && (
         <MaxBoxSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} embedded />
       )}

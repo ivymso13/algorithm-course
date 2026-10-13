@@ -1,4 +1,5 @@
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
+import { completeResearchReview } from "@/lib/researchStore";
 import { getAssignment } from "@/lib/roster";
 import { ValidationError, validateWarmupFeedback } from "@/lib/validation";
 import {
@@ -42,16 +43,8 @@ export async function POST(request: Request) {
     const mine = await getMyWarmupSubmission(target.roundId, session.studentKey);
     if (!mine) return Response.json({ error: "먼저 알고리즘을 제출하세요" }, { status: 403 });
 
-    const experience = await upsertWarmupExperience({
-      submissionId,
-      executorStudentKey: session.studentKey,
-      executorCourseId: session.courseId,
-      executorId: assignment.studentId,
-      executorName: assignment.name,
-      checkedSteps: body.checkedSteps,
-      executable: body.executable,
-      feedback,
-    });
+    await completeResearchReview(session.courseId,submissionId,session.studentKey,feedback,body.executable,body.checkedSteps);
+    const experience = { feedback, executable: body.executable, checkedSteps: body.checkedSteps };
     return Response.json({ experience });
   } catch (error) {
     if (error instanceof WarmupOwnershipError) return Response.json({ error: error.message }, { status: 403 });

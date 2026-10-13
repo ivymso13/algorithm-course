@@ -5,6 +5,7 @@ import { josephusProblem } from "./josephus";
 import { pancakeProblem } from "./pancake";
 import { woodcutProblem } from "./woodcut";
 import { constellationProblem } from "./constellation";
+import { evenCountProblem } from "./evencount";
 import { maxBoxProblem } from "./maxbox";
 import type { ActionOutcome, GeneratedInstance, ProblemModule } from "./types";
 
@@ -16,6 +17,7 @@ export const PROBLEM_MODULES: Record<ProblemType, ProblemModule> = {
   woodcut: woodcutProblem,
   constellation: constellationProblem,
   maxbox: maxBoxProblem,
+  evencount: evenCountProblem,
 };
 
 export function getProblemModule(type: ProblemType): ProblemModule {

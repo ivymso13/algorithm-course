@@ -7,11 +7,12 @@
  * hydrate, leaving buttons unresponsive. */
 
 import { useEffect, useState } from "react";
+import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { StudentStepNav } from "@/components/write/StudentStepNav";
 import { useWarmupSession } from "@/components/write/useWarmupSession";
-import { JevAutoGradeStatus } from "@/components/jev/JevAutoGradeStatus";
+import { ResearchPanel } from "@/components/write/ResearchPanel";
 import { parseAlgorithmSteps, serializeAlgorithmSteps } from "@/lib/algorithmSteps";
 
 function ensureAtLeastOneStep(steps: string[]): string[] {
@@ -39,6 +40,7 @@ export default function AlgorithmWritePage() {
   const [draftRestoredNotice, setDraftRestoredNotice] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [reason,setReason] = useState("");
   const [showFullPrompt, setShowFullPrompt] = useState(false);
 
   // Initialize steps from a pending draft, falling back to the last saved
@@ -140,7 +142,7 @@ export default function AlgorithmWritePage() {
       const res = await fetch("/api/warmup/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ algorithmText: serialized }),
+        body: JSON.stringify({ algorithmText: serialized, reason }),
       });
       const data = (await res.json()) as { mySubmission?: typeof mySubmission; error?: string };
       if (!res.ok || !data.mySubmission) {
@@ -198,14 +200,14 @@ export default function AlgorithmWritePage() {
   }
 
   const hasSubmitted = Boolean(mySubmission);
-  const isOpen = round?.status === "open";
+  const isOpen = round?.status === "open" && (!mySubmission || round.canRevise === true);
   const serializedText = serializeAlgorithmSteps(steps);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar currentStudentKey={studentLabel} onLogout={handleLogout} />
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
         {/* 3-Step Navigation */}
         <StudentStepNav currentStep={2} hasSubmitted={hasSubmitted} />
 
@@ -236,9 +238,7 @@ export default function AlgorithmWritePage() {
           </section>
         ) : (
           <>
-            {round.problemType === "maxbox" && mySubmission && (
-              <JevAutoGradeStatus roundId={round.id} revisionKey={`${mySubmission.id}:${mySubmission.updatedAt}`} />
-            )}
+            {mySubmission && <ResearchPanel roundId={round.id} />}
 
             {/* Problem Summary Card (Focused on writing) */}
             <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-xs space-y-2">
@@ -249,10 +249,10 @@ export default function AlgorithmWritePage() {
                   </span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      isOpen ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+                      round.status === "open" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
                     }`}
                   >
-                    {isOpen ? "진행 중" : "종료됨"}
+                    {round.status === "open" ? "진행 중" : "종료됨"}
                   </span>
                 </div>
                 <a
@@ -292,6 +292,8 @@ export default function AlgorithmWritePage() {
               )}
             </section>
 
+            <div className="grid items-start gap-5 lg:grid-cols-2">
+              <div className="min-w-0 lg:sticky lg:top-5">{round.problemType && <ProblemSandboxContainer problemType={round.problemType} defaultOpen />}</div>
             {/* Main: Step-by-Step Algorithm Editor */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -333,6 +335,7 @@ export default function AlgorithmWritePage() {
                 </div>
               )}
 
+              {mySubmission && <div className="space-y-2 rounded-xl bg-indigo-50 p-3 text-xs"><p>{isOpen ? "동료 피드백을 참고하여 수정합니다. 원문은 별도 버전으로 보존됩니다." : "첫 제출은 고정됩니다. 배정된 동료 평가를 모두 받으면 수정할 수 있습니다."}</p><label htmlFor="revision-reason" className="font-bold">어떤 피드백을 참고해 무엇을 바꾸었나요?</label><textarea id="revision-reason" disabled={!isOpen} value={reason} onChange={e=>setReason(e.target.value)} maxLength={2000} className="w-full rounded-lg border p-2" /></div>}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-3">
                   {steps.map((step, index) => {
@@ -450,11 +453,12 @@ export default function AlgorithmWritePage() {
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 text-center py-2">
-                    이 라운드는 종료되어 제출하거나 수정할 수 없습니다.
+                    현재 원문은 수정할 수 없습니다. 동료 평가 완료 여부와 라운드 상태를 확인하세요.
                   </p>
                 )}
               </form>
             </section>
+            </div>
           </>
         )}
       </main>

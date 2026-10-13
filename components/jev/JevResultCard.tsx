@@ -12,6 +12,7 @@ export interface JevExampleTrial {
 }
 
 export interface JevResultCardProps {
+  fixedCases?: boolean;
   roundTitle: string | null;
   submissionText: string | null;
   totalTrials: number;
@@ -31,6 +32,7 @@ export interface JevResultCardProps {
  * focus on algorithmic reasoning, edge-case debugging, and iterative refinement.
  */
 export function JevResultCard({
+  fixedCases = false,
   roundTitle,
   submissionText,
   totalTrials,
@@ -155,7 +157,7 @@ export function JevResultCard({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
             <span>실행 통계 비율</span>
-            <span className="text-slate-500 font-mono text-[11px]">총 {totalTrials}회 무작위 시뮬레이션</span>
+            <span className="text-slate-500 font-mono text-[11px]">{fixedCases ? `고정 테스트 ${totalTrials}개` : `총 ${totalTrials}회 무작위 시뮬레이션`}</span>
           </div>
 
           {/* Tri-color Segmented Progress Bar */}

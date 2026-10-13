@@ -1,3 +1,4 @@
+import { researchView } from "@/lib/researchStore";
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
 import { getMyWarmupSubmission, getOpenWarmupRound, listBoardSubmissions } from "@/lib/warmupStore";
 
@@ -18,5 +19,7 @@ export async function GET(request: Request) {
   }
 
   const entries = await listBoardSubmissions(round.id, session.studentKey);
-  return Response.json({ entries });
+  const research=await researchView(session.courseId,round.id,session.studentKey);
+  const assigned=new Map(research.outgoing.map(a=>[a.submission_id,a]));
+  return Response.json({ entries: entries.filter(e=>assigned.has(e.id)).map(e=>({...e,algorithmText:assigned.get(e.id)!.algorithm_text,experienced:assigned.get(e.id)!.status==='completed'})) });
 }

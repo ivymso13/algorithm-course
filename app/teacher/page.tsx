@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { JevRoundJob } from "@/components/jev/JevRoundJob";
 import { JevAutoRoundStatus } from "@/components/jev/JevAutoRoundStatus";
+import { TeacherResearchRound } from "@/components/write/TeacherResearchRound";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
@@ -1071,9 +1072,7 @@ export default function TeacherPage() {
                       </div>
 
                       <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
-                      {resolveWarmupSandboxProblemType(round) === "maxbox" && (
-                        <JevAutoRoundStatus key={`auto:${round.id}:${password}`} roundId={round.id} password={password} />
-                      )}
+                      <TeacherResearchRound roundId={round.id} password={password} />
                       {round.status === "closed" && resolveWarmupSandboxProblemType(round) === "maxbox" && (
                         <JevRoundJob key={`${round.id}:${password}`} roundId={round.id} password={password} />
                       )}

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+import { RESEARCH_SCHEMA } from "./researchSchema";
 import { JEV_TABLES, JEV_INDEXES } from "./jevSchema";
 
 // Mirrors drizzle/0000_*.sql with `IF NOT EXISTS` added. Drizzle migrations
@@ -158,6 +159,7 @@ const SCHEMA_STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS warmup_experiences_unique_idx ON warmup_experiences (submission_id, executor_student_key)`,
   `CREATE INDEX IF NOT EXISTS warmup_experiences_submission_idx ON warmup_experiences (submission_id)`,
   ...JEV_TABLES,
+  ...RESEARCH_SCHEMA,
 ];
 
 // Some columns were added to tables that predate them, so a database that

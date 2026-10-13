@@ -2,7 +2,7 @@
 // (dist/server) with every outbound request answered by a local fake of the
 // TypeSafe System One endpoint — no real network, no API cost, no real key.
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
+import { readFile,readdir } from "node:fs/promises";
 import path from "node:path";
 import { Miniflare, Response as MfResponse } from "miniflare";
 
@@ -144,7 +144,7 @@ export async function collectJavaScriptModules(directory) {
   return files;
 }
 
-export async function createTestApp({ bindings = { TYPESAFE_API_KEY: FAKE_KEY }, fake = createFakeJev() } = {}) {
+export async function createTestApp({ bindings = { TYPESAFE_API_KEY: FAKE_KEY }, fake = createFakeJev(), assetsDirectory } = {}) {
   const files = await collectJavaScriptModules(serverRoot);
   const mainPath = path.join(serverRoot, "index.js");
   const modules = [mainPath, ...files.filter((file) => file !== mainPath)].map((file) => ({
@@ -158,6 +158,7 @@ export async function createTestApp({ bindings = { TYPESAFE_API_KEY: FAKE_KEY },
     compatibilityDate: "2026-05-15",
     compatibilityFlags: ["nodejs_compat"],
     d1Databases: ["DB"],
+    ...(assetsDirectory ? {serviceBindings:{ASSETS:async(request)=>{const file=path.resolve(assetsDirectory,'.'+decodeURIComponent(new URL(request.url).pathname));if(!file.startsWith(path.resolve(assetsDirectory)+path.sep))return new MfResponse('not found',{status:404});try{return new MfResponse(await readFile(file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.json')?'application/json':'application/octet-stream'}});}catch{return new MfResponse('not found',{status:404});}}}} : {}),
     bindings: {
       TEACHER_PASSWORD: teacherPassword,
       COURSE_CODE: "JEVFLOW2026",
@@ -234,7 +235,11 @@ export async function closeRound(app, roundId) {
 }
 
 export async function submit(app, cookie, algorithmText) {
-  const res = await expectStatus(app, "/api/warmup/submit", { method: "POST", cookie, body: { algorithmText } }, 200);
+  const current=await requestJson(app,"/api/warmup/round",{cookie});
+  if(current.data?.mySubmission && current.data.mySubmission.algorithmText!==algorithmText){
+    await expectStatus(app,"/api/teacher/warmup/revision-open",{method:"POST",teacher:true,body:{submissionId:current.data.mySubmission.id,reason:"테스트에서 실행 중 버전 변경과 취소를 검증하기 위한 개방"}},200);
+  }
+  const res = await expectStatus(app, "/api/warmup/submit", { method: "POST", cookie, body: { algorithmText,reason:"테스트에서 원문 변경과 실행 결과 분리를 검증합니다." } }, 200);
   return res.data.mySubmission.id;
 }
 

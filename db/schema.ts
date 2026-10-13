@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+export {algorithmVersions,algorithmReviewAssignments,algorithmRoundCohorts,algorithmAiFeedback,algorithmInterpretationNotes,algorithmRevisionOverrides,algorithmObservations} from "./researchSchema";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**

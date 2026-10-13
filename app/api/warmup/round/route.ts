@@ -1,3 +1,4 @@
+import { researchView } from "@/lib/researchStore";
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { getMyWarmupSubmission, getOpenWarmupRound } from "@/lib/warmupStore";
@@ -11,6 +12,7 @@ export async function GET(request: Request) {
   if (!round) return Response.json({ studentKey: session.studentKey, round: null, mySubmission: null });
 
   const mySubmission = await getMyWarmupSubmission(round.id, session.studentKey);
+  const research=await researchView(session.courseId,round.id,session.studentKey);
   return Response.json({
     studentKey: session.studentKey,
     round: {
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
       status: round.status,
       reviewOpenedAt: round.reviewOpenedAt,
       problemType: resolveWarmupSandboxProblemType(round),
+      canRevise: research.canRevise,
     },
     mySubmission: mySubmission
       ? {

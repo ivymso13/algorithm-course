@@ -1,5 +1,7 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import {algorithmVersions,algorithmReviewAssignments,algorithmRoundCohorts,algorithmAiFeedback,algorithmInterpretationNotes,algorithmRevisionOverrides,algorithmObservations} from "@/db/researchSchema";
+import { researchProgress, assignResearchReviews } from "./researchStore";
+import { getD1, getDb } from "@/db";
 import { jevAutoRuns, jevAutoTrials, jevBatchEvaluations, jevJobItems, jevJobs, warmupExperiences, warmupRounds, warmupSubmissions, warmupVotes } from "@/db/schema";
 import { WARMUP_VOTE_TYPES, type WarmupVoteType } from "@/lib/warmupMeta";
 import { sanitizeCheckedSteps, splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -67,12 +69,13 @@ export async function getOpenWarmupRoundWithSubmitters(courseId: number) {
       .where(eq(warmupVotes.roundId, round.id)),
   ]);
 
+  const progress=await researchProgress(courseId);
   return {
     id: round.id,
     title: round.title,
     reviewOpenedAt: round.reviewOpenedAt,
     submittedStudentKeys: submissionRows.map((r) => r.studentKey),
-    evaluatedStudentKeys: fullyEvaluatedStudentKeys(submissionRows, voteRows),
+    evaluatedStudentKeys: progress.some(p=>p.round_id===round.id) ? progress.filter(p=>p.round_id===round.id&&p.completed===p.required).map(p=>p.reviewer_key) : fullyEvaluatedStudentKeys(submissionRows, voteRows),
   };
 }
 
@@ -118,6 +121,7 @@ export async function listWarmupRoundsForCourse(courseId: number) {
   const voteCounts = countByRound(voteRows);
   const experienceCounts = countByRound(experienceRows);
 
+  const progress=await researchProgress(courseId);
   return rounds.map((round) => {
     const roundSubmissions = submissionRows.filter((r) => r.roundId === round.id);
     const roundVotes = voteRows.filter((v) => v.roundId === round.id);
@@ -125,8 +129,8 @@ export async function listWarmupRoundsForCourse(courseId: number) {
       ...round,
       submissionCount: submissionCounts.get(round.id) ?? 0,
       voteCount: voteCounts.get(round.id) ?? 0,
-      experienceCount: experienceCounts.get(round.id) ?? 0,
-      evaluatedCount: fullyEvaluatedStudentKeys(roundSubmissions, roundVotes).length,
+      experienceCount: (experienceCounts.get(round.id) ?? 0)+progress.filter(p=>p.round_id===round.id).reduce((sum,p)=>sum+p.completed,0),
+      evaluatedCount: progress.some(p=>p.round_id===round.id) ? progress.filter(p=>p.round_id===round.id&&p.completed===p.required).length : fullyEvaluatedStudentKeys(roundSubmissions, roundVotes).length,
     };
   });
 }
@@ -173,7 +177,7 @@ export async function closeWarmupRound(id: number, courseId: number) {
 export async function openWarmupReview(id: number, courseId: number) {
   const round = assertWarmupRoundExists(await getWarmupRound(id), courseId);
   if (round.status !== "open") throw new WarmupStateError("진행 중인 라운드만 평가 단계를 열 수 있습니다");
-  if (round.reviewOpenedAt) return round;
+  if (round.reviewOpenedAt) { await assignResearchReviews(id); return round; }
 
   const db = await getDb();
   const [updated] = await db
@@ -181,6 +185,7 @@ export async function openWarmupReview(id: number, courseId: number) {
     .set({ reviewOpenedAt: new Date().toISOString() })
     .where(eq(warmupRounds.id, id))
     .returning();
+  await assignResearchReviews(id);
   return updated;
 }
 
@@ -196,6 +201,13 @@ export async function deleteWarmupRound(id: number, courseId: number) {
 
   const db = await getDb();
   await db.batch([
+    db.delete(algorithmObservations).where(sql`${algorithmObservations.versionId} in (select id from algorithm_versions where round_id=${id})`),
+    db.delete(algorithmInterpretationNotes).where(sql`${algorithmInterpretationNotes.versionId} in (select id from algorithm_versions where round_id=${id})`),
+    db.delete(algorithmAiFeedback).where(sql`${algorithmAiFeedback.versionId} in (select id from algorithm_versions where round_id=${id})`),
+    db.delete(algorithmReviewAssignments).where(eq(algorithmReviewAssignments.roundId,id)),
+    db.delete(algorithmRevisionOverrides).where(sql`${algorithmRevisionOverrides.submissionId} in (select id from warmup_submissions where round_id=${id})`),
+    db.delete(algorithmRoundCohorts).where(eq(algorithmRoundCohorts.roundId,id)),
+    db.delete(algorithmVersions).where(eq(algorithmVersions.roundId,id)),
     db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.roundId, id)),
     db.delete(jevJobItems).where(sql`${jevJobItems.jobId} in (select id from jev_jobs where round_id = ${id})`),
     db.delete(jevJobs).where(eq(jevJobs.roundId, id)),
@@ -225,6 +237,12 @@ export async function deleteWarmupSubmission(submissionId: number, courseId: num
   if (!round || round.courseId !== courseId) throw new WarmupNotFoundError("제출을 찾을 수 없습니다");
 
   await db.batch([
+    db.delete(algorithmObservations).where(sql`${algorithmObservations.versionId} in (select id from algorithm_versions where submission_id=${submissionId})`),
+    db.delete(algorithmInterpretationNotes).where(sql`${algorithmInterpretationNotes.versionId} in (select id from algorithm_versions where submission_id=${submissionId})`),
+    db.delete(algorithmAiFeedback).where(sql`${algorithmAiFeedback.versionId} in (select id from algorithm_versions where submission_id=${submissionId})`),
+    db.delete(algorithmReviewAssignments).where(sql`${algorithmReviewAssignments.versionId} in (select id from algorithm_versions where submission_id=${submissionId})`),
+    db.delete(algorithmRevisionOverrides).where(eq(algorithmRevisionOverrides.submissionId,submissionId)),
+    db.delete(algorithmVersions).where(eq(algorithmVersions.submissionId,submissionId)),
     db.delete(jevBatchEvaluations).where(eq(jevBatchEvaluations.submissionId, submissionId)),
     db.delete(jevJobItems).where(eq(jevJobItems.submissionId, submissionId)),
     db.delete(jevAutoTrials).where(sql`${jevAutoTrials.runId} in (select id from jev_auto_runs where submission_id = ${submissionId})`),
@@ -254,10 +272,12 @@ export async function teacherWarmupRoundDetail(id: number, courseId: number) {
       ])
     : [[], []];
 
+  const d1=await getD1();
+  const newReviews=(await d1.prepare(`SELECT a.*,v.submission_id,r.student_id,r.student_name FROM algorithm_review_assignments a JOIN algorithm_versions v ON v.id=a.version_id LEFT JOIN warmup_submissions r ON r.round_id=a.round_id AND r.student_key=a.reviewer_key WHERE a.round_id=? AND a.status='completed'`).bind(id).all()).results;
   const items = submissions.map((submission) => ({
     submission,
     voteCounts: tallyVotes(votes.filter((v) => v.submissionId === submission.id)),
-    experiences: experiences.filter((e) => e.submissionId === submission.id),
+    experiences: [...experiences.filter((e) => e.submissionId === submission.id),...newReviews.filter(e=>e.submission_id===submission.id).map(e=>({id:Number(e.id),submissionId:submission.id,roundId:id,executorStudentKey:String(e.reviewer_key),executorId:String(e.student_id??""),executorName:String(e.student_name??"평가자"),checkedSteps:JSON.parse(String(e.checked_steps)),totalSteps:splitAlgorithmIntoSteps(submission.algorithmText).length,executable:!!e.executable,feedback:String(e.feedback),createdAt:String(e.completed_at),updatedAt:String(e.completed_at)}))],
   }));
 
   return { round, items };
@@ -473,10 +493,13 @@ export async function getBoardSubmissionForViewer(
     throw new WarmupOwnershipError("본인 제출은 체험할 수 없습니다");
   }
 
+  const d1=await getD1();
+  const assigned=await d1.prepare(`SELECT v.algorithm_text FROM algorithm_review_assignments a JOIN algorithm_versions v ON v.id=a.version_id WHERE a.reviewer_key=? AND v.submission_id=? AND v.course_id=?`).bind(viewerStudentKey,submissionId,viewerCourseId).first<{algorithm_text:string}>();
+  if(!assigned)throw new WarmupOwnershipError("배정된 알고리즘만 평가할 수 있습니다.");
   return {
     id: row.id,
     anonLabel: row.anonLabel,
-    algorithmText: row.algorithmText,
+    algorithmText: assigned.algorithm_text,
     roundId: row.roundId,
     roundStatus: round.status,
   };
@@ -550,6 +573,9 @@ export async function upsertWarmupExperience(input: {
 }
 
 export async function getMyWarmupExperience(submissionId: number, executorStudentKey: string) {
+  const d1=await getD1();
+  const completed=await d1.prepare(`SELECT a.*,v.algorithm_text,v.round_id FROM algorithm_review_assignments a JOIN algorithm_versions v ON v.id=a.version_id WHERE v.submission_id=? AND a.reviewer_key=? AND a.status='completed'`).bind(submissionId,executorStudentKey).first<{id:number;checked_steps:string;feedback:string;executable:number;algorithm_text:string;round_id:number}>();
+  if(completed)return {id:completed.id,submissionId,roundId:completed.round_id,checkedSteps:JSON.parse(completed.checked_steps),totalSteps:splitAlgorithmIntoSteps(completed.algorithm_text).length,executable:!!completed.executable,feedback:completed.feedback};
   const db = await getDb();
   const [row] = await db
     .select()

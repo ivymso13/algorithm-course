@@ -8,6 +8,8 @@ export const DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const DEFAULT_JEV_TIMEOUT_MS = 8_000;
 
 export interface JevServiceOptions {
+  /** Compile meanings once; execution engine checks state preconditions later. */
+  classificationOnly?: boolean;
   endpoint?: string;
   timeoutMs?: number;
   /** Injectable for tests; defaults to global fetch. */
@@ -57,6 +59,7 @@ export class JevService implements IJevService {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly beforeRequest?: () => Promise<void>;
+  private readonly classificationOnly: boolean;
 
   /**
    * Throws JevConfigurationError without a key. Never retries: a failed or
@@ -73,6 +76,7 @@ export class JevService implements IJevService {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS;
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
     this.beforeRequest = options.beforeRequest;
+    this.classificationOnly = options.classificationOnly ?? false;
   }
 
   /** POSTs with a hard timeout; maps every transport problem to a safe JevApiError. */
@@ -129,7 +133,7 @@ export class JevService implements IJevService {
     // REPEAT's appliesWhen is its loop guard, not a precondition: a loop
     // whose guard is already false runs zero times (see executionEngine),
     // so the student's REPEAT sentence must stay recognizable here too.
-    const applicable = candidateActions(currentState);
+    const applicable = this.classificationOnly ? schema.actions : candidateActions(currentState);
     const candidates = [
       ...applicable,
       ...schema.actions.filter((a) => a.effect.replayFromReferencedStep && !applicable.includes(a)),
@@ -158,7 +162,7 @@ export class JevService implements IJevService {
     // JSON-blob state and criteria without concrete examples scored much
     // lower for equally-clear sentences (e.g. INIT steps ~0.5 vs ~0.95).
     const stateContext = `현재 상태: 메모지 = ${currentState.maxVal ?? "아직 없음"}, 방금 확인한 상자의 사과 개수 = ${currentState.currentValue ?? "아직 없음"}, 로봇 위치 = ${currentState.currentIndex}.`;
-    const stateText = `당신은 자연어 지시를 한 치의 해석이나 추론 없이 문자 그대로만 따르는 프로그램이다. 문제: "${schema.prompt}" ${stateContext} 다음 지시: "${stepText}"`;
+    const stateText = `당신은 자연어 지시를 한 치의 해석이나 추론 없이 문자 그대로만 따르는 프로그램이다. 문제: "${schema.prompt}" ${this.classificationOnly ? "이 명령의 뜻만 분류한다. 실행 시점에는 확인한 값과 메모가 있을 수 있으므로 초기 상태 때문에 뜻을 거절하지 않는다." : stateContext} 다음 지시: "${stepText}"`;
 
     const requestBody = {
       model: "jev-latest",
@@ -210,7 +214,7 @@ export class JevService implements IJevService {
     // value). But `noul` *is* reliable at the extreme low end — every
     // genuinely ambiguous step we've tested scored well under 0.15 there —
     // so it's kept only as a veto for that case, not as a general gate.
-    const confidence = noul < 0.15 ? noul : choiceConf;
+    const confidence = !this.classificationOnly && noul < 0.15 ? noul : choiceConf;
     const executable = confidence >= threshold && Boolean(matchedAction);
 
     // The first question only offers actions that apply now, so a clear
