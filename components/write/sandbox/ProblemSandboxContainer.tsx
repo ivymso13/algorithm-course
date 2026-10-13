@@ -1,5 +1,6 @@
 "use client";
 
+import { CardFlipSandbox } from "./CardFlipSandbox";
 import { EvenCountSandbox } from "../EvenCountActivity";
 import { useState } from "react";
 import type { ProblemType } from "@/lib/assignments";
@@ -63,6 +64,7 @@ export function ProblemSandboxContainer({
         <ConstellationSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
 
+      {problemType === "cardflip" && <CardFlipSandbox onCopyHistory={onCopyHistory} />}
       {problemType === "evencount" && <EvenCountSandbox writingSupport embedded />}
       {problemType === "maxbox" && (
         <MaxBoxSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} embedded />

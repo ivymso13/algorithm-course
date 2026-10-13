@@ -502,6 +502,7 @@ export async function getBoardSubmissionForViewer(
     algorithmText: assigned.algorithm_text,
     roundId: row.roundId,
     roundStatus: round.status,
+    problemId: round.problemId,
   };
 }
 

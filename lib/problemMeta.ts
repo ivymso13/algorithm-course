@@ -2,6 +2,7 @@ import type { ProblemType } from "@/lib/assignments";
 export type { ProblemType } from "@/lib/assignments";
 
 export const PROBLEM_LABELS: Record<ProblemType, string> = {
+  cardflip: "카드 뒤집기 — 한 차례의 규칙 실행",
   evencount: "상자 속 짝수 세기",
   "12coins": "12개의 동전 중 가짜 찾기",
   card: "정렬된 뒤집힌 카드에서 목표 숫자 찾기",
@@ -13,6 +14,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
+  cardflip: "카드 뒤집기",
   evencount: "짝수 세기",
   "12coins": "동전 찾기",
   card: "카드 찾기",
@@ -24,6 +26,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
+  cardflip: "🃏",
   evencount: "📦",
   "12coins": "⚖️",
   card: "🎴",
@@ -35,6 +38,7 @@ export const PROBLEM_ICONS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
+  cardflip: "카드 6장이 앞면 또는 뒷면으로 놓여 있습니다. 오른쪽 끝 카드부터 확인합니다. 뒤집기 전 뒷면이었다면 앞면으로 뒤집고 이번 차례를 끝냅니다. 뒤집기 전 앞면이었다면 뒷면으로 뒤집고 왼쪽 카드에서 같은 규칙을 반복합니다. 왼쪽에 카드가 더 없어도 이번 차례를 끝냅니다. 초기 배치가 달라져도 정확히 한 차례를 진행하는 자연어 알고리즘을 작성하세요. 비버챌린지 카드 뒤집기 문제를 바탕으로 카드 수와 목표를 바꾼 활동입니다.",
   evencount: "상자 5개에는 0~10 사이의 숫자가 들어 있습니다. 첫 상자부터 하나씩 확인하여 짝수가 든 상자의 개수를 구하세요. 메모지는 0으로 시작하며 0도 짝수입니다.",
   "12coins":
     "동전 12개(1~12번) 중 정확히 1개만 무게가 다릅니다. 더 무거운지 가벼운지는 알 수 없습니다. 양팔저울을 사용해서 무게가 다른 동전의 번호를 찾는 알고리즘을 쓰세요. (어느 동전인지만 찾으면 됩니다 — 무겁다/가볍다까지는 몰라도 됩니다.)",
@@ -52,6 +56,7 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
+  cardflip: ["현재 카드의 앞·뒷면 확인하기", "현재 카드 뒤집기", "왼쪽 카드로 한 칸 이동하기", "이번 차례 끝내기"],
   evencount: ["상자를 열어 숫자 확인하기", "메모지에 1 더하기", "오른쪽 상자로 이동하기", "메모지의 수 제출하기"],
   "12coins": [
     "왼쪽 저울에 동전 번호(들)를 선택해서 올리기",
@@ -89,6 +94,7 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
 };
 
 export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
+  cardflip: ["뒤집기 전의 면을 기준으로 다음 행동을 판단하세요.", "어느 카드부터 시작하고 언제 반복을 끝내는지 적어 주세요.", "특정 배치의 답만 쓰지 말고 다른 배치에서도 실행할 수 있게 작성하세요."],
   evencount: ["짝수인지 확인한 뒤 메모지를 언제 늘릴지 쓰세요.", "마지막 상자도 확인하고 종료하도록 조건과 이동 순서를 점검하세요."],
   "12coins": [
     "저울질 결과가 '평형'일 때와 '기울어짐'일 때 어떤 동전들을 다음에 달아야 하는지 경우(case)를 나누어 적으세요.",
@@ -128,6 +134,7 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
 };
 
 export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
+  cardflip: "뒤집은 뒤의 면으로 조건 판단, 뒷면을 앞면으로 뒤집은 뒤 계속 이동, 왼쪽 끝에서 종료 누락",
   evencount: "마지막 상자를 세지 않음, 조건 없이 증가, 출력 누락",
   "12coins": "평형일 때 남은 동전에 답이 있다는 논리 누락, 저울질 결과별 분기 미작성",
   card: "목표 숫자가 없을 때 종료 조건 누락, 범위 좁히기 판단 기준 불명확",

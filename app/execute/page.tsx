@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { CardFlipSandbox } from "@/components/write/sandbox/CardFlipSandbox";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -16,6 +17,7 @@ type SubmissionView = {
   anonLabel: string;
   algorithmText: string;
   roundId: number;
+  problemId?: string | null;
   roundStatus: "draft" | "open" | "closed";
 };
 
@@ -416,6 +418,8 @@ export default function ExecutePage() {
             라운드가 종료되었습니다. 이전에 작성된 피드백만 확인할 수 있습니다.
           </div>
         )}
+
+        {submission.problemId==="card-flip" && <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs"><h2 className="mb-3 text-sm font-bold">친구의 알고리즘 직접 실행하기</h2><CardFlipSandbox peerMode /></section>}
 
         {/* Step-by-Step Checklist */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">

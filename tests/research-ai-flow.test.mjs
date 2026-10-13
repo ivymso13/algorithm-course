@@ -49,7 +49,7 @@ test("every registered activity uses the same durable first submission and JEV f
  const app=await createTestApp({fake});
  try{
   const problems=(await expectStatus(app,'/api/teacher/warmup/rounds',{teacher:true},200)).data.problems;
-  assert.equal(problems.length,8);
+  assert.equal(problems.length,9);
   const login=await expectStatus(app,'/api/student/login',{method:'POST',body:{...STUDENTS[0],consent:true}},200),cookie=login.response.headers.get('set-cookie').split(';')[0];
   for(const problem of problems){
     const created=await expectStatus(app,'/api/teacher/warmup/rounds',{method:'POST',teacher:true,body:{problemId:problem.id}},200),roundId=created.data.round.id;

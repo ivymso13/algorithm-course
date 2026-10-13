@@ -2,6 +2,7 @@ import type { ProblemType } from "@/lib/assignments";
 
 /** Source-controlled warm-up problem bank. Add one object to publish a new option. */
 export const WARMUP_PROBLEMS = [
+  { id: "card-flip", title: "카드 뒤집기 — 한 차례의 규칙 실행", prompt: "카드 6장이 앞면 또는 뒷면으로 놓여 있습니다. 오른쪽 끝부터 확인합니다. 뒤집기 전 뒷면이었다면 앞면으로 뒤집고 이번 차례를 끝냅니다. 뒤집기 전 앞면이었다면 뒷면으로 뒤집고 왼쪽 카드에서 같은 규칙을 반복합니다. 왼쪽에 카드가 더 없어도 끝냅니다. 초기 배치가 달라져도 정확히 한 차례를 진행하는 자연어 알고리즘을 작성하세요. 비버챌린지 카드 뒤집기 문제를 바탕으로 카드 수와 목표를 바꾼 활동입니다." },
   { id: "even-count", title: "상자 속 짝수 세기", prompt: "상자 5개에는 0~10 사이의 숫자가 들어 있습니다. 첫 상자부터 하나씩 확인하여 짝수가 든 상자의 개수를 구하는 자연어 알고리즘을 작성하세요. 로봇은 첫 상자에 있고 메모지는 0으로 시작합니다. 0도 짝수입니다." },
   {
     id: "fake-coin",
@@ -57,6 +58,7 @@ export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemTy
   constellation: "constellation",
   "max-box": "maxbox",
   "even-count": "evencount",
+  "card-flip": "cardflip",
 };
 
 /**

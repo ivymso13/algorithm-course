@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createTestApp,expectStatus,STUDENTS} from './support/jevHarness.mjs';
+test('card-flip preview includes peer practice metadata and card-specific feedback',async()=>{
+ const app=await createTestApp();try{
+  await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'unknown'}},400);
+  const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'card-flip'}},200);
+  const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
+  assert.equal(round.problemType,'cardflip');
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 오른쪽 끝의 카드를 확인한다.\n2. 카드를 뒤집는다.\n3. 이번 차례를 끝낸다.'}},200);
+  const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  assert.equal(view.outgoing.length,2);
+  const peer=(await expectStatus(app,'/api/warmup/submission?id='+view.outgoing[0].submission_id,{cookie},200)).data.submission;
+  assert.equal(peer.problemId,'card-flip');
+  await expectStatus(app,'/api/warmup/student-preview',{method:'POST',cookie},200);
+  const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  assert.equal(after.canRevise,true);assert.ok(after.incoming.every(a=>/카드|뒤집기/.test(a.feedback)));
+ }finally{await app.dispose();}
+});
 test('teacher student preview isolates classroom data and permits a full first draft, feedback, revision cycle',async()=>{
  const app=await createTestApp();try{
   await expectStatus(app,'/api/teacher/student-preview',{method:'POST'},401);
