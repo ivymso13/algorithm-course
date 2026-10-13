@@ -12,10 +12,11 @@ export type { StepNumber };
 interface StudentStepNavProps {
   currentStep: StepNumber;
   hasSubmitted: boolean;
+  destinations?: { label: string; href: string }[];
 }
 
-export function StudentStepNav({ currentStep, hasSubmitted }: StudentStepNavProps) {
-  const steps = computeStepNavItems(currentStep, hasSubmitted);
+export function StudentStepNav({ currentStep, hasSubmitted, destinations }: StudentStepNavProps) {
+  const steps = computeStepNavItems(currentStep, hasSubmitted).map((step, index) => ({ ...step, ...destinations?.[index] }));
 
   return (
     <nav
