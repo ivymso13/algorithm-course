@@ -34,8 +34,8 @@ export function ResearchPanel({roundId}:{roundId:number}) {
   const complete=view.incoming.filter(r=>r.status==='completed').length;
   return <section className="space-y-5">
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-bold">내 문장 → 실행자의 이해 → 수정</h2><a href="/write/history" className="text-xs font-bold text-blue-700">이전 활동 기록 →</a></div>
-    <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-6 text-blue-900">{view.roundStatus==='closed'?'종료된 활동입니다. 원문과 해석·피드백·수정 이력을 확인할 수 있습니다.':view.canRevise?'동료 피드백을 참고해 알고리즘을 수정할 수 있습니다.':`첫 제출은 고정되어 있습니다. 받은 동료 평가 ${complete}/${view.incoming.length||'배정 대기'} · 모든 평가가 도착하면 수정이 열립니다.`}</p>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-bold">{view.roundStatus==='closed'?'활동 종료 · 기록 확인':view.canRevise?'동료평가 완료 · 수정 가능':view.incoming.length?'동료평가 진행 중 · 수정 대기':'첫 제출 완료 · 평가 배정 대기'}</h2><a href="/write/history" className="text-xs font-bold text-blue-700">이전 활동 기록 →</a></div>
+    <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-6 text-blue-900">{view.roundStatus==='closed'?'종료된 활동입니다. 원문과 해석·피드백·수정 이력을 확인할 수 있습니다.':view.canRevise?'받은 피드백을 확인하고 알고리즘을 수정하세요.':`첫 제출은 고정되어 있습니다. 받은 동료 평가 ${complete}/${view.incoming.length||'배정 대기'} · 모든 평가가 도착하면 수정이 열립니다.`}</p>
     {view.overrideReason&&<p className="text-xs text-amber-800">교사 예외 개방: {view.overrideReason}</p>}
     </div>
     <section aria-label="JEV 실행 결과" className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-xs">

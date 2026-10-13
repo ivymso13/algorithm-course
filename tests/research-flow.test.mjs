@@ -13,8 +13,10 @@ test("all activities retain immutable first drafts, assigned feedback gates revi
   await expectStatus(app,'/api/teacher/warmup/review-open',{method:'POST',teacher:true,body:{roundId}},200);
   let view=(await expectStatus(app,'/api/warmup/research',{cookie:cookies[0]},200)).data;
   assert.equal(view.canRevise,false);assert.equal(view.incoming.length,2);assert.equal(view.versions[0].algorithm_text,original);
+  assert.equal((await expectStatus(app,'/api/warmup/round',{cookie:cookies[0]},200)).data.round.canRevise,false);
   for(const cookie of cookies){const v=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;for(const a of v.outgoing){await expectStatus(app,'/api/warmup/experience',{method:'POST',cookie,body:{submissionId:a.submission_id,checkedSteps:[0,1],executable:false,feedback:'2단계에서 범위를 어떻게 줄이는지 구체적인 기준이 필요합니다.'}},200);}}
   view=(await expectStatus(app,'/api/warmup/research',{cookie:cookies[0]},200)).data;assert.equal(view.canRevise,true);assert.equal(view.incoming.filter(r=>r.status==='completed').length,2);
+  assert.equal((await expectStatus(app,'/api/warmup/round',{cookie:cookies[0]},200)).data.round.canRevise,true);
   const versionId=view.versions[0].id;
   await expectStatus(app,'/api/warmup/research',{method:'POST',cookie:cookies[0],body:{versionId,agrees:false,note:'범위를 줄이는 방향은 문장에 없었는데 해석이 보충되었습니다.'}},200);
   await expectStatus(app,'/api/warmup/research',{method:'POST',cookie:cookies[1],body:{versionId,agrees:true,note:''}},404);

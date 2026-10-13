@@ -185,10 +185,11 @@ export async function getSessionByToken(token: string): Promise<ActiveSession | 
     await db.delete(sessions).where(eq(sessions.id, row.id));
     return null;
   }
-  await db
-    .update(sessions)
-    .set({ lastSeenAt: new Date().toISOString() })
-    .where(eq(sessions.id, row.id));
+  // Activity is approximate; authentication still reads and validates the
+  // session on every request. Avoid a write on every polling tick.
+  if (Date.now() - Date.parse(row.lastSeenAt) >= 5 * 60_000) {
+    await db.update(sessions).set({ lastSeenAt: new Date().toISOString() }).where(eq(sessions.id, row.id));
+  }
   return {
     id: row.id,
     studentId: row.studentId,
