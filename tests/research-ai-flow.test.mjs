@@ -4,6 +4,21 @@ import { Response as MfResponse } from "miniflare";
 import { createTestApp,createFakeJev,expectStatus,requestJson,STUDENTS } from "./support/jevHarness.mjs";
 import * as XLSX from "xlsx";
 
+test("an ambiguous instruction retains all interpretation records and withholds execution rather than grading wrong",async()=>{
+ const fake=createFakeJev();let count=0;
+ fake.answer=async()=>MfResponse.json({answers:{action:{choice:++count===1?'NONE':'CHECK',confidence:0.95}}});
+ const app=await createTestApp({fake});try{
+  const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true},200);
+  const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 적당하게 한다\n2. 상자를 확인한다\n3. 상자를 확인한다'}},200);
+  const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:view.versions[0].id}},200);
+  const version=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data.versions[0];
+  assert.equal(version.ai_status,'completed');const result=JSON.parse(version.ai_result);
+  assert.equal(result.interpretations.length,3);assert.equal(result.interpretations[0].accepted,false);assert.equal(result.trials.length,0);assert.equal(count,3);
+ }finally{await app.dispose();}
+});
+
 test("JEV reads one immutable even-count program once and executes 10 fixed cases",async()=>{
  const fake=createFakeJev();
  fake.answer=async(request)=>{const b=await request.json();const text=JSON.parse(b.state.match(/분류할 문장: (.+)$/)[1]);const choice=text.includes('남아')?'LOOP_MOVE':text.includes('짝수')?'ADD_EVEN':text.includes('제출')?'OUTPUT':'CHECK';return MfResponse.json({model:'test-model',answers:{action:{choice,confidence:0.95}}});};

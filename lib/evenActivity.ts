@@ -62,11 +62,11 @@ export async function interpretEven(steps: string[], key: string, fetchImpl: typ
         }
       }
       interpretations.push({ step: i + 1, text, action, confidence: answer.confidence, accepted, reason });
-      if (!accepted) return { plan: [], interpretations };
+      if (!accepted) continue;
       plan.push({ step: i + 1, text, action: action as EvenAction, ...(start ? { start } : {}) });
     }
   }
-  return { plan, interpretations };
+  return { plan: interpretations.every(p => p.accepted) ? plan : [], interpretations };
 }
 
 export function runEven(plan: EvenInstruction[], numbers: number[]) {
