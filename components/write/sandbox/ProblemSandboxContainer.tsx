@@ -63,7 +63,7 @@ export function ProblemSandboxContainer({
         <ConstellationSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} />
       )}
 
-      {problemType === "evencount" && <EvenCountSandbox writingSupport />}
+      {problemType === "evencount" && <EvenCountSandbox writingSupport embedded />}
       {problemType === "maxbox" && (
         <MaxBoxSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} embedded />
       )}

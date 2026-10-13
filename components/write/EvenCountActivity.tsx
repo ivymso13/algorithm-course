@@ -16,7 +16,7 @@ const destinations = [{label:"문제·실습",href:base},{label:"알고리즘 �
 const labels: Record<string,string> = { CHECK:"상자 숫자 확인", ADD_EVEN:"짝수일 때만 1 더하기", ADD:"항상 1 더하기", MOVE:"오른쪽으로 이동", LOOP_MOVE:"상자가 남으면 이동하고 반복", LOOP:"상자가 남으면 이전 단계 반복", OUTPUT:"메모지의 수 제출", NONE:"해석 확인 필요" };
 const button = "rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 disabled:opacity-40";
 
-export function EvenCountSandbox({ writingSupport = false }: { writingSupport?: boolean }) {
+export function EvenCountSandbox({ writingSupport = false, embedded = false }: { writingSupport?: boolean; embedded?: boolean }) {
   const [numbers,setNumbers]=useState([3,8,2,7,4]);const [index,setIndex]=useState(0);const [value,setValue]=useState<number|null>(null);const [memo,setMemo]=useState(0);
   const [seen,setSeen]=useState<number[]>([]);const [history,setHistory]=useState<string[]>([]);const [answer,setAnswer]=useState("");const [open,setOpen]=useState(true);
   const [restored,setRestored]=useState(false);
@@ -39,9 +39,9 @@ export function EvenCountSandbox({ writingSupport = false }: { writingSupport?: 
   useEffect(()=>{if(restored){try{sessionStorage.setItem("even-count-sandbox",JSON.stringify({numbers,index,value,memo,seen,history,answer}));}catch{/* storage optional */}}},[restored,numbers,index,value,memo,seen,history,answer]);
   function log(s:string){setHistory(h=>[...h,s]);setAnswer("");}
   function reset(random=false){if(random)setNumbers(Array.from({length:5},()=>Math.floor(Math.random()*11)));setIndex(0);setValue(null);setMemo(0);setSeen([]);setHistory([]);setAnswer("");}
-  return <section className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-xs">
-    <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-linear-to-r from-blue-50/70 via-indigo-50/50 to-white px-4 py-3"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-sm text-white">📦</span><div><h3 className="text-sm font-bold">직접 풀어보기</h3><p className="text-[11px] text-slate-500">{writingSupport ? "실습으로 확인한 행동과 조건을 오른쪽 알고리즘에 적어 보세요." : "버튼을 직접 누르며 짝수를 세는 방법을 찾아보세요."}</p></div></div><button onClick={()=>setOpen(!open)} className={button}>{open?"접어두기 ▲":"펼치기 ▼"}</button></div>
-    {open&&<div className="space-y-4 p-4"><div className="flex justify-between text-xs"><span>로봇: {index+1}번째 상자</span><strong className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">📝 메모지: {memo}</strong></div>
+  return <section className={embedded ? "" : "overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-xs"}>
+    {!embedded && <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-linear-to-r from-blue-50/70 via-indigo-50/50 to-white px-4 py-3"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-sm text-white">📦</span><div><h3 className="text-sm font-bold">직접 풀어보기</h3><p className="text-[11px] text-slate-500">{writingSupport ? "실습으로 확인한 행동과 조건을 오른쪽 알고리즘에 적어 보세요." : "버튼을 직접 누르며 짝수를 세는 방법을 찾아보세요."}</p></div></div><button onClick={()=>setOpen(!open)} className={button}>{open?"접어두기 ▲":"펼치기 ▼"}</button></div>}
+    {(embedded||open)&&<div className={embedded ? "space-y-4" : "space-y-4 p-4"}><div className="flex justify-between text-xs"><span>로봇: {index+1}번째 상자</span><strong className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">📝 메모지: {memo}</strong></div>
       <div className="grid grid-cols-5 gap-2">{numbers.map((n,i)=><div key={i} className={`rounded-xl border-2 p-2 text-center ${i===index?"border-blue-500 bg-blue-50":"border-slate-200 bg-slate-50"}`}><p className="text-[10px] text-slate-500">상자 {i+1}</p><p className="py-2 text-xl font-bold">{seen.includes(i)?n:"?"}</p><p className="h-5">{i===index?"🤖":""}</p></div>)}</div>
       <p className="text-xs text-slate-600">방금 확인한 숫자: {value??"미확인"}</p><div className="flex flex-wrap gap-2">
         <button className={button} onClick={()=>{setValue(numbers[index]);setSeen(s=>s.includes(index)?s:[...s,index]);log(`${index+1}번째 상자 확인: ${numbers[index]}`);}}>🔍 상자 확인하기</button>
