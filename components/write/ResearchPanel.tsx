@@ -32,23 +32,42 @@ export function ResearchPanel({roundId}:{roundId:number}) {
   if(!latest)return null;
   let ai:AI|null=null;try{if(latest.ai_result)ai=JSON.parse(latest.ai_result);}catch{/* invalid saved payload */}
   const complete=view.incoming.filter(r=>r.status==='completed').length;
-  return <section className="space-y-4 rounded-2xl border border-indigo-200 bg-white p-4 shadow-xs">
+  return <section className="space-y-5">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-bold">내 문장 → 실행자의 이해 → 수정</h2><a href="/write/history" className="text-xs font-bold text-blue-700">이전 활동 기록 →</a></div>
-    <p className="rounded-xl bg-blue-50 p-3 text-xs leading-6 text-blue-900">{view.roundStatus==='closed'?'종료된 활동입니다. 원문과 해석·피드백·수정 이력을 확인할 수 있습니다.':view.canRevise?'동료 피드백을 참고해 알고리즘을 수정할 수 있습니다.':`첫 제출은 고정되어 있습니다. 받은 동료 평가 ${complete}/${view.incoming.length||'배정 대기'} · 모든 평가가 도착하면 수정이 열립니다.`}</p>
+    <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-6 text-blue-900">{view.roundStatus==='closed'?'종료된 활동입니다. 원문과 해석·피드백·수정 이력을 확인할 수 있습니다.':view.canRevise?'동료 피드백을 참고해 알고리즘을 수정할 수 있습니다.':`첫 제출은 고정되어 있습니다. 받은 동료 평가 ${complete}/${view.incoming.length||'배정 대기'} · 모든 평가가 도착하면 수정이 열립니다.`}</p>
     {view.overrideReason&&<p className="text-xs text-amber-800">교사 예외 개방: {view.overrideReason}</p>}
-    <details><summary className="cursor-pointer text-sm font-bold">원문과 수정 이력 ({view.versions.length}개)</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{view.versions.map(v=><article key={v.id} className="rounded-xl bg-slate-50 p-3 text-xs"><h3 className="font-bold">버전 {v.revision}{v.origin==='legacy'?' · 기존 자료 기준본':''}</h3><pre className="mt-2 whitespace-pre-wrap font-sans leading-6">{v.algorithm_text}</pre>{v.reason&&<p className="mt-2 text-blue-900">수정 이유: {v.reason}</p>}{v.ai_result&&<details className="mt-2"><summary>이 버전의 JEV 기록</summary><SavedAIRecord version={v}/></details>}</article>)}</div></details>
-    <h3 className="text-sm font-bold">JEV 채점·해석 기록 · 버전 {latest.revision}</h3>
+    </div>
+    <section aria-label="JEV 실행 결과" className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-xs">
+      <div className="flex items-center justify-between gap-3 border-b border-indigo-100 bg-indigo-50 px-4 py-3"><h3 className="flex items-center gap-2 text-base font-bold text-indigo-950"><span aria-hidden="true">🤖</span>JEV 실행 결과</h3><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700">버전 {latest.revision}</span></div>
+      <div className="space-y-3 p-4">
     {(busy||latest.ai_status==='running'||latest.ai_status==='queued')&&<p role="status" className="text-xs text-slate-500">JEV가 명령을 읽고 있습니다. 원문은 이미 저장되어 있으며 평가 참여는 가능합니다.</p>}
     {latest.ai_status==='failed'&&<div className="text-xs text-amber-900"><p>{latest.ai_error}</p><button disabled={busy||view.roundStatus!=="open"} onClick={()=>execute(latest.id)} className="mt-2 rounded-lg border px-3 py-2">다시 읽기</button></div>}
     {ai&&<>{ai.kind==='execution'&&ai.trials.length===0&&<div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900"><strong>고정 테스트 10개 · 검사 보류</strong><p>JEV가 해석을 확정하지 못한 단계가 있어 테스트를 실행하지 않았습니다. 오답으로 채점하지 않습니다. 아래 해석 확인이 필요한 단계와 동료 피드백을 참고해 수정해 주세요.</p></div>}<p className="text-xs text-slate-500">AI 해석은 학생 능력의 판정이 아닙니다. 의도와 다른 부분을 표시해 주세요.</p>{ai.notice&&<p className="rounded-xl bg-amber-50 p-3 text-xs">{ai.notice}</p>}
-      {ai.trials.length>0&&<JevResultCard fixedCases roundTitle={null} submissionText={latest.algorithm_text} totalTrials={ai.trials.length} correctCount={ai.trials.filter(t=>t.correct).length} incorrectCount={ai.trials.filter(t=>t.executable&&!t.correct).length} errorCount={ai.trials.filter(t=>!t.executable).length} examples={ai.trials.map((t,i)=>({trialIndex:i,numbers:t.numbers,correct:t.executable?t.correct:null,executable:t.executable,failedStep:null,finalAnswer:t.output,correctAnswer:t.expected,failureReason:t.failure,trace:t.trace}))}/>}
+      {ai.trials.length>0&&<JevResultCard embedded fixedCases roundTitle={null} submissionText={latest.algorithm_text} totalTrials={ai.trials.length} correctCount={ai.trials.filter(t=>t.correct).length} incorrectCount={ai.trials.filter(t=>t.executable&&!t.correct).length} errorCount={ai.trials.filter(t=>!t.executable).length} examples={ai.trials.map((t,i)=>({trialIndex:i,numbers:t.numbers,correct:t.executable?t.correct:null,executable:t.executable,failedStep:null,finalAnswer:t.output,correctAnswer:t.expected,failureReason:t.failure,trace:t.trace}))}/>}
       <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-bold">문장별 해석 확인 · {ai.interpretations.filter(p=>!p.accepted).length}단계 확인 필요</summary><div className="mt-3 space-y-3">
       {ai.interpretations.map((p,i)=><div key={i} className="grid gap-2 rounded-xl border border-slate-100 p-3 text-xs sm:grid-cols-2"><div><strong>{p.step}단계 · 내 문장</strong><p className="mt-1 leading-6">{p.text}</p></div><div><strong>{p.accepted?'JEV의 해석':'해석 후보 · 확인 필요'}</strong><p className="mt-1 leading-6">{p.action}</p>{p.reason&&<p className="text-amber-800">{p.reason}</p>}</div></div>)}
       <div className="space-y-2 rounded-xl bg-blue-50 p-3 text-xs"><label className="flex gap-2"><input type="checkbox" disabled={view.roundStatus!=="open"} checked={agrees} onChange={e=>setAgrees(e.target.checked)}/>JEV의 해석이 내 의도와 같습니다</label><textarea disabled={view.roundStatus!=="open"} value={note} onChange={e=>setNote(e.target.value)} maxLength={2000} placeholder="어느 단계에서 의도와 다르게 읽었나요? 같은 경우에도 관찰한 점을 남길 수 있습니다." className="w-full rounded-lg border p-2"/><button disabled={view.roundStatus!=="open"} onClick={saveNote} className="rounded-lg bg-blue-600 px-3 py-2 font-bold text-white">해석 확인 기록하기</button>{latest.note!==null&&<p>저장된 의견: {latest.agrees?'의도와 일치':'의도와 불일치'} · {latest.note}</p>}</div>
       </div></details>
     </>}
-    <h3 className="text-sm font-bold">받은 동료 피드백</h3>{view.incoming.length===0?<p className="text-xs text-slate-500">교사가 평가를 열면 평가자가 배정됩니다.</p>:view.incoming.map((r,i)=><article key={r.id} className="rounded-xl bg-slate-50 p-3 text-xs"><strong>평가자 {i+1} · 버전 {r.revision}</strong><p className="mt-1 leading-6">{r.status==='completed'?r.feedback:'평가 대기 중'}</p></article>)}
-    <h3 className="text-sm font-bold">내가 평가할 알고리즘</h3><p className="text-xs text-slate-500">친구의 첫 원문을 직접 따라 실행하고, 이해가 갈린 단계를 구체적으로 적어 주세요. 친구의 JEV 결과는 제공되지 않습니다.</p>{view.outgoing.map(a=><a key={a.id} href={`/execute?submissionId=${a.submission_id}`} className="block rounded-xl border border-slate-200 p-3 text-xs font-bold text-blue-700">{a.anon_label} · {a.status==='completed'?'평가 제출 완료':'실행하고 평가하기 →'}</a>)}
+      </div>
+    </section>
+    <div className="grid items-start gap-5 lg:grid-cols-2">
+    <section aria-label="받은 동료 피드백" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-xs">
+      <div className="flex items-center justify-between gap-3 border-b border-emerald-100 bg-emerald-50 px-4 py-3"><h3 className="flex items-center gap-2 text-base font-bold text-emerald-950"><span aria-hidden="true">💬</span>받은 동료 피드백</h3><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700">{complete}/{view.incoming.length} 완료</span></div>
+      <div className="space-y-3 p-4">{view.incoming.length===0?<p className="text-xs text-slate-500">교사가 평가를 열면 평가자가 배정됩니다.</p>:view.incoming.map((r,i)=><article key={r.id} className="rounded-xl bg-slate-50 p-3 text-xs"><strong>평가자 {i+1} · 버전 {r.revision}</strong><p className="mt-1 leading-6">{r.status==='completed'?r.feedback:'평가 대기 중'}</p></article>)}
+      </div>
+    </section>
+    <section aria-label="내가 할 동료평가" className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-xs">
+      <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-3"><h3 className="flex items-center gap-2 text-base font-bold text-amber-950"><span aria-hidden="true">✍️</span>내가 할 동료평가</h3><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-amber-800">{view.outgoing.filter(a=>a.status==='completed').length}/{view.outgoing.length} 완료</span></div>
+      <div className="space-y-3 p-4"><p className="text-xs text-slate-500">친구의 첫 원문을 직접 따라 실행하고, 이해가 갈린 단계를 구체적으로 적어 주세요. 친구의 JEV 결과는 제공되지 않습니다.</p>{view.outgoing.map(a=><a key={a.id} href={`/execute?submissionId=${a.submission_id}`} className="block rounded-xl border border-slate-200 p-3 text-xs font-bold text-blue-700">{a.anon_label} · {a.status==='completed'?'평가 제출 완료':'실행하고 평가하기 →'}</a>)}
+      {view.outgoing.length===0&&<p className="text-xs text-slate-500">교사가 평가를 열면 친구의 알고리즘이 배정됩니다.</p>}
+      </div>
+    </section>
+    </div>
+    <section aria-label="원문과 수정 이력" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+    <details><summary className="cursor-pointer text-sm font-bold">원문과 수정 이력 ({view.versions.length}개)</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{view.versions.map(v=><article key={v.id} className="rounded-xl bg-slate-50 p-3 text-xs"><h3 className="font-bold">버전 {v.revision}{v.origin==='legacy'?' · 기존 자료 기준본':''}</h3><pre className="mt-2 whitespace-pre-wrap font-sans leading-6">{v.algorithm_text}</pre>{v.reason&&<p className="mt-2 text-blue-900">수정 이유: {v.reason}</p>}{v.ai_result&&<details className="mt-2"><summary>이 버전의 JEV 기록</summary><SavedAIRecord version={v}/></details>}</article>)}</div></details>
+    </section>
     {error&&<p role="alert" className="text-xs text-red-700">{error}</p>}
   </section>;
 }

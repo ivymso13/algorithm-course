@@ -13,6 +13,7 @@ export interface JevExampleTrial {
 }
 
 export interface JevResultCardProps {
+  embedded?: boolean;
   fixedCases?: boolean;
   roundTitle: string | null;
   submissionText: string | null;
@@ -27,15 +28,15 @@ export interface JevResultCardProps {
 
 /** Show the overall result once; open only the cases that need attention. */
 export function JevResultCard({
-  fixedCases=false, roundTitle, submissionText, totalTrials, correctCount,
+  embedded=false, fixedCases=false, roundTitle, submissionText, totalTrials, correctCount,
   incorrectCount, errorCount, createdAt, submissionVersion, examples,
 }: JevResultCardProps) {
   const headingId=useId();
   const failures=examples?.filter(ex=>!ex.executable||ex.correct===false)??[];
   const allCorrect=totalTrials>0&&correctCount===totalTrials;
-  return <section aria-labelledby={headingId} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+  return <section aria-labelledby={headingId} className={embedded ? "space-y-3" : "rounded-xl border border-slate-200 bg-white p-4 space-y-3"}>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 id={headingId} className="text-sm font-bold">JEV 실행 결과{roundTitle? ` · ${roundTitle}` : ""}</h3>
+      <h3 id={headingId} className={embedded ? "sr-only" : "text-sm font-bold"}>JEV 실행 결과{roundTitle? ` · ${roundTitle}` : ""}</h3>
       <span className="text-xs text-slate-500">{fixedCases?"고정 테스트":"테스트"} {totalTrials}개{submissionVersion!=null?` · 버전 ${submissionVersion}`:""}</span>
     </div>
     <div className={`rounded-lg p-3 text-sm ${allCorrect?"bg-emerald-50 text-emerald-900":"bg-amber-50 text-amber-900"}`}>
