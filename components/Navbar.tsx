@@ -5,6 +5,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { StudentPreviewBanner } from "./write/StudentPreviewBanner";
 
 interface NavbarProps {
   currentStudentKey?: string | null;
@@ -49,6 +50,7 @@ export function Navbar({ currentStudentKey, onLogout }: NavbarProps) {
 
   return (
     <>
+      {pathname.startsWith("/write") && currentStudentKey && <StudentPreviewBanner key={currentStudentKey} />}
       <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2.5 sm:px-6 sm:py-3 gap-2">
           {/* Brand Logo */}

@@ -930,6 +930,7 @@ export default function TeacherPage() {
             >
               🧩 체험하기
             </button>
+            <a href="/teacher/student-preview" className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">학생 흐름 체험</a>
           </div>
         </div>
 

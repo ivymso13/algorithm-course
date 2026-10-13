@@ -5,6 +5,7 @@ import { getOpenWarmupRound, upsertWarmupSubmission, WarmupStateError } from "@/
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { saveMaxboxSubmission } from "@/lib/jevAuto";
 import { saveResearchSubmission } from "@/lib/researchStore";
+import { openStudentPreviewReview } from "@/lib/studentPreview";
 
 export async function POST(request: Request) {
   const session = await requireStudentSession(request);
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
     };
     const submission = await saveResearchSubmission({ ...input, courseId: session.courseId, reason: typeof body.reason === "string" ? body.reason.slice(0,2000) : "" });
     if(resolveWarmupSandboxProblemType(round)==="maxbox") await saveMaxboxSubmission({...input,courseId:session.courseId});
+    await openStudentPreviewReview(session.courseId);
     return Response.json({
       ok: true,
       round: { id: round.id, title: round.title, prompt: round.prompt, status: round.status },
