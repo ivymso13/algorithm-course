@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { interpretEven, runEven, EVEN_CASES, type EvenInstruction } from "../lib/evenActivity";
+import { interpretEven, runEven, repeatStart, EVEN_CASES, type EvenInstruction } from "../lib/evenActivity";
 
 const plan: EvenInstruction[] = [
   { step: 1, text: "확인", action: "CHECK" },
@@ -8,6 +8,26 @@ const plan: EvenInstruction[] = [
   { step: 3, text: "이동하고 반복", action: "LOOP_MOVE", start: 1 },
   { step: 4, text: "출력", action: "OUTPUT" },
 ];
+test("repeat references accept both natural numbering orders and reject ambiguous targets", () => {
+  for (const text of ["오른쪽에 상자가 남아있다면 단계 1로 돌아간다.", "상자가 남으면 1단계로 돌아간다", "1번째 단계부터 다시 한다"]) assert.equal(repeatStart(text, 4), 1);
+  for (const text of ["단계 0으로 돌아간다", "단계 4로 돌아간다", "단계 1 또는 2단계로 돌아간다", "1.5단계로 돌아간다"]) assert.equal(repeatStart(text, 4), undefined);
+});
+test("reported instruction is interpreted; moving before testing remaining boxes skips the last box", async () => {
+  const answers = ["CHECK", "ADD_EVEN", "MOVE", "LOOP", "OUTPUT"];
+  const fetchImpl: typeof fetch = async () => Response.json({ answers: { action: { choice: answers.shift(), confidence: 0.95 } } });
+  const result = await interpretEven(["상자 확인하기", "만약 상자의 값이 짝수라면 메모지에 1 더하기", "오른쪽으로 이동하기", "오른쪽에 상자가 남아있다면 단계 1로 돌아간다.", "메모지의 수를 제출한다"], "test-only", fetchImpl);
+  assert.equal(result.interpretations.every(p => p.accepted), true);
+  assert.equal(result.plan[3].start, 1);
+  const trial = runEven(result.plan, [1,3,5,7,2]);
+  assert.equal(trial.executable, true); assert.equal(trial.output, 0); assert.equal(trial.expected, 1); assert.equal(trial.correct, false);
+});
+test("move and return phrasing preserves the combined conditional loop", async () => {
+  const answers = ["CHECK", "ADD_EVEN", "LOOP_MOVE", "OUTPUT"];
+  const fetchImpl: typeof fetch = async () => Response.json({ answers: { action: { choice: answers.shift(), confidence: 0.95 } } });
+  const result = await interpretEven(["상자 확인하기", "짝수라면 메모지에 1 더하기", "오른쪽에 상자가 남아있다면 이동하고 단계 1로 돌아간다.", "메모지의 수를 제출한다"], "test-only", fetchImpl);
+  assert.equal(result.plan.length, 4);
+  for (const numbers of EVEN_CASES) assert.equal(runEven(result.plan, numbers).correct, true);
+});
 test("even activity handles all odd, all even, edge-only even and zero", () => {
   for (const numbers of EVEN_CASES) assert.equal(runEven(plan, numbers).correct, true);
 });

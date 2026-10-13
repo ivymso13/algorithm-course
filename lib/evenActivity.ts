@@ -16,16 +16,16 @@ export interface EvenInterpretation { step: number; text: string; action: string
 export const EVEN_CASES = [[1,3,5,7,9], [2,4,6,8,10], [2,3,5,7,9], [1,3,5,7,2], [3,8,2,7,4], [0,1,2,3,4]];
 
 export function repeatStart(text: string, step: number): number | undefined {
-  const refs = [...text.matchAll(/(\d+)\s*(?:번째\s*)?단계/g)];
+  const refs = [...text.matchAll(/(?<![\d.])(?:(\d+)\s*(?:번째\s*)?단계|단계\s*(\d+)(?![\d.]))/g)];
   if (refs.length !== 1 || /\d+\s*(?:번|회)\s*반복/.test(text)) return;
-  const start = Number(refs[0][1]);
+  const start = Number(refs[0][1] ?? refs[0][2]);
   return start >= 1 && start < step ? start : undefined;
 }
 
 export async function interpretEven(steps: string[], key: string, fetchImpl: typeof fetch = fetch) {
   const plan: EvenInstruction[] = []; const interpretations: EvenInterpretation[] = [];
   for (let i = 0; i < steps.length; i++) {
-    const clauses = /반복|다시|\d+\s*단계부터/.test(steps[i]) ? [steps[i]] : splitCompoundStep(steps[i]);
+    const clauses = /반복|다시|돌아|되풀이|\d+\s*단계부터/.test(steps[i]) ? [steps[i]] : splitCompoundStep(steps[i]);
     for (const text of clauses) {
       const response = await fetchImpl("https://api.typesafe.ai/v1/systemone", {
         method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -42,8 +42,12 @@ export async function interpretEven(steps: string[], key: string, fetchImpl: typ
       let accepted = action !== "NONE" && answer.confidence >= 0.65;
       let reason = accepted ? undefined : "이 문장의 행동을 확실하게 해석하지 못했습니다. 대상과 행동을 구체적으로 써 주세요.";
       const start = action === "LOOP" || action === "LOOP_MOVE" ? repeatStart(text, i + 1) : undefined;
-      if ((action === "LOOP" || action === "LOOP_MOVE") && (!start || !/(?:상자|오른쪽)/.test(text) || !/(?:남아|남은|있으면|있다면|있는 동안|없을 때까지|마지막|끝)/.test(text))) {
-        accepted = false; reason = "반복 조건과 돌아갈 이전 단계 번호를 써 주세요. 예: 오른쪽에 상자가 남아 있으면 이동하고 1단계부터 다시 한다.";
+      if (action === "LOOP" || action === "LOOP_MOVE") {
+        if (!start) {
+          accepted = false; reason = "돌아갈 이전 단계 번호를 하나만 써 주세요. '1단계로 돌아간다'와 '단계 1로 돌아간다' 모두 사용할 수 있습니다.";
+        } else if (!/(?:상자|오른쪽)/.test(text) || !/(?:남아|남은|있으면|있다면|있는 동안|없을 때까지|마지막|끝)/.test(text)) {
+          accepted = false; reason = "반복할 조건을 써 주세요. 예: 오른쪽에 상자가 남아 있다면 단계 1로 돌아간다.";
+        }
       }
       interpretations.push({ step: i + 1, text, action, confidence: answer.confidence, accepted, reason });
       if (!accepted) return { plan: [], interpretations };
