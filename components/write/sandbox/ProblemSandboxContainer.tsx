@@ -12,6 +12,7 @@ import { PancakeSandbox } from "./PancakeSandbox";
 import { WoodcutSandbox } from "./WoodcutSandbox";
 import { ConstellationSandbox } from "./ConstellationSandbox";
 import { MaxBoxSandbox } from "./MaxBoxSandbox";
+import { TruckLoadSandbox } from "./TruckLoadSandbox";
 
 interface ProblemSandboxContainerProps {
   problemType: ProblemType;
@@ -66,6 +67,7 @@ export function ProblemSandboxContainer({
 
       {problemType === "cardflip" && <CardFlipSandbox onCopyHistory={onCopyHistory} />}
       {problemType === "evencount" && <EvenCountSandbox writingSupport embedded />}
+      {problemType === "truckload" && <TruckLoadSandbox onCopyHistory={onCopyHistory} />}
       {problemType === "maxbox" && (
         <MaxBoxSandbox key={problemType} onCopyHistory={onCopyHistory} presentationMode={presentationMode} embedded />
       )}

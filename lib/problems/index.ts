@@ -8,6 +8,7 @@ import { constellationProblem } from "./constellation";
 import { cardFlipProblem } from "./cardflip";
 import { evenCountProblem } from "./evencount";
 import { maxBoxProblem } from "./maxbox";
+import { truckLoadProblem } from "./truckload";
 import type { ActionOutcome, GeneratedInstance, ProblemModule } from "./types";
 
 export const PROBLEM_MODULES: Record<ProblemType, ProblemModule> = {
@@ -20,6 +21,7 @@ export const PROBLEM_MODULES: Record<ProblemType, ProblemModule> = {
   maxbox: maxBoxProblem,
   evencount: evenCountProblem,
   cardflip: cardFlipProblem,
+  truckload: truckLoadProblem,
 };
 
 export function getProblemModule(type: ProblemType): ProblemModule {

@@ -59,7 +59,7 @@ export async function researchView(courseId:number,roundId:number,studentKey:str
   const incoming=(await db.prepare(`SELECT a.*,v.revision FROM algorithm_review_assignments a JOIN algorithm_versions v ON v.id=a.version_id JOIN warmup_submissions s ON s.id=v.submission_id WHERE a.round_id=? AND v.course_id=? AND s.student_key=? ORDER BY a.id`).bind(roundId,courseId,studentKey).all()).results;
   const outgoing=(await db.prepare(`SELECT a.id,a.version_id,a.status,s.id AS submission_id,s.anon_label,v.algorithm_text,v.revision FROM algorithm_review_assignments a JOIN algorithm_versions v ON v.id=a.version_id JOIN warmup_submissions s ON s.id=v.submission_id WHERE a.round_id=? AND v.course_id=? AND a.reviewer_key=? ORDER BY a.id`).bind(roundId,courseId,studentKey).all()).results;
   const override=versions.length?await db.prepare("SELECT reason FROM algorithm_revision_overrides WHERE submission_id=?").bind(versions[0].submission_id).first():null;
-  return {roundStatus:round.status,versions,incoming:incoming.map(({reviewer_key:_key,...r})=>r),outgoing,canRevise:round.status==='open'&&(!!override||incoming.length>0&&incoming.every(r=>r.status==='completed')),overrideReason:override?.reason??null};
+  return {roundStatus:round.status,versions,incoming:incoming.map(row=>{const safe={...row};delete safe.reviewer_key;return safe;}),outgoing,canRevise:round.status==='open'&&(!!override||incoming.length>0&&incoming.every(r=>r.status==='completed')),overrideReason:override?.reason??null};
 }
 
 export async function completeResearchReview(courseId:number,submissionId:number,reviewerKey:string,feedback:string,executable:boolean,checked:unknown) {

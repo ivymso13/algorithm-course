@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTestApp,expectStatus,requestJson,STUDENTS } from "./support/jevHarness.mjs";
+import { createTestApp,expectStatus,STUDENTS } from "./support/jevHarness.mjs";
 
 test("all activities retain immutable first drafts, assigned feedback gates revision, notes and exports are persisted",async()=>{
  const app=await createTestApp();

@@ -1,7 +1,7 @@
 import { requireStudentSession, SESSION_ERROR_RESPONSE } from "@/lib/requireStudentSession";
 import { getAssignment } from "@/lib/roster";
 import { ValidationError, validateAlgorithmText } from "@/lib/validation";
-import { getOpenWarmupRound, upsertWarmupSubmission, WarmupStateError } from "@/lib/warmupStore";
+import { getOpenWarmupRound, WarmupStateError } from "@/lib/warmupStore";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { saveMaxboxSubmission } from "@/lib/jevAuto";
 import { saveResearchSubmission } from "@/lib/researchStore";

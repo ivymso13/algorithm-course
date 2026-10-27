@@ -7,7 +7,7 @@ type Assignment={id:number;version_id:number;submission_id:number;anon_label:str
 type View={versions:Version[];incoming:Review[];outgoing:Assignment[];canRevise:boolean;roundStatus:string;overrideReason:string|null};
 type AI={kind:string;notice?:string;interpretations:{step:number;text:string;action:string;confidence:number;accepted:boolean;reason?:string}[];trials:{numbers:number[];expected:number;output:number|null;correct:boolean;executable:boolean;failure?:string;trace?:{step:number;index:number;value:number|null;memo:number|null;output:number|null}[]}[]};
 function SavedAIRecord({version}:{version:Version}) {
- let result:AI|null=null;try{if(version.ai_result)result=JSON.parse(version.ai_result);}catch{}
+ let result:AI|null=null;try{if(version.ai_result)result=JSON.parse(version.ai_result);}catch{/* Invalid saved results are shown as unavailable. */}
  if(!result)return <p className="mt-2 text-slate-600">{version.ai_status==='failed'?version.ai_error:version.ai_status==='running'?'해석 진행 중':'아직 JEV 결과가 저장되지 않았습니다.'}</p>;
  return <div className="mt-2 space-y-3">
   {result.kind==='execution' && result.trials.length===0 && <p className="rounded-lg bg-amber-50 p-3 text-amber-900">고정 테스트 10개 검사 보류 · 해석을 확정하지 못한 단계가 있어 실행하지 않았습니다. 오답으로 채점하지 않습니다.</p>}
@@ -18,15 +18,19 @@ function SavedAIRecord({version}:{version:Version}) {
  </div>;
 }
 export function ResearchPanel({roundId}:{roundId:number}) {
-  const [view,setView]=useState<View|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[note,setNote]=useState(""),[agrees,setAgrees]=useState(true);
+  const [view,setView]=useState<View|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[draft,setDraft]=useState<{versionId:number;note:string;agrees:boolean}|null>(null);
   const load=useCallback(async()=>{const r=await fetch('/api/warmup/research?roundId='+roundId,{cache:'no-store'});if(!r.ok)throw new Error('활동 기록을 불러오지 못했습니다.');setView(await r.json() as View);},[roundId]);
   useEffect(()=>{let active=true;const read=()=>load().catch(e=>{if(active)setError(e.message);});void read();const timer=setInterval(read,5000);return()=>{active=false;clearInterval(timer);};},[roundId,load]);
   const latest=view?.versions.at(-1);
   const lastAttempt=useRef(0);
-  useEffect(()=>{setNote(latest?.note??"");setAgrees(latest?.agrees!==0);},[latest?.id]);
+  const note=draft?.versionId===latest?.id?draft?.note??"":latest?.note??"";
+  const agrees=draft?.versionId===latest?.id?draft?.agrees??true:latest?.agrees!==0;
   const execute=useCallback(async(id:number)=>{setBusy(true);setError("");try{const r=await fetch('/api/warmup/research-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:id})});if(!r.ok)throw new Error('JEV 요청을 시작하지 못했습니다.');await load();}catch(e){setError(e instanceof Error?e.message:'연결 오류');}finally{setBusy(false);}},[load]);
-  const needsRun=view?.roundStatus==='open'&&!!latest&&(latest.ai_status==='queued'||latest.ai_status===null||latest.ai_status==='running'&&!!latest.ai_lease_until&&latest.ai_lease_until<Date.now());
-  useEffect(()=>{if(latest&&needsRun&&Date.now()-lastAttempt.current>=4500){lastAttempt.current=Date.now();void execute(latest.id);}},[latest,needsRun,execute]);
+  useEffect(()=>{
+    const now=Date.now();
+    const needsRun=view?.roundStatus==='open'&&latest&&(latest.ai_status==='queued'||latest.ai_status===null||latest.ai_status==='running'&&!!latest.ai_lease_until&&latest.ai_lease_until<now);
+    if(latest&&needsRun&&now-lastAttempt.current>=4500){lastAttempt.current=now;void execute(latest.id);}
+  },[latest,view?.roundStatus,execute]);
   async function saveNote(){if(!latest)return;setError("");const r=await fetch('/api/warmup/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:latest.id,agrees,note})});const d=await r.json() as {error?:string};if(!r.ok)setError(d.error??'의견을 저장하지 못했습니다.');else await load();}
   if(!view)return <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-900">{error||'제출·피드백 기록을 불러오는 중…'}</p>;
   if(!latest)return null;
@@ -47,7 +51,7 @@ export function ResearchPanel({roundId}:{roundId:number}) {
       {ai.trials.length>0&&<JevResultCard embedded fixedCases roundTitle={null} submissionText={latest.algorithm_text} totalTrials={ai.trials.length} correctCount={ai.trials.filter(t=>t.correct).length} incorrectCount={ai.trials.filter(t=>t.executable&&!t.correct).length} errorCount={ai.trials.filter(t=>!t.executable).length} examples={ai.trials.map((t,i)=>({trialIndex:i,numbers:t.numbers,correct:t.executable?t.correct:null,executable:t.executable,failedStep:null,finalAnswer:t.output,correctAnswer:t.expected,failureReason:t.failure,trace:t.trace}))}/>}
       <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-bold">문장별 해석 확인 · {ai.interpretations.filter(p=>!p.accepted).length}단계 확인 필요</summary><div className="mt-3 space-y-3">
       {ai.interpretations.map((p,i)=><div key={i} className="grid gap-2 rounded-xl border border-slate-100 p-3 text-xs sm:grid-cols-2"><div><strong>{p.step}단계 · 내 문장</strong><p className="mt-1 leading-6">{p.text}</p></div><div><strong>{p.accepted?'JEV의 해석':'해석 후보 · 확인 필요'}</strong><p className="mt-1 leading-6">{p.action}</p>{p.reason&&<p className="text-amber-800">{p.reason}</p>}</div></div>)}
-      <div className="space-y-2 rounded-xl bg-blue-50 p-3 text-xs"><label className="flex gap-2"><input type="checkbox" disabled={view.roundStatus!=="open"} checked={agrees} onChange={e=>setAgrees(e.target.checked)}/>JEV의 해석이 내 의도와 같습니다</label><textarea disabled={view.roundStatus!=="open"} value={note} onChange={e=>setNote(e.target.value)} maxLength={2000} placeholder="어느 단계에서 의도와 다르게 읽었나요? 같은 경우에도 관찰한 점을 남길 수 있습니다." className="w-full rounded-lg border p-2"/><button disabled={view.roundStatus!=="open"} onClick={saveNote} className="rounded-lg bg-blue-600 px-3 py-2 font-bold text-white">해석 확인 기록하기</button>{latest.note!==null&&<p>저장된 의견: {latest.agrees?'의도와 일치':'의도와 불일치'} · {latest.note}</p>}</div>
+      <div className="space-y-2 rounded-xl bg-blue-50 p-3 text-xs"><label className="flex gap-2"><input type="checkbox" disabled={view.roundStatus!=="open"} checked={agrees} onChange={e=>setDraft({versionId:latest.id,note,agrees:e.target.checked})}/>JEV의 해석이 내 의도와 같습니다</label><textarea disabled={view.roundStatus!=="open"} value={note} onChange={e=>setDraft({versionId:latest.id,note:e.target.value,agrees})} maxLength={2000} placeholder="어느 단계에서 의도와 다르게 읽었나요? 같은 경우에도 관찰한 점을 남길 수 있습니다." className="w-full rounded-lg border p-2"/><button disabled={view.roundStatus!=="open"} onClick={saveNote} className="rounded-lg bg-blue-600 px-3 py-2 font-bold text-white">해석 확인 기록하기</button>{latest.note!==null&&<p>저장된 의견: {latest.agrees?'의도와 일치':'의도와 불일치'} · {latest.note}</p>}</div>
       </div></details>
     </>}
       </div>

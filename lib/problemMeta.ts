@@ -11,6 +11,7 @@ export const PROBLEM_LABELS: Record<ProblemType, string> = {
   woodcut: "나무 자르기 — 목표 목재량을 채우는 최대 절단 높이 찾기",
   constellation: "별자리 만들기 — 모든 별을 최소 비용으로 연결하기",
   maxbox: "가장 많은 사과가 든 상자 찾기",
+  truckload: "택배 트럭 — 필요한 트럭 수 구하기",
 };
 
 export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
@@ -23,6 +24,7 @@ export const PROBLEM_SHORT_NAMES: Record<ProblemType, string> = {
   woodcut: "나무 자르기",
   constellation: "별자리 만들기",
   maxbox: "상자 속 사과",
+  truckload: "택배 트럭",
 };
 
 export const PROBLEM_ICONS: Record<ProblemType, string> = {
@@ -35,6 +37,7 @@ export const PROBLEM_ICONS: Record<ProblemType, string> = {
   woodcut: "🪚",
   constellation: "✨",
   maxbox: "🍎",
+  truckload: "🚚",
 };
 
 export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
@@ -53,6 +56,7 @@ export const PROBLEM_DESCRIPTIONS: Record<ProblemType, string> = {
     "좌표평면 위에 별 N개가 흩어져 있습니다(모든 별의 좌표가 처음부터 공개되어 있습니다). 별과 별 사이를 선(전선)으로 이어 모든 별이 서로 연결되도록 만들되, 이미 (간접적으로라도) 연결된 두 별을 또 잇는 것은 낭비이므로 허용되지 않습니다. 사용한 모든 선의 길이 합이 최소가 되도록 별들을 연결하는 알고리즘을 쓰세요.",
   maxbox:
     "상자 N개가 일렬로 놓여 있고, 각 상자에는 서로 다른 개수의 사과가 들어 있습니다. 상자를 하나씩 열어보기 전까지는 안에 사과가 몇 개인지 알 수 없습니다. 상자를 순서대로 열어보면서, 지금까지 열어본 것 중 사과가 가장 많이 든 상자의 개수를 계속 기록해 두었다가, 모든 상자를 다 열어본 뒤 그 최댓값을 답으로 내는 알고리즘을 쓰세요.",
+  truckload: "상자가 왼쪽부터 순서대로 놓여 있고 트럭 한 대에는 10kg까지 실을 수 있습니다. 상자를 순서대로 싣다가, 다음 상자를 실으면 10kg을 넘게 되면 그 트럭을 출발시키고 새 트럭에 이어서 싣습니다. 모든 상자를 보내려면 트럭이 모두 몇 대 필요한지 구하세요.",
 };
 
 export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
@@ -91,6 +95,7 @@ export const PROBLEM_ALLOWED_ACTIONS: Record<ProblemType, string[]> = {
     "지금까지 확인한 것 중 최댓값을 메모지에 기록하기",
     "최종 답으로 사과 개수(최댓값) 입력",
   ],
+  truckload: ["상자를 열어 무게 확인하기", "지금 트럭에 상자 싣기", "지금 트럭을 출발시키고 새 트럭 부르기", "오른쪽 상자로 이동하기", "트럭 수 제출하기"],
 };
 
 export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
@@ -131,6 +136,7 @@ export const PROBLEM_WRITING_TIPS: Record<ProblemType, string[]> = {
     "처음 상자를 열었을 때(비교 대상이 아직 없을 때) 어떻게 시작하는지 명확히 적으세요.",
     "모든 상자를 다 확인했는지 판단하는 종료 조건을 적으세요.",
   ],
+  truckload: ["상자를 싣기 전에 10kg을 넘는지 언제 확인할지 쓰세요.", "트럭을 출발시킨 뒤 그 상자를 어디에 싣는지 적어 주세요.", "처음 트럭과 마지막 트럭을 어떻게 세는지 점검하세요."],
 };
 
 export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
@@ -143,6 +149,7 @@ export const PROBLEM_COMMON_PITFALLS: Record<ProblemType, string> = {
   woodcut: "목재량이 목표와 정확히 같을 때 절단 높이를 더 올릴 수 있는지 확인 누락, 상한/하한 갱신 방향 혼동, 종료 조건 누락",
   constellation: "가장 짧은 선부터 순서대로 고려하지 않고 임의 순서로 연결, 이미 연결된 그룹인지 확인하는 기준 누락, 별이 N개일 때 필요한 선의 개수(N-1개)를 명시하지 않음",
   maxbox: "첫 상자를 열었을 때 비교 없이 바로 최댓값으로 기록하는 시작 조건 누락, 매번 비교하지 않고 가끔만 비교하는 논리 누락, 모든 상자를 다 확인했는지 종료 조건 누락",
+  truckload: "마지막 트럭을 세지 않음, 넘치는 상자를 그대로 실음, 출발한 뒤 그 상자를 새 트럭에 싣지 않음, 마지막 상자 누락",
 };
 
 export const WRITING_GUIDANCE =

@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardFlipSandbox } from "@/components/write/sandbox/CardFlipSandbox";
+import { TruckLoadSandbox } from "@/components/write/sandbox/TruckLoadSandbox";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -420,6 +421,7 @@ export default function ExecutePage() {
         )}
 
         {submission.problemId==="card-flip" && <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs"><h2 className="mb-3 text-sm font-bold">친구의 알고리즘 직접 실행하기</h2><CardFlipSandbox peerMode /></section>}
+        {submission.problemId==="truck-loading" && <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs"><h2 className="mb-3 text-sm font-bold">친구의 알고리즘 직접 실행하기</h2><TruckLoadSandbox peerMode /></section>}
 
         {/* Step-by-Step Checklist */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">

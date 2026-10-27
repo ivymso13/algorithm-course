@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { JevRoundJob } from "@/components/jev/JevRoundJob";
-import { JevAutoRoundStatus } from "@/components/jev/JevAutoRoundStatus";
 import { TeacherResearchRound } from "@/components/write/TeacherResearchRound";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { Navbar } from "@/components/Navbar";
