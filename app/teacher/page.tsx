@@ -174,7 +174,7 @@ export default function TeacherPage() {
 
   const loadWarmupRounds = useCallback(async () => {
     try {
-      const res = await fetch("/api/teacher/warmup/rounds", { headers: authHeaders() });
+      const res = await fetch("/api/teacher/warmup/rounds", { headers: authHeaders(), cache: "no-store" });
       const data = (await res.json()) as {
         rounds?: WarmupRoundSummary[];
         problems?: WarmupProblem[];
@@ -1870,10 +1870,15 @@ export default function TeacherPage() {
                 </a>
               </div>
 
-              <a href="/teacher/student-preview?problemId=candy-sharing" className="block rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm font-bold text-indigo-900">🍬 사탕 나누기 체험 → <span className="text-xs font-normal">문제를 읽고 알고리즘 작성 · JEV 고정 10사례 채점</span></a>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {(
                   [
+                    {
+                      previewId: "candy-sharing" as StudentPreviewProblemId,
+                      sandboxType: null,
+                      badge: "JEV 고정 10사례 · 반복형·공식형",
+                      desc: "조작 도구 없이 문제를 읽고 사탕을 나누어 줄 수 있는 최대 친구 수를 구하는 알고리즘을 작성합니다.",
+                    },
                     {
                       previewId: "card-flip" as StudentPreviewProblemId,
                       sandboxType: "cardflip" as ProblemType,
@@ -1909,9 +1914,9 @@ export default function TeacherPage() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="flex items-center gap-2 text-sm font-bold text-slate-900">
                             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-base shadow-2xs border border-slate-200/80">
-                              {PROBLEM_ICONS[item.sandboxType]}
+                              {item.sandboxType ? PROBLEM_ICONS[item.sandboxType] : "🍬"}
                             </span>
-                            <span>{PROBLEM_SHORT_NAMES[item.sandboxType]}</span>
+                            <span>{item.sandboxType ? PROBLEM_SHORT_NAMES[item.sandboxType] : "사탕 나누기"}</span>
                           </span>
                           <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-800 border border-indigo-200/60">
                             {item.badge}
@@ -1929,9 +1934,10 @@ export default function TeacherPage() {
                         >
                           {isStarting ? "체험 준비 중…" : "학생 체험 시작 ➔"}
                         </button>
+                        {item.sandboxType && (
                         <button
                           type="button"
-                          onClick={() => setSelectedGroupType(item.sandboxType)}
+                          onClick={() => { if (item.sandboxType) setSelectedGroupType(item.sandboxType); }}
                           className={`rounded-lg border px-2.5 py-2 text-xs font-semibold transition cursor-pointer ${
                             isSelectedSandbox
                               ? "border-blue-600 bg-white text-blue-700"
@@ -1940,6 +1946,7 @@ export default function TeacherPage() {
                         >
                           {isSelectedSandbox ? "✓ 아래에 표시됨" : "실습 도구 보기"}
                         </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -2018,6 +2025,8 @@ export default function TeacherPage() {
                   );
                 })}
               </div>
+
+              <a href="/teacher/student-preview?problemId=candy-sharing" className="flex items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-900"><span>🍬 사탕 나누기</span><span className="text-xs">문제·알고리즘 작성 체험 →</span></a>
 
               {/* Selected Problem Summary Bar */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
