@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoundInfo, MySubmission } from "./types";
 
-// The 4-step flow is split across separate routes, each mounting its own
-// `useWarmupSession()` instance — without this module-level guard, the
-// "이전 세션이 복구되었습니다" notice (meant for a real page reload/revisit)
-// would fire again on every ordinary navigation between /write,
-// /write/algorithm, and /write/explore. A plain module variable is enough:
-// it resets on a real reload/new tab, but survives client-side navigation
-// within the same page session.
+// Native links deliberately reload the document between activity routes.
+// A normal navigation with an existing session is not a session recovery.
 let hasShownSessionRestoredNotice = false;
 
 export function useWarmupSession() {
@@ -23,7 +18,7 @@ export function useWarmupSession() {
   const [loading, setLoading] = useState(false);
 
   const loadRound = useCallback(async (): Promise<{ ok: boolean; hadSubmission: boolean }> => {
-    const res = await fetch("/api/warmup/round");
+    const res = await fetch("/api/warmup/round", { cache: "no-store" });
     if (res.status === 401) {
       setLoggedIn(false);
       return { ok: false, hadSubmission: false };
@@ -47,7 +42,7 @@ export function useWarmupSession() {
       loadRound()
         .then(({ ok, hadSubmission }) => {
           if (ignore) return;
-          if (ok && hadSubmission && !hasShownSessionRestoredNotice) {
+          if (ok && hadSubmission && !hasShownSessionRestoredNotice && (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload") {
             hasShownSessionRestoredNotice = true;
             setSessionRestoredNotice(true);
             window.setTimeout(() => setSessionRestoredNotice(false), 4000);
