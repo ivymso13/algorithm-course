@@ -9,6 +9,7 @@ import { getWarmupProblem } from "@/lib/warmupProblems";
 type PreviewActivityMeta = {
   id: StudentPreviewProblemId;
   sandboxType: ProblemType | null;
+  icon?: string;
   shortTitle: string;
   subtitle: string;
   jevBadge: string;
@@ -16,7 +17,8 @@ type PreviewActivityMeta = {
 };
 
 const PREVIEW_ACTIVITIES: readonly PreviewActivityMeta[] = [
-  { id: "candy-sharing", sandboxType: null, shortTitle: "사탕 나누기", subtitle: "문제를 읽고 최대 친구 수를 구하는 자연어 알고리즘 작성", jevBadge: "JEV 반복형·공식형 · 고정 10사례", peerBadge: "단계 체크 · 동료 피드백" },
+  { id: "candy-sharing", sandboxType: null, icon: "🍬", shortTitle: "사탕 나누기", subtitle: "문제를 읽고 최대 친구 수를 구하는 자연어 알고리즘 작성", jevBadge: "JEV 반복형·공식형 · 고정 10사례", peerBadge: "단계 체크 · 동료 피드백" },
+  { id: "coin-change", sandboxType: null, icon: "🪙", shortTitle: "거스름돈", subtitle: "문제를 읽고 500·100·50·10원 동전을 각각 몇 개 줄지 구하는 자연어 알고리즘 작성", jevBadge: "JEV 몫·나머지형·반복형 · 고정 10사례 · 동전별 비교", peerBadge: "단계 체크 · 동료 피드백" },
   {
     id: "card-flip",
     sandboxType: "cardflip",
@@ -198,7 +200,7 @@ export default function StudentPreviewPage() {
                       <th scope="row" className="whitespace-nowrap px-4 py-4 align-top">
                         <label htmlFor={radioId} className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-900">
                           <input id={radioId} type="radio" name="problemId" value={act.id} checked={selected} onChange={() => setProblemId(act.id)} className="h-4 w-4 accent-blue-600" />
-                          <span aria-hidden="true" className="text-lg">{act.sandboxType ? PROBLEM_ICONS[act.sandboxType] : "🍬"}</span>{act.shortTitle}
+                          <span aria-hidden="true" className="text-lg">{act.sandboxType ? PROBLEM_ICONS[act.sandboxType] : act.icon}</span>{act.shortTitle}
                         </label>
                       </th>
                       <td className="min-w-[230px] px-4 py-4 align-top text-xs leading-6 text-slate-600">{act.subtitle}</td>
@@ -216,7 +218,7 @@ export default function StudentPreviewPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-base" aria-hidden="true">
-                      {selectedMeta.sandboxType ? PROBLEM_ICONS[selectedMeta.sandboxType] : "🍬"}
+                      {selectedMeta.sandboxType ? PROBLEM_ICONS[selectedMeta.sandboxType] : selectedMeta.icon}
                     </span>
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900">
                       {selectedProblem.title}

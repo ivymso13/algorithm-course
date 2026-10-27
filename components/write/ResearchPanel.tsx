@@ -57,13 +57,15 @@ type AI = {
   trials: {
     numbers: number[];
     inputLabel?: string;
-    expected: number;
-    output: number | null;
+    answerLabels?: string[];
+    expected: number | number[];
+    output: number | null | (number | null)[];
     correct: boolean;
     executable: boolean;
     failure?: string;
     trace?: {
       step: number;
+      detail?: string;
       sum?: number | null;
       next?: number | null;
       remaining?: number | null;
@@ -141,6 +143,7 @@ function SavedAIRecord({ version }: { version: Version }) {
             trialIndex: i,
             numbers: t.numbers,
             inputLabel: t.inputLabel,
+            answerLabels: t.answerLabels,
             correct: t.executable ? t.correct : null,
             executable: t.executable,
             failedStep: null,
@@ -393,6 +396,7 @@ export function ResearchPanel({
                   trialIndex: i,
                   numbers: t.numbers,
             inputLabel: t.inputLabel,
+                  answerLabels: t.answerLabels,
                   correct: t.executable ? t.correct : null,
                   executable: t.executable,
                   failedStep: null,

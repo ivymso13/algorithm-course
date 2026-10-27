@@ -7,10 +7,13 @@ export interface JevExampleTrial {
   correct: boolean | null;
   executable: boolean;
   failedStep: number | null;
-  finalAnswer: number | null;
-  correctAnswer: number;
+  /** Several answers per case (e.g. one count per coin), labeled by `answerLabels`. */
+  finalAnswer: number | null | (number | null)[];
+  correctAnswer: number | number[];
+  answerLabels?: string[];
   failureReason?: string;
   trace?: {
+    detail?: string;
     sum?: number | null;
     next?: number | null;
     remaining?: number | null;
@@ -34,6 +37,39 @@ export interface JevResultCardProps {
   createdAt?: string;
   submissionVersion?: number | null;
   examples?: JevExampleTrial[];
+}
+
+function formatAnswer(value: number | null | (number | null)[], labels?: string[]) {
+  if (!Array.isArray(value)) return value ?? "없음";
+  return value.map((v, i) => `${labels?.[i] ?? i + 1} ${v ?? "없음"}`).join(" · ");
+}
+
+/** Per-label comparison so a case with several answers shows which one differs. */
+function AnswerTable({ ex }: { ex: JevExampleTrial }) {
+  const expected = ex.correctAnswer as number[];
+  const submitted = Array.isArray(ex.finalAnswer) ? ex.finalAnswer : null;
+  return (
+    <table className="w-full max-w-sm text-left text-xs">
+      <caption className="sr-only">항목별 제출 값과 정답</caption>
+      <thead className="text-[11px] text-slate-500">
+        <tr><th scope="col" className="py-1 pr-3 font-semibold">항목</th><th scope="col" className="py-1 pr-3 font-semibold">제출</th><th scope="col" className="py-1 pr-3 font-semibold">정답</th><th scope="col" className="py-1 font-semibold">비교</th></tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {expected.map((value, i) => {
+          const got = submitted?.[i] ?? null;
+          const same = got === value;
+          return (
+            <tr key={i}>
+              <th scope="row" className="py-1 pr-3 font-semibold text-slate-700">{ex.answerLabels?.[i] ?? i + 1}</th>
+              <td className="py-1 pr-3">{got ?? "없음"}</td>
+              <td className="py-1 pr-3 text-blue-700">{value}</td>
+              <td className={`py-1 font-semibold ${same ? "text-emerald-700" : "text-rose-700"}`}>{same ? "일치" : "다름"}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 /** Show the overall result once; open only the cases that need attention. */
@@ -132,23 +168,28 @@ export function JevResultCard({
                     </span>
                   </span>
                   <span className="text-[11px] font-normal text-slate-500">
-                    제출: <strong className="text-slate-800">{ex.finalAnswer ?? "없음"}</strong> · 정답:{" "}
-                    <strong className="text-blue-700">{ex.correctAnswer}</strong>
+                    제출: <strong className="text-slate-800">{formatAnswer(ex.finalAnswer, ex.answerLabels)}</strong> · 정답:{" "}
+                    <strong className="text-blue-700">{formatAnswer(ex.correctAnswer, ex.answerLabels)}</strong>
                   </span>
                 </summary>
 
                 <div className="mt-3 space-y-2.5 border-t border-slate-200/80 pt-2.5">
+                  {Array.isArray(ex.correctAnswer) && <AnswerTable ex={ex} />}
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
-                    <span>
-                      제출한 값: <strong>{ex.finalAnswer ?? "없음"}</strong>
-                    </span>
-                    <span>·</span>
-                    <span>
-                      정답: <strong className="text-blue-700">{ex.correctAnswer}</strong>
-                    </span>
+                    {!Array.isArray(ex.correctAnswer) && (
+                      <>
+                        <span>
+                          제출한 값: <strong>{formatAnswer(ex.finalAnswer)}</strong>
+                        </span>
+                        <span>·</span>
+                        <span>
+                          정답: <strong className="text-blue-700">{ex.correctAnswer}</strong>
+                        </span>
+                      </>
+                    )}
                     {ex.failedStep != null && (
                       <>
-                        <span>·</span>
+                        {!Array.isArray(ex.correctAnswer) && <span>·</span>}
                         <span className="font-semibold text-amber-900">
                           {ex.failedStep}단계에서 중단
                         </span>
@@ -170,8 +211,8 @@ export function JevResultCard({
                       <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 font-mono text-[11px] text-slate-600">
                         {ex.trace.map((step, i) => (
                           <p key={i} className="py-1.5">
-                            {ex.inputLabel ? `${step.step}단계 · 친구 수 ${step.memo ?? "미설정"} · 누적 합 ${step.sum ?? "미설정"} · 다음 수 ${step.next ?? "미설정"} · 남은 사탕 ${step.remaining ?? "미설정"}` : `${step.step}단계 · 위치 ${step.index + 1} · 확인 ${step.value ?? "미확인"} · 메모 ${step.memo ?? "없음"}`}
-                            {step.output != null ? ` · 출력 ${step.output}` : ""}
+                            {step.detail ? step.detail : ex.inputLabel ? `${step.step}단계 · 친구 수 ${step.memo ?? "미설정"} · 누적 합 ${step.sum ?? "미설정"} · 다음 수 ${step.next ?? "미설정"} · 남은 사탕 ${step.remaining ?? "미설정"}` : `${step.step}단계 · 위치 ${step.index + 1} · 확인 ${step.value ?? "미확인"} · 메모 ${step.memo ?? "없음"}`}
+                            {!step.detail && step.output != null ? ` · 출력 ${step.output}` : ""}
                           </p>
                         ))}
                       </div>

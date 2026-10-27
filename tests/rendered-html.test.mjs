@@ -90,6 +90,7 @@ test("server-renders the teacher student-preview page", async () => {
   assert.match(html, /카드 뒤집기/);
   assert.match(html, /택배 트럭/);
   assert.match(html, /사탕 나누기/);
+  assert.match(html, /거스름돈/);
 });
 
 for (const problem of ["woodcut", "constellation", "maxbox"]) {

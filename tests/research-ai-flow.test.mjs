@@ -49,7 +49,7 @@ test("every registered activity uses the same durable first submission and JEV f
  const app=await createTestApp({fake});
  try{
   const problems=(await expectStatus(app,'/api/teacher/warmup/rounds',{teacher:true},200)).data.problems;
-  assert.equal(problems.length,11);
+  assert.equal(problems.length,12);
   const login=await expectStatus(app,'/api/student/login',{method:'POST',body:{...STUDENTS[0],consent:true}},200),cookie=login.response.headers.get('set-cookie').split(';')[0];
   for(const problem of problems){
     const created=await expectStatus(app,'/api/teacher/warmup/rounds',{method:'POST',teacher:true,body:{problemId:problem.id}},200),roundId=created.data.round.id;
@@ -59,7 +59,7 @@ test("every registered activity uses the same durable first submission and JEV f
     await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:before.versions[0].id}},200);
     const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
     assert.equal(after.versions[0].ai_status,'completed',problem.id);
-    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count','truck-loading','candy-sharing'].includes(problem.id)?'execution':'interpretation');
+    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count','truck-loading','candy-sharing','coin-change'].includes(problem.id)?'execution':'interpretation');
     assert.equal(after.canRevise,false);
     await expectStatus(app,'/api/teacher/warmup/close',{method:'POST',teacher:true,body:{roundId}},200);
   }
@@ -117,6 +117,38 @@ test('natural candy allocation keeps conditional scope and never inserts an omit
   await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:versions.at(-1).id}},200);
   const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
   assert.ok(JSON.parse(after.versions.at(-1).ai_result).trials.every(t=>t.correct));
+  assert.equal(after.versions[0].algorithm_text,original);assert.deepEqual(JSON.parse(after.versions[0].ai_result),result);
+ }finally{await app.dispose();}
+});
+
+test('coin change grades four per-coin counts from natural sentences and withholds unresolved revisions',async()=>{
+ const fake=createFakeJev();
+ const coinOf=text=>{const m=text.match(/(500|100|50|10)으로/);return m?'C'+m[1]:'NONE';};
+ fake.answer=async(request)=>{const body=await request.json();assert.deepEqual(Object.keys(body.questions),['action','coin','source','target']);const text=JSON.parse(body.state.match(/분류할 문장: (.+)$/)[1]);
+  const r=text.includes('출력')?{action:'OUTPUT_COUNTS'}:text.includes('나머지')?{action:'DIVMOD',coin:coinOf(text),source:'AMOUNT',target:'AMOUNT'}:text.includes('몫')?{action:'DIV',coin:coinOf(text),source:'AMOUNT'}:{action:'NONE'};
+  const c=0.95;return MfResponse.json({answers:{action:{choice:r.action,confidence:c},coin:{choice:r.coin??'NONE',confidence:c},source:{choice:r.source??'NONE',confidence:c},target:{choice:r.target??'NONE',confidence:c}}});};
+ const app=await createTestApp({fake});
+ try{
+  const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'coin-change'}},200);
+  const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
+  assert.equal(round.problemType,null);assert.match(round.prompt,/10원 단위/);assert.match(round.prompt,/0원 이상 10,000원 이하/);
+  const original='1. 받을 돈 x를 500으로 나눈 몫은 a, 나머지는 x로 한다.\n2. x를 100으로 나눈 몫은 b, 나머지는 x로 한다.\n3. x를 50으로 나눈 몫은 c, 나머지는 x로 한다.\n4. x를 10으로 나눈 몫을 d라고 한다.\n5. a, b, c, d를 출력한다.';
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:original}},200);
+  const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:view.versions[0].id}},200);
+  const result=JSON.parse((await expectStatus(app,'/api/warmup/research',{cookie},200)).data.versions[0].ai_result);
+  assert.equal(result.caseSetVersion,'coin-fixed-10-v1');assert.equal(result.promptVersion,'coin-program-v1');assert.equal(fake.calls,5);
+  assert.ok(result.interpretations.every(p=>p.accepted));assert.match(result.interpretations[0].action,/동전: 500원/);
+  assert.equal(result.trials.length,10);assert.ok(result.trials.every(t=>t.correct));
+  const zero=result.trials.find(t=>t.numbers[0]===0);assert.deepEqual(zero.expected,[0,0,0,0]);assert.deepEqual(zero.output,[0,0,0,0]);
+  assert.deepEqual(result.trials.find(t=>t.numbers[0]===990).output,[1,4,1,4]);assert.deepEqual(result.trials[0].answerLabels,['500원','100원','50원','10원']);
+  await expectStatus(app,'/api/warmup/student-preview',{method:'POST',cookie},200);
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 거스름돈을 동전으로 바꾼다.\n2. 동전 개수를 출력한다.',reason:'짧게 줄여 보고 검사 보류 여부를 확인'}},200);
+  const latest=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data.versions.at(-1);
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:latest.id}},200);
+  const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  const withheld=JSON.parse(after.versions.at(-1).ai_result);assert.equal(withheld.trials.length,0);assert.equal(withheld.interpretations[0].accepted,false);assert.match(withheld.interpretations[0].reason,/보류/);
   assert.equal(after.versions[0].algorithm_text,original);assert.deepEqual(JSON.parse(after.versions[0].ai_result),result);
  }finally{await app.dispose();}
 });
