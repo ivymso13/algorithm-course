@@ -9,6 +9,39 @@ const PREFIX = "STUDENT-PREVIEW-";
 export async function isStudentPreview(courseId:number) {
   return (await getCourseById(courseId))?.code.startsWith(PREFIX) ?? false;
 }
+export type StudentPreviewStatus = {
+  preview: boolean;
+  problemId?: string | null;
+  roundTitle?: string | null;
+  hasSubmitted?: boolean;
+  revision?: number;
+  aiStatus?: string | null;
+  incomingCompleted?: number;
+  incomingTotal?: number;
+  outgoingCompleted?: number;
+  outgoingTotal?: number;
+  canRevise?: boolean;
+};
+export async function getStudentPreviewStatus(courseId: number, studentKey: string): Promise<StudentPreviewStatus> {
+  if (!(await isStudentPreview(courseId))) return { preview: false };
+  const round = await getOpenWarmupRound(courseId);
+  if (!round) return { preview: true, problemId: null, roundTitle: null, hasSubmitted: false, revision: 0, aiStatus: null, incomingCompleted: 0, incomingTotal: 0, outgoingCompleted: 0, outgoingTotal: 0, canRevise: false };
+  const view = await researchView(courseId, round.id, studentKey);
+  const latest = view.versions.at(-1);
+  return {
+    preview: true,
+    problemId: round.problemId,
+    roundTitle: round.title,
+    hasSubmitted: view.versions.length > 0,
+    revision: Number(latest?.revision ?? 0),
+    aiStatus: typeof latest?.ai_status === "string" ? latest.ai_status : null,
+    incomingCompleted: view.incoming.filter((r) => r.status === "completed").length,
+    incomingTotal: view.incoming.length,
+    outgoingCompleted: view.outgoing.filter((a) => a.status === "completed").length,
+    outgoingTotal: view.outgoing.length,
+    canRevise: view.canRevise,
+  };
+}
 export type StudentPreviewProblemId = "even-count" | "card-flip" | "truck-loading";
 export const STUDENT_PREVIEW_PROBLEM_IDS: readonly StudentPreviewProblemId[] = ["even-count", "card-flip", "truck-loading"];
 const TRUCK_SAMPLES = ["1. 트럭 수를 1로 한다.\n2. 상자의 무게를 확인한다.\n3. 상자를 트럭에 싣는다.\n4. 오른쪽으로 이동한다.\n5. 상자가 남으면 2단계로 돌아간다.\n6. 트럭 수를 제출한다.", "1. 트럭 수에 1을 더한다.\n2. 현재 상자의 무게를 확인한다.\n3. 이 상자를 실으면 10kg을 넘으면 트럭을 출발시키고 새 트럭을 부른다.\n4. 상자를 지금 트럭에 싣는다.\n5. 오른쪽에 상자가 남아 있으면 오른쪽으로 이동하고 2단계부터 반복한다.\n6. 트럭 수를 제출한다."];

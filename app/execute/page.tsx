@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardFlipSandbox } from "@/components/write/sandbox/CardFlipSandbox";
 import { TruckLoadSandbox } from "@/components/write/sandbox/TruckLoadSandbox";
+import { EvenCountSandbox } from "@/components/write/EvenCountActivity";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
 import { splitAlgorithmIntoSteps } from "@/lib/warmupSteps";
@@ -420,8 +421,33 @@ export default function ExecutePage() {
           </div>
         )}
 
-        {submission.problemId==="card-flip" && <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs"><h2 className="mb-3 text-sm font-bold">친구의 알고리즘 직접 실행하기</h2><CardFlipSandbox peerMode /></section>}
-        {submission.problemId==="truck-loading" && <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs"><h2 className="mb-3 text-sm font-bold">친구의 알고리즘 직접 실행하기</h2><TruckLoadSandbox peerMode /></section>}
+        {submission.problemId === "card-flip" && (
+          <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="border-b border-slate-100 pb-2">
+              <h2 className="text-sm font-bold text-slate-900">친구의 알고리즘 직접 실행하기</h2>
+              <p className="text-[11px] text-slate-500">아래 단계별 문장을 읽으며 카드를 직접 조작해 보세요.</p>
+            </div>
+            <CardFlipSandbox peerMode />
+          </section>
+        )}
+        {submission.problemId === "even-count" && (
+          <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="border-b border-slate-100 pb-2">
+              <h2 className="text-sm font-bold text-slate-900">친구의 알고리즘 직접 실행하기</h2>
+              <p className="text-[11px] text-slate-500">친구가 작성한 문장만 따라 버튼을 누르며 실행 가능 여부를 점검하세요.</p>
+            </div>
+            <EvenCountSandbox embedded />
+          </section>
+        )}
+        {submission.problemId === "truck-loading" && (
+          <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="border-b border-slate-100 pb-2">
+              <h2 className="text-sm font-bold text-slate-900">친구의 알고리즘 직접 실행하기</h2>
+              <p className="text-[11px] text-slate-500">아래 단계별 문장을 읽으며 상자와 트럭을 직접 조작해 보세요.</p>
+            </div>
+            <TruckLoadSandbox peerMode />
+          </section>
+        )}
 
         {/* Step-by-Step Checklist */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
