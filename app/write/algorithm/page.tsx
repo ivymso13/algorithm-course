@@ -6,7 +6,7 @@
  * navigation, the destination page's client components did not reliably
  * hydrate, leaving buttons unresponsive. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
@@ -43,42 +43,39 @@ export default function AlgorithmWritePage() {
   const [reason,setReason] = useState("");
   const [showFullPrompt, setShowFullPrompt] = useState(false);
 
-  // Initialize steps from a pending draft, falling back to the last saved
-  // submission. A non-empty draft always wins: submitting always clears the
-  // draft key immediately, so a draft can only be non-empty here because the
-  // student typed further edits or copied sandbox practice notes in from
-  // /write after already submitting — both represent newer intent than the
-  // saved copy and would otherwise be silently discarded.
+  const initializedContext = useRef<string | null>(null);
+  const [readyContext, setReadyContext] = useState<string | null>(null);
+  const roundId = round?.id ?? null;
+  const contextKey = roundId !== null && studentLabel ? JSON.stringify([studentLabel, roundId]) : null;
+  const savedSubmissionText = mySubmission?.algorithmText ?? "";
+
+  // Polling updates round/submission objects every 3.5s. Restore the editor
+  // only when entering a different student/round, never on a poll response.
   useEffect(() => {
-    if (!round) return;
-
-    let ignore = false;
+    if (!contextKey || roundId === null || initializedContext.current === contextKey) return;
+    let noticeTimer: number | undefined;
     const timer = window.setTimeout(() => {
-      if (ignore) return;
-
-      const draftKey = `algo_warmup_draft_${round.id}`;
+      if (initializedContext.current === contextKey) return;
+      let text = savedSubmissionText;
+      let restored = false;
       try {
-        const saved = sessionStorage.getItem(draftKey);
-        if (saved && saved.trim()) {
-          setSteps(ensureAtLeastOneStep(parseAlgorithmSteps(saved)));
-          setDraftRestoredNotice(true);
-          window.setTimeout(() => setDraftRestoredNotice(false), 4000);
-          return;
-        }
-      } catch {
-        // ignore storage errors
-      }
-
-      if (mySubmission) {
-        setSteps(ensureAtLeastOneStep(parseAlgorithmSteps(mySubmission.algorithmText)));
-      }
+        const saved = sessionStorage.getItem(`algo_warmup_draft_${roundId}`);
+        if (saved?.trim()) { text = saved; restored = true; }
+      } catch { /* Storage is optional; use the saved submission. */ }
+      initializedContext.current = contextKey;
+      setSteps(ensureAtLeastOneStep(parseAlgorithmSteps(text)));
+      setReason("");
+      setSubmitError(null);
+      setSubmitAttempted(false);
+      setDraftRestoredNotice(restored);
+      setReadyContext(contextKey);
+      if (restored) noticeTimer = window.setTimeout(() => setDraftRestoredNotice(false), 4000);
     }, 0);
-
     return () => {
-      ignore = true;
       window.clearTimeout(timer);
+      if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
     };
-  }, [round, mySubmission]);
+  }, [contextKey, roundId, savedSubmissionText]);
 
   function applyStepsChange(nextSteps: string[]) {
     setSteps(nextSteps);
@@ -119,7 +116,7 @@ export default function AlgorithmWritePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!round) return;
+    if (!round || readyContext !== contextKey) return;
     setSubmitError(null);
     setSubmitAttempted(true);
 
@@ -200,7 +197,7 @@ export default function AlgorithmWritePage() {
   }
 
   const hasSubmitted = Boolean(mySubmission);
-  const isOpen = round?.status === "open" && (!mySubmission || round.canRevise === true);
+  const isOpen = readyContext === contextKey && contextKey !== null && round?.status === "open" && (!mySubmission || round.canRevise === true);
   const serializedText = serializeAlgorithmSteps(steps);
 
   return (
@@ -473,7 +470,7 @@ export default function AlgorithmWritePage() {
                   <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
                     <button
                       type="submit"
-                      disabled={submitting || !serializedText.trim()}
+                      disabled={submitting || !isOpen || !serializedText.trim()}
                       className="w-full sm:flex-1 rounded-xl bg-blue-600 py-3 px-5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
                     >
                       {submitting
