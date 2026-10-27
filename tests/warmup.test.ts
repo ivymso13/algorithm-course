@@ -38,6 +38,7 @@ test("WARMUP_PROBLEM_SANDBOX_TYPES: every problem bank entry maps to exactly the
   assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["pancake-sort"], "pancake");
   assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["candy-sharing"],null);
   assert.equal(resolveWarmupSandboxProblemType({problemId:"candy-sharing",title:"사탕",prompt:""}),null);
+  assert.equal(WARMUP_PROBLEM_SANDBOX_TYPES["coin-change"],null,"coin change has no simulator or required buttons");
   // Every bank entry must have a mapping — a future problem added without
   // one would otherwise blow up resolveWarmupSandboxProblemType silently.
   for (const problem of WARMUP_PROBLEMS) {

@@ -1,9 +1,11 @@
 import { CANDY_PROMPT } from "./candyActivity";
+import { COIN_PROMPT } from "./coinChangeActivity";
 import type { ProblemType } from "@/lib/assignments";
 
 /** Source-controlled warm-up problem bank. Add one object to publish a new option. */
 export const WARMUP_PROBLEMS = [
   { id: "candy-sharing", title: "사탕 나누기 — 최대 친구 수 구하기", prompt: CANDY_PROMPT },
+  { id: "coin-change", title: "거스름돈 — 동전별 개수 구하기", prompt: COIN_PROMPT },
   { id: "card-flip", title: "카드 뒤집기 — 한 차례의 규칙 실행", prompt: "카드 6장이 앞면 또는 뒷면으로 놓여 있습니다. 오른쪽 끝부터 확인합니다. 뒤집기 전 뒷면이었다면 앞면으로 뒤집고 이번 차례를 끝냅니다. 뒤집기 전 앞면이었다면 뒷면으로 뒤집고 왼쪽 카드에서 같은 규칙을 반복합니다. 왼쪽에 카드가 더 없어도 끝냅니다. 초기 배치가 달라져도 정확히 한 차례를 진행하는 자연어 알고리즘을 작성하세요. 비버챌린지 카드 뒤집기 문제를 바탕으로 카드 수와 목표를 바꾼 활동입니다." },
   { id: "even-count", title: "상자 속 짝수 세기", prompt: "상자 5개에는 0~10 사이의 숫자가 들어 있습니다. 첫 상자부터 하나씩 확인하여 짝수가 든 상자의 개수를 구하는 자연어 알고리즘을 작성하세요. 로봇은 첫 상자에 있고 메모지는 0으로 시작합니다. 0도 짝수입니다." },
   { id: "truck-loading", title: "택배 트럭 — 필요한 트럭 수 구하기", prompt: "상자들을 왼쪽부터 주어진 순서대로 운송하려고 합니다. 각 상자의 무게는 1~10kg이고, 트럭 한 대에는 최대 10kg을 실을 수 있습니다. 상자를 나누거나 순서를 바꿀 수 없으며, 출발한 트럭에는 상자를 더 실을 수 없습니다. 모든 상자를 운송하는 데 필요한 최소 트럭 수를 구하는 자연어 알고리즘을 작성하세요. 상자 수와 무게가 달라져도 실행할 수 있어야 합니다. 로봇은 첫 상자 앞에 있고 무게는 확인해야 알 수 있습니다. 처음에는 빈 트럭이 준비되어 있고, 트럭 수 기록과 실린 무게는 0입니다." },
@@ -54,6 +56,7 @@ export function getWarmupProblem(id: unknown): WarmupProblem | undefined {
 /** Which interactive sandbox (see components/write/sandbox) matches each source problem. */
 export const WARMUP_PROBLEM_SANDBOX_TYPES: Record<WarmupProblem["id"], ProblemType | null> = {
   "candy-sharing": null,
+  "coin-change": null,
   "fake-coin": "12coins",
   "hidden-card": "card",
   josephus: "josephus",

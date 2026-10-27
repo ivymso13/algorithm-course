@@ -1876,6 +1876,16 @@ export default function TeacherPage() {
                       sandboxType: null,
                       badge: "JEV 고정 10사례 · 반복형·공식형",
                       desc: "조작 도구 없이 문제를 읽고 사탕을 나누어 줄 수 있는 최대 친구 수를 구하는 알고리즘을 작성합니다.",
+                      icon: "🍬",
+                      title: "사탕 나누기",
+                    },
+                    {
+                      previewId: "coin-change" as StudentPreviewProblemId,
+                      sandboxType: null,
+                      badge: "JEV 고정 10사례 · 동전별 개수 비교",
+                      desc: "조작 도구 없이 거스름돈을 500·100·50·10원 동전 각각 몇 개로 줄지 구하는 알고리즘을 작성합니다.",
+                      icon: "🪙",
+                      title: "거스름돈",
                     },
                     {
                       previewId: "card-flip" as StudentPreviewProblemId,
@@ -1902,7 +1912,7 @@ export default function TeacherPage() {
                   return (
                     <tr key={item.previewId} className={isSelectedSandbox ? "bg-blue-50/40" : "bg-white"}>
                       <th scope="row" className="whitespace-nowrap px-4 py-4 align-top text-sm font-bold text-slate-900">
-                        <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="text-lg">{item.sandboxType ? PROBLEM_ICONS[item.sandboxType] : "🍬"}</span>{item.sandboxType ? PROBLEM_SHORT_NAMES[item.sandboxType] : "사탕 나누기"}</span>
+                        <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="text-lg">{item.sandboxType ? PROBLEM_ICONS[item.sandboxType] : item.icon}</span>{item.sandboxType ? PROBLEM_SHORT_NAMES[item.sandboxType] : item.title}</span>
                       </th>
                       <td className="min-w-[240px] px-4 py-4 align-top">
                         <p className="text-xs leading-6 text-slate-600">{item.desc}</p>
@@ -1996,6 +2006,7 @@ export default function TeacherPage() {
               </div>
 
               <a href="/teacher/student-preview?problemId=candy-sharing" className="flex items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-900"><span>🍬 사탕 나누기</span><span className="text-xs">문제·알고리즘 작성 체험 →</span></a>
+              <a href="/teacher/student-preview?problemId=coin-change" className="flex items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-900"><span>🪙 거스름돈</span><span className="text-xs">문제·알고리즘 작성 체험 →</span></a>
 
               {/* Selected Problem Summary Bar */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
