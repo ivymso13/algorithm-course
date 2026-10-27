@@ -3,6 +3,7 @@ import { getWarmupProblem, resolveWarmupSandboxProblemType } from "./warmupProbl
 import { PROBLEM_ALLOWED_ACTIONS } from "./problemMeta";
 import { parseAlgorithmSteps } from "./algorithmSteps";
 import { interpretEven, runEven, EVEN_CASES,EVEN_ACTIONS } from "./evenActivity";
+import { interpretTruck, runTruck, TRUCK_CASES, TRUCK_ACTIONS } from "./truckActivity";
 import { schema } from "./jev/problemSchema";
 import { JevService } from "./jev/jevService";
 import { executeAlgorithm } from "./jev/executionEngine";
@@ -36,6 +37,9 @@ export async function runResearchAI(courseId:number,studentKey:string,versionId:
     if(owned.problem_id==='even-count') {
       const {plan,interpretations}=await interpretEven(steps,key,guardedFetch);
       result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:EVEN_ACTIONS[p.action as keyof typeof EVEN_ACTIONS]??p.action})),trials:plan.length?RESEARCH_EVEN_CASES.map(n=>runEven(plan,n)):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'even-actions-v2',model:'jev-latest'};
+    } else if(owned.problem_id==='truck-loading') {
+      const {plan,interpretations}=await interpretTruck(steps,key,guardedFetch);
+      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:TRUCK_ACTIONS[p.action as keyof typeof TRUCK_ACTIONS]??p.action})),trials:plan.length?TRUCK_CASES.map(n=>{const t=runTruck(plan,n);return {...t,trace:t.trace.map(s=>({...s,memo:s.trucks}))};}):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'truck-actions-v1',model:'jev-latest'};
     } else if(type==='maxbox') {
       const service=new JevService(key,{classificationOnly:true,fetchImpl:guardedFetch});const map=new Map<string,JevStepEvaluation>();const interpretations=[];
       for(let i=0;i<steps.length;i++)for(const text of splitCompoundStep(steps[i])){const evaluation=await service.evaluateStep({stepIndex:i+1,stepText:text,allSteps:steps,currentState:DEFAULT_INITIAL_STATE});map.set(text,evaluation);interpretations.push({step:i+1,text,action:evaluation.actionId??evaluation.action,confidence:evaluation.confidence,accepted:evaluation.executable,reason:evaluation.reason});}

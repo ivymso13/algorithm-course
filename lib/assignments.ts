@@ -10,7 +10,7 @@
  * unit-testable.
  */
 
-export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox", "evencount", "cardflip"] as const;
+export const PROBLEM_TYPES = ["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox", "evencount", "cardflip", "truckload"] as const;
 export type ProblemType = (typeof PROBLEM_TYPES)[number];
 
 export type Roster = { school: string; studentId: string; name: string }[];

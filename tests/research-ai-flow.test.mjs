@@ -49,7 +49,7 @@ test("every registered activity uses the same durable first submission and JEV f
  const app=await createTestApp({fake});
  try{
   const problems=(await expectStatus(app,'/api/teacher/warmup/rounds',{teacher:true},200)).data.problems;
-  assert.equal(problems.length,9);
+  assert.equal(problems.length,10);
   const login=await expectStatus(app,'/api/student/login',{method:'POST',body:{...STUDENTS[0],consent:true}},200),cookie=login.response.headers.get('set-cookie').split(';')[0];
   for(const problem of problems){
     const created=await expectStatus(app,'/api/teacher/warmup/rounds',{method:'POST',teacher:true,body:{problemId:problem.id}},200),roundId=created.data.round.id;
@@ -59,7 +59,7 @@ test("every registered activity uses the same durable first submission and JEV f
     await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:before.versions[0].id}},200);
     const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
     assert.equal(after.versions[0].ai_status,'completed',problem.id);
-    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count'].includes(problem.id)?'execution':'interpretation');
+    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count','truck-loading'].includes(problem.id)?'execution':'interpretation');
     assert.equal(after.canRevise,false);
     await expectStatus(app,'/api/teacher/warmup/close',{method:'POST',teacher:true,body:{roundId}},200);
   }
