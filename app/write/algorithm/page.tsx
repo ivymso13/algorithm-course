@@ -238,7 +238,7 @@ export default function AlgorithmWritePage() {
           </section>
         ) : (
           <>
-            {mySubmission && <ResearchPanel roundId={round.id} />}
+            {mySubmission && <ResearchPanel roundId={round.id} compact />}
 
             {/* Problem Summary Card (Focused on writing) */}
             <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-xs space-y-2">
@@ -335,7 +335,39 @@ export default function AlgorithmWritePage() {
                 </div>
               )}
 
-              {mySubmission && <div className="space-y-2 rounded-xl bg-indigo-50 p-3 text-xs"><p>{isOpen ? "동료 피드백을 참고하여 수정합니다. 원문은 별도 버전으로 보존됩니다." : "첫 제출은 고정됩니다. 배정된 동료 평가를 모두 받으면 수정할 수 있습니다."}</p><label htmlFor="revision-reason" className="font-bold">어떤 피드백을 참고해 무엇을 바꾸었나요?</label><textarea id="revision-reason" disabled={!isOpen} value={reason} onChange={e=>setReason(e.target.value)} maxLength={2000} className="w-full rounded-lg border p-2" /></div>}
+              {mySubmission && (
+                <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <label htmlFor="revision-reason" className="font-bold text-indigo-950">
+                      ✏️ 어떤 피드백을 참고해 무엇을 바꾸었나요?
+                    </label>
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                        isOpen
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-900"
+                      }`}
+                    >
+                      {isOpen ? "수정 가능" : "동료평가 완료 후 열림"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-indigo-900/80">
+                    {isOpen
+                      ? "동료 피드백과 JEV 해석을 참고하여 수정하세요. 첫 제출 원문은 별도 버전으로 보존됩니다."
+                      : "첫 제출은 고정됩니다. 배정된 동료 평가를 모두 받으면 수정할 수 있습니다."}
+                  </p>
+                  <textarea
+                    id="revision-reason"
+                    rows={2}
+                    disabled={!isOpen}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    maxLength={2000}
+                    placeholder="예: 동료 피드백에서 지적한 시작 조건과 반복 종료 시점을 명확히 고쳤습니다."
+                    className="w-full rounded-xl border border-indigo-200 bg-white p-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-hidden disabled:opacity-60"
+                  />
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-3">
                   {steps.map((step, index) => {

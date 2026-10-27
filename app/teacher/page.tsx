@@ -6,7 +6,15 @@ import { TeacherResearchRound } from "@/components/write/TeacherResearchRound";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
 import { Navbar } from "@/components/Navbar";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
-import { PROBLEM_LABELS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
+import {
+  PROBLEM_LABELS,
+  PROBLEM_SHORT_NAMES,
+  PROBLEM_ICONS,
+  PROBLEM_DESCRIPTIONS,
+  PROBLEM_ALLOWED_ACTIONS,
+  type ProblemType,
+} from "@/lib/problemMeta";
+import type { StudentPreviewProblemId } from "@/lib/studentPreview";
 import {
   WARMUP_ROUND_STATUS_LABELS,
   WARMUP_VOTE_ICONS,
@@ -152,9 +160,10 @@ export default function TeacherPage() {
   // synchronously, closing that gap.
   const warmupBusyRef = useRef(false);
   const [groups, setGroups] = useState<ReviewGroup[]>([]);
-  const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("12coins");
+  const [selectedGroupType, setSelectedGroupType] = useState<ProblemType>("cardflip");
   const [reviewFilter, setReviewFilter] = useState<"all" | "incorrect" | "ambiguous">("all");
   const [presentationMode, setPresentationMode] = useState(true);
+  const [previewStartingId, setPreviewStartingId] = useState<StudentPreviewProblemId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -192,6 +201,11 @@ export default function TeacherPage() {
       setOpenWarmupRound(data.openWarmupRound ?? null);
       setCourse(data.course ?? null);
       setAuthed(true);
+      try {
+        sessionStorage.setItem("algo_teacher_pw", pw);
+      } catch {
+        // ignore storage errors
+      }
       loadWarmupRounds();
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
@@ -542,6 +556,30 @@ export default function TeacherPage() {
     }
   }
 
+  async function handleStartStudentPreview(previewProblemId: StudentPreviewProblemId) {
+    if (previewStartingId) return;
+    setPreviewStartingId(previewProblemId);
+    setError(null);
+    try {
+      const res = await fetch("/api/teacher/student-preview", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId: previewProblemId }),
+      });
+      const data = (await res.json()) as { error?: string; url?: string };
+      if (!res.ok) throw new Error(data.error ?? "학생 체험을 시작하지 못했습니다.");
+      try {
+        sessionStorage.setItem("algo_teacher_pw", password);
+      } catch {
+        // ignore storage errors
+      }
+      window.location.assign(data.url ?? "/write");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "학생 체험을 시작하지 못했습니다.");
+      setPreviewStartingId(null);
+    }
+  }
+
   async function exportExcel() {
     setError(null);
     try {
@@ -823,7 +861,7 @@ export default function TeacherPage() {
               </span>
             </div>
           </section>
-        ) : (
+        ) : tab === "practice" ? null : (
           <section className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
@@ -886,7 +924,7 @@ export default function TeacherPage() {
         )}
 
         {/* Administrator navigation; legacy dashboard and review remain implemented but have no menu entry */}
-        <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -921,16 +959,22 @@ export default function TeacherPage() {
             <button
               type="button"
               onClick={() => setTab("practice")}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition cursor-pointer ${
                 tab === "practice"
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
               }`}
             >
               🧩 체험하기
             </button>
-            <a href="/teacher/student-preview" className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">학생 흐름 체험</a>
           </div>
+
+          <a
+            href="/teacher/student-preview"
+            className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs sm:text-sm font-bold text-blue-800 shadow-2xs transition hover:bg-blue-100"
+          >
+            🎓 학생 흐름 체험 설정 ➔
+          </a>
         </div>
 
         {error && (
@@ -1568,7 +1612,7 @@ export default function TeacherPage() {
 
             {/* Problem Type Selector Tabs */}
             <div className="flex flex-wrap gap-2">
-              {(["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox", "evencount", "cardflip"] as ProblemType[]).map(
+              {(["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox", "evencount", "cardflip", "truckload"] as ProblemType[]).map(
                 (pType) => (
                   <button
                     key={pType}
@@ -1795,62 +1839,234 @@ export default function TeacherPage() {
           </section>
         )}
 
-        {/* TAB 3: Solve-Together Practice Area */}
+        {/* TAB 3: Solve-Together Practice & Teacher Student-Preview Hub */}
         {tab === "practice" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-blue-200 bg-linear-to-r from-blue-50 to-indigo-50 p-5 shadow-xs space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🧩</span>
-                <h3 className="text-base font-bold text-slate-900">
-                  문제 체험하기
-                </h3>
+          <section className="space-y-5">
+            {/* 1. Student Full-Flow Preview Launcher */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                      전체 과정 점검
+                    </span>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                      🎓 학생 입장에서 전체 흐름 체험하기
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    실제 수업 명단·연구 데이터와 완전히 분리된 임시 공간에서{" "}
+                    <strong className="font-semibold text-slate-800">
+                      실습 → 알고리즘 작성·제출 → JEV 해석·채점 확인 → 예시 동료평가 → 피드백 반영 수정
+                    </strong>
+                    까지 한 번에 체험합니다.
+                  </p>
+                </div>
+                <a
+                  href="/teacher/student-preview"
+                  className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  상세 안내·선택 화면 열기 ➔
+                </a>
               </div>
-              <p className="text-xs text-slate-600">
-                학생 제출/채점과는 무관한 별도의 연습 공간입니다. 프로젝터로 화면을 띄우고 학생들과
-                함께 저울질하거나, 카드를 뒤집거나, 사람을 제거하거나, 팬케이크를 뒤집어보며 문제
-                해결 규칙을 같이 찾아보세요.
-              </p>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {(
+                  [
+                    {
+                      previewId: "card-flip" as StudentPreviewProblemId,
+                      sandboxType: "cardflip" as ProblemType,
+                      badge: "JEV 명령 해석 · 동료 실습",
+                      desc: "오른쪽 끝 카드부터 앞·뒷면을 확인하며 한 차례 뒤집기 규칙을 작성·검증합니다.",
+                    },
+                    {
+                      previewId: "even-count" as StudentPreviewProblemId,
+                      sandboxType: "evencount" as ProblemType,
+                      badge: "JEV 고정 10사례 채점",
+                      desc: "5개 상자를 순서대로 열어 짝수 개수를 메모지에 기록하고 제출하는 절차를 점검합니다.",
+                    },
+                    {
+                      previewId: "truck-loading" as StudentPreviewProblemId,
+                      sandboxType: "truckload" as ProblemType,
+                      badge: "JEV 고정 10사례 · 동료 실습",
+                      desc: "10kg 적재 한도를 지키며 트럭 출발·적재를 반복해 필요한 트럭 수를 구합니다.",
+                    },
+                  ] as const
+                ).map((item) => {
+                  const isSelectedSandbox = selectedGroupType === item.sandboxType;
+                  const isStarting = previewStartingId === item.previewId;
+                  return (
+                    <article
+                      key={item.previewId}
+                      className={`flex flex-col justify-between rounded-xl border p-4 transition ${
+                        isSelectedSandbox
+                          ? "border-blue-300 bg-blue-50/30"
+                          : "border-slate-200 bg-slate-50/60"
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-base shadow-2xs border border-slate-200/80">
+                              {PROBLEM_ICONS[item.sandboxType]}
+                            </span>
+                            <span>{PROBLEM_SHORT_NAMES[item.sandboxType]}</span>
+                          </span>
+                          <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-800 border border-indigo-200/60">
+                            {item.badge}
+                          </span>
+                        </div>
+                        <p className="text-xs leading-relaxed text-slate-600">{item.desc}</p>
+                      </div>
+
+                      <div className="mt-3.5 flex items-center gap-2 border-t border-slate-200/70 pt-3">
+                        <button
+                          type="button"
+                          disabled={previewStartingId !== null}
+                          onClick={() => void handleStartStudentPreview(item.previewId)}
+                          className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                        >
+                          {isStarting ? "체험 준비 중…" : "학생 체험 시작 ➔"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGroupType(item.sandboxType)}
+                          className={`rounded-lg border px-2.5 py-2 text-xs font-semibold transition cursor-pointer ${
+                            isSelectedSandbox
+                              ? "border-blue-600 bg-white text-blue-700"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {isSelectedSandbox ? "✓ 아래에 표시됨" : "실습 도구 보기"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Problem Type Selector + Presentation Mode Toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-2">
-                {(["12coins", "card", "josephus", "pancake", "woodcut", "constellation", "maxbox", "evencount", "cardflip"] as ProblemType[]).map(
-                  (pType) => (
+            {/* 2. Classroom Projector & Interactive Sandbox Explorer */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white">
+                      수업 시연 · 연습
+                    </span>
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                      🖥️ 교실 시연용 실습 도구 (전체 10개 활동)
+                    </h2>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    학생 제출·채점과 무관한 연습 공간입니다. 활동을 선택하고 발표 모드로 화면에 띄워 학생들과 함께 규칙을 찾아보세요.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPresentationMode((prev) => !prev)}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold shadow-2xs transition cursor-pointer shrink-0 ${
+                    presentationMode
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {presentationMode ? "📽️ 발표 모드 켜짐 (크게 보기)" : "🔎 기본 크기로 보기"}
+                </button>
+              </div>
+
+              {/* Uniform 10-Item Activity Grid */}
+              <div
+                role="group"
+                aria-label="시연할 문제 유형 선택"
+                className="grid grid-cols-2 gap-2 sm:grid-cols-5"
+              >
+                {(
+                  [
+                    "cardflip",
+                    "evencount",
+                    "truckload",
+                    "maxbox",
+                    "12coins",
+                    "card",
+                    "josephus",
+                    "pancake",
+                    "woodcut",
+                    "constellation",
+                  ] as ProblemType[]
+                ).map((pType) => {
+                  const selected = selectedGroupType === pType;
+                  return (
                     <button
                       key={pType}
                       type="button"
                       onClick={() => setSelectedGroupType(pType)}
-                      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer ${
-                        selectedGroupType === pType
-                          ? "bg-blue-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                      aria-pressed={selected}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition cursor-pointer ${
+                        selected
+                          ? "border-blue-600 bg-blue-600 text-white shadow-xs"
+                          : "border-slate-200 bg-slate-50/70 text-slate-700 hover:border-slate-300 hover:bg-white"
                       }`}
                     >
-                      <span>{PROBLEM_ICONS[pType]}</span>
-                      <span>{PROBLEM_LABELS[pType]}</span>
+                      <span className="text-base shrink-0" aria-hidden="true">
+                        {PROBLEM_ICONS[pType]}
+                      </span>
+                      <span className="truncate">{PROBLEM_SHORT_NAMES[pType]}</span>
                     </button>
-                  )
-                )}
+                  );
+                })}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setPresentationMode((prev) => !prev)}
-                className={`rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer ${
-                  presentationMode
-                    ? "bg-slate-900 text-white"
-                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {presentationMode ? "📽️ 발표 모드 (크게 보기)" : "🔎 기본 크기로 보기"}
-              </button>
-            </div>
+              {/* Selected Problem Summary Bar */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900">
+                    <span aria-hidden="true">{PROBLEM_ICONS[selectedGroupType]}</span>
+                    <span>{PROBLEM_LABELS[selectedGroupType]}</span>
+                  </h3>
+                  {(selectedGroupType === "cardflip" ||
+                    selectedGroupType === "evencount" ||
+                    selectedGroupType === "truckload") && (
+                    <button
+                      type="button"
+                      disabled={previewStartingId !== null}
+                      onClick={() =>
+                        void handleStartStudentPreview(
+                          selectedGroupType === "cardflip"
+                            ? "card-flip"
+                            : selectedGroupType === "evencount"
+                            ? "even-count"
+                            : "truck-loading"
+                        )
+                      }
+                      className="rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50 cursor-pointer"
+                    >
+                      이 문제로 학생 전체 흐름 체험 ➔
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs leading-relaxed text-slate-600">
+                  {PROBLEM_DESCRIPTIONS[selectedGroupType]}
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px]">
+                  <span className="font-bold text-slate-700 mr-0.5">허용 행동:</span>
+                  {(PROBLEM_ALLOWED_ACTIONS[selectedGroupType] ?? []).map((act) => (
+                    <span
+                      key={act}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-slate-600"
+                    >
+                      ✔ {act}
+                    </span>
+                  ))}
+                </div>
+              </div>
 
-            <ProblemSandboxContainer
-              problemType={selectedGroupType}
-              presentationMode={presentationMode}
-            />
+              <ProblemSandboxContainer
+                problemType={selectedGroupType}
+                presentationMode={presentationMode}
+              />
+            </div>
           </section>
         )}
       </main>

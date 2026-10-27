@@ -1,6 +1,6 @@
 import {requireStudentSession,SESSION_ERROR_RESPONSE} from "@/lib/requireStudentSession";
-import {isStudentPreview,receivePreviewFeedback} from "@/lib/studentPreview";
-export async function GET(request:Request){const session=await requireStudentSession(request);return Response.json({preview:session?await isStudentPreview(session.courseId):false});}
+import {getStudentPreviewStatus,isStudentPreview,receivePreviewFeedback} from "@/lib/studentPreview";
+export async function GET(request:Request){const session=await requireStudentSession(request);if(!session)return Response.json({preview:false});return Response.json(await getStudentPreviewStatus(session.courseId,session.studentKey));}
 export async function POST(request:Request){
   const session=await requireStudentSession(request);if(!session)return SESSION_ERROR_RESPONSE();
   if(!await isStudentPreview(session.courseId))return Response.json({error:"학생 체험에서만 사용할 수 있습니다."},{status:403});

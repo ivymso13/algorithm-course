@@ -80,6 +80,17 @@ test("server-renders the teacher page", async () => {
   assert.match(html, /교사용/);
 });
 
+test("server-renders the teacher student-preview page", async () => {
+  const response = await render("/teacher/student-preview");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /학생 입장에서 체험하기/);
+  assert.match(html, /카드 뒤집기/);
+  assert.match(html, /택배 트럭/);
+});
+
 for (const problem of ["woodcut", "constellation", "maxbox"]) {
   test(`standalone ${problem} preview redirects to administrator login`, async () => {
     const response = await render(`/dev-preview-${problem}`);

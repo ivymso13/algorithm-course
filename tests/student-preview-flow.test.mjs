@@ -6,6 +6,8 @@ test('card-flip preview includes peer practice metadata and card-specific feedba
   await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'unknown'}},400);
   const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'card-flip'}},200);
   const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  const statusBefore=(await expectStatus(app,'/api/warmup/student-preview',{cookie},200)).data;
+  assert.equal(statusBefore.preview,true);assert.equal(statusBefore.problemId,'card-flip');assert.equal(statusBefore.hasSubmitted,false);
   const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
   assert.equal(round.problemType,'cardflip');
   await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 오른쪽 끝의 카드를 확인한다.\n2. 카드를 뒤집는다.\n3. 이번 차례를 끝낸다.'}},200);
@@ -14,8 +16,35 @@ test('card-flip preview includes peer practice metadata and card-specific feedba
   const peer=(await expectStatus(app,'/api/warmup/submission?id='+view.outgoing[0].submission_id,{cookie},200)).data.submission;
   assert.equal(peer.problemId,'card-flip');
   await expectStatus(app,'/api/warmup/student-preview',{method:'POST',cookie},200);
+  const statusAfter=(await expectStatus(app,'/api/warmup/student-preview',{cookie},200)).data;
+  assert.equal(statusAfter.hasSubmitted,true);assert.equal(statusAfter.revision,1);assert.equal(statusAfter.incomingCompleted,2);assert.equal(statusAfter.canRevise,true);
   const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
   assert.equal(after.canRevise,true);assert.ok(after.incoming.every(a=>/카드|뒤집기/.test(a.feedback)));
+ }finally{await app.dispose();}
+});
+test('truck-loading preview supports full preview status tracking, peer practice, and truck-specific feedback',async()=>{
+ const app=await createTestApp();try{
+  const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'truck-loading'}},200);
+  const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  const initialStatus=(await expectStatus(app,'/api/warmup/student-preview',{cookie},200)).data;
+  assert.equal(initialStatus.preview,true);
+  assert.equal(initialStatus.problemId,'truck-loading');
+  assert.equal(initialStatus.hasSubmitted,false);
+  const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
+  assert.equal(round.problemType,'truckload');
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 상자 무게를 확인한다.\n2. 상자를 트럭에 싣는다.\n3. 오른쪽에 상자가 남으면 이동하고 1단계부터 반복한다.\n4. 트럭 수를 제출한다.'}},200);
+  const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  assert.equal(view.outgoing.length,2);
+  const peer=(await expectStatus(app,'/api/warmup/submission?id='+view.outgoing[0].submission_id,{cookie},200)).data.submission;
+  assert.equal(peer.problemId,'truck-loading');
+  await expectStatus(app,'/api/warmup/student-preview',{method:'POST',cookie},200);
+  const afterStatus=(await expectStatus(app,'/api/warmup/student-preview',{cookie},200)).data;
+  assert.equal(afterStatus.hasSubmitted,true);
+  assert.equal(afterStatus.revision,1);
+  assert.equal(afterStatus.incomingCompleted,2);
+  assert.equal(afterStatus.canRevise,true);
+  const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  assert.ok(after.incoming.every(a=>/트럭|10kg/.test(a.feedback)));
  }finally{await app.dispose();}
 });
 test('teacher student preview isolates classroom data and permits a full first draft, feedback, revision cycle',async()=>{
