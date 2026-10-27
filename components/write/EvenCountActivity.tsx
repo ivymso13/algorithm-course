@@ -26,6 +26,8 @@ export function EvenCountSandbox({ writingSupport = false, embedded = false }: {
       if(saved){
         const state=JSON.parse(saved);
         if(Array.isArray(state.numbers)&&state.numbers.length===5&&state.numbers.every((n:unknown)=>typeof n==="number"&&Number.isInteger(n)&&n>=0&&n<=10)&&Number.isInteger(state.index)&&state.index>=0&&state.index<5&&Number.isInteger(state.memo)&&state.memo>=0){
+          // Restore browser storage only after hydration.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setNumbers(state.numbers);setIndex(state.index);setMemo(state.memo);
           setValue(state.value===null||state.value===state.numbers[state.index]?state.value:null);
           if(Array.isArray(state.seen))setSeen(state.seen.filter((i:unknown)=>typeof i==="number"&&Number.isInteger(i)&&i>=0&&i<5));
@@ -59,6 +61,8 @@ export function EvenCountActivity({phase: requestedPhase}:{phase:StepNumber}) {
   const [steps,setSteps]=useState([""]);const [result,setResult]=useState<Result|null>(null);const [password,setPassword]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");
   const [draftReady,setDraftReady]=useState(false);
   useEffect(()=>{
+    // Restore browser storage only after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSteps(restoreEvenSteps(sessionStorage,localStorage));
     try{const saved=sessionStorage.getItem("even-count-result");if(saved)setResult(JSON.parse(saved));}catch{/* result recovery is independent */}
     try{setPassword(sessionStorage.getItem("even-count-password")??"");}catch{/* authentication storage optional */}

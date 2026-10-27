@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Response as MfResponse } from "miniflare";
-import { createTestApp,createFakeJev,expectStatus,requestJson,STUDENTS } from "./support/jevHarness.mjs";
+import { createTestApp,createFakeJev,expectStatus,STUDENTS } from "./support/jevHarness.mjs";
 import * as XLSX from "xlsx";
 
 test("an ambiguous instruction retains all interpretation records and withholds execution rather than grading wrong",async()=>{

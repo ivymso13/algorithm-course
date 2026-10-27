@@ -13,7 +13,8 @@ export async function appendResearchSheets(workbook:XLSX.WorkBook,courseId:numbe
     ['워밍업_라운드',`SELECT * FROM warmup_rounds WHERE course_id=?`],
   ];
   const interpretations:Record<string,unknown>[]=[],trials:Record<string,unknown>[]=[],trace:Record<string,unknown>[]=[];
-  for(const [name,query] of sheets){const rows=(await db.prepare(query).bind(courseId).all()).results.map(r=>{const {reviewer_key:_reviewer,student_key:_student,token:_token,result,...safe}=r;
+  for(const [name,query] of sheets){const rows=(await db.prepare(query).bind(courseId).all()).results.map(r=>{const {result,...safe}=r;
+    delete safe.reviewer_key;delete safe.student_key;delete safe.token;
     if(typeof result==='string'){try{const data=JSON.parse(result);Object.assign(safe,{caseSetVersion:data.caseSetVersion,model:data.model,promptVersion:data.promptVersion,kind:data.kind});for(const p of data.interpretations??[])interpretations.push({feedback_id:r.id,version_id:r.version_id,...p});for(const [i,t] of (data.trials??[]).entries()){const {trace:steps,...trial}=t;trials.push({feedback_id:r.id,version_id:r.version_id,case_index:i,...trial,numbers:JSON.stringify(t.numbers)});for(const [j,step] of (steps??[]).entries())trace.push({feedback_id:r.id,version_id:r.version_id,case_index:i,tick:j,...step});}}catch{Object.assign(safe,{error:'저장된 응답 해석 실패'});}}
     return safe;});XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(rows),name);}
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(interpretations),'JEV_명령해석');

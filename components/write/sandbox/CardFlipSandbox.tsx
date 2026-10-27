@@ -4,6 +4,8 @@ import {cardFlipProblem,cardFlipExpected,initialCardFlipState,type CardFlipState
 const button="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 disabled:opacity-40";
 export function CardFlipSandbox({onCopyHistory,peerMode=false}:{onCopyHistory?:(text:string)=>void;peerMode?:boolean}){
  const [initial,setInitial]=useState<boolean[]|null>(null),[state,setState]=useState<CardFlipState|null>(null),[log,setLog]=useState<string[]>([]),[error,setError]=useState("");
+ // Generate random cards after hydration so server and client initial markup agree.
+ // eslint-disable-next-line react-hooks/set-state-in-effect
  useEffect(()=>{const instance=cardFlipProblem.generate();setInitial(instance.input.cards);setState(instance.state as CardFlipState);},[]);
  function reset(fresh=false){const cards=fresh?cardFlipProblem.generate().input.cards:initial;if(!cards)return;setInitial(cards);setState(initialCardFlipState(cards));setLog([]);setError("");}
  function act(action:string){if(!initial||!state)return;try{const outcome=cardFlipProblem.applyAction(state,{n:initial.length,cards:initial},action,{});setState(outcome.state as CardFlipState);const text=action==='check'? `${state.index+1}번 카드 확인: ${state.cards[state.index]?'앞면':'뒷면'}`:action==='flip'?`${state.index+1}번 카드 뒤집기: ${state.cards[state.index]?'앞면 → 뒷면':'뒷면 → 앞면'}`:action==='left'?'왼쪽으로 한 칸 이동':'이번 차례 끝내기';setLog(prev=>[...prev,text]);setError("");}catch(e){setError(e instanceof Error?e.message:"행동을 실행하지 못했습니다.");}}

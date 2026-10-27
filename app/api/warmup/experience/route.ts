@@ -6,7 +6,6 @@ import {
   getBoardSubmissionForViewer,
   getMyWarmupSubmission,
   getMyWarmupExperience,
-  upsertWarmupExperience,
   WarmupOwnershipError,
   WarmupStateError,
 } from "@/lib/warmupStore";

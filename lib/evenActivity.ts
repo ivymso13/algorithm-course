@@ -27,7 +27,9 @@ export function evenActionCandidates(text: string) {
   const hasStepReference = /(?:\d+\s*(?:번째\s*)?단계|단계\s*\d+)/.test(text);
   const withoutJump = text.replace(/(?:\d+\s*(?:번째\s*)?단계|단계\s*\d+)\s*(?:으로|로|부터|에)?\s*(?:이동(?:한다|하기)?|돌아(?:간다|가기)?|다시)?/g, "");
   if (hasStepReference && !/(?:이동|한\s*칸|한칸|옮기|옮긴|옮겨)/.test(withoutJump)) {
-    const { MOVE: _move, LOOP_MOVE: _loopMove, ...candidates } = EVEN_ACTIONS;
+    const candidates = { ...EVEN_ACTIONS };
+    Reflect.deleteProperty(candidates, "MOVE");
+    Reflect.deleteProperty(candidates, "LOOP_MOVE");
     return candidates;
   }
   return EVEN_ACTIONS;

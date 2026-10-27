@@ -1,5 +1,5 @@
 import { getD1 } from "@/db";
-import { getWarmupProblem, resolveWarmupSandboxProblemType } from "./warmupProblems";
+import { resolveWarmupSandboxProblemType } from "./warmupProblems";
 import { PROBLEM_ALLOWED_ACTIONS } from "./problemMeta";
 import { parseAlgorithmSteps } from "./algorithmSteps";
 import { interpretEven, runEven, EVEN_CASES,EVEN_ACTIONS } from "./evenActivity";
