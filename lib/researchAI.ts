@@ -37,13 +37,13 @@ export async function runResearchAI(courseId:number,studentKey:string,versionId:
     let result:unknown;
     if(owned.problem_id==='candy-sharing') {
       const {plan,interpretations}=await interpretCandy(steps,key,guardedFetch);
-      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:CANDY_ACTIONS[p.action as keyof typeof CANDY_ACTIONS]??p.action})),trials:plan.length?CANDY_CASES.map(n=>runCandy(plan,n)):[],caseSetVersion:'candy-fixed-10-v1',promptVersion:'candy-program-v1',model:'jev-latest',notice:'사탕 수 N에 대한 최대 친구 수를 검사합니다. 실제 배분 과정은 요구하지 않습니다. 해석을 확정하지 못한 풀이의 검사는 보류합니다.'};
+      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:p.action==='NONE'?'자동 해석을 확정하지 못했습니다.':CANDY_ACTIONS[p.action as keyof typeof CANDY_ACTIONS]??p.action})),trials:plan.length?CANDY_CASES.map(n=>runCandy(plan,n)):[],caseSetVersion:'candy-fixed-10-v1',promptVersion:'candy-program-v2',model:'jev-latest',notice:'사탕 수 N에 대한 최대 친구 수를 검사합니다. 실제 배분 과정은 요구하지 않습니다. 해석을 확정하지 못한 풀이의 검사는 보류합니다.'};
     } else if(owned.problem_id==='even-count') {
       const {plan,interpretations}=await interpretEven(steps,key,guardedFetch);
       result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:EVEN_ACTIONS[p.action as keyof typeof EVEN_ACTIONS]??p.action})),trials:plan.length?RESEARCH_EVEN_CASES.map(n=>runEven(plan,n)):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'even-actions-v2',model:'jev-latest'};
     } else if(owned.problem_id==='truck-loading') {
       const {plan,interpretations}=await interpretTruck(steps,key,guardedFetch);
-      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:TRUCK_ACTIONS[p.action as keyof typeof TRUCK_ACTIONS]??p.action})),trials:plan.length?TRUCK_CASES.map(n=>{const t=runTruck(plan,n);return {...t,trace:t.trace.map(s=>({...s,memo:s.trucks}))};}):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'truck-actions-v1',model:'jev-latest'};
+      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:p.action==='NONE'?'자동 해석을 확정하지 못했습니다.':TRUCK_ACTIONS[p.action as keyof typeof TRUCK_ACTIONS]??p.action})),trials:plan.length?TRUCK_CASES.map(n=>{const t=runTruck(plan,n);return {...t,trace:t.trace.map(s=>({...s,memo:s.trucks}))};}):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'truck-actions-v2',model:'jev-latest'};
     } else if(type==='maxbox') {
       const service=new JevService(key,{classificationOnly:true,fetchImpl:guardedFetch});const map=new Map<string,JevStepEvaluation>();const interpretations=[];
       for(let i=0;i<steps.length;i++)for(const text of splitCompoundStep(steps[i])){const evaluation=await service.evaluateStep({stepIndex:i+1,stepText:text,allSteps:steps,currentState:DEFAULT_INITIAL_STATE});map.set(text,evaluation);interpretations.push({step:i+1,text,action:evaluation.actionId??evaluation.action,confidence:evaluation.confidence,accepted:evaluation.executable,reason:evaluation.reason});}
