@@ -1870,7 +1870,13 @@ export default function TeacherPage() {
                 </a>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[680px] text-left">
+                  <caption className="sr-only">학생 흐름 체험 활동 목록</caption>
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+                    <tr><th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">활동</th><th scope="col" className="px-4 py-3 font-semibold">문제·JEV 지원</th><th scope="col" className="px-4 py-3 font-semibold">체험</th><th scope="col" className="px-4 py-3 font-semibold">실습 도구</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
                 {(
                   [
                     {
@@ -1902,56 +1908,27 @@ export default function TeacherPage() {
                   const isSelectedSandbox = selectedGroupType === item.sandboxType;
                   const isStarting = previewStartingId === item.previewId;
                   return (
-                    <article
-                      key={item.previewId}
-                      className={`flex flex-col justify-between rounded-xl border p-4 transition ${
-                        isSelectedSandbox
-                          ? "border-blue-300 bg-blue-50/30"
-                          : "border-slate-200 bg-slate-50/60"
-                      }`}
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-base shadow-2xs border border-slate-200/80">
-                              {item.sandboxType ? PROBLEM_ICONS[item.sandboxType] : "🍬"}
-                            </span>
-                            <span>{item.sandboxType ? PROBLEM_SHORT_NAMES[item.sandboxType] : "사탕 나누기"}</span>
-                          </span>
-                          <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-800 border border-indigo-200/60">
-                            {item.badge}
-                          </span>
-                        </div>
-                        <p className="text-xs leading-relaxed text-slate-600">{item.desc}</p>
-                      </div>
-
-                      <div className="mt-3.5 flex items-center gap-2 border-t border-slate-200/70 pt-3">
-                        <button
-                          type="button"
-                          disabled={previewStartingId !== null}
-                          onClick={() => void handleStartStudentPreview(item.previewId)}
-                          className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
-                        >
-                          {isStarting ? "체험 준비 중…" : "학생 체험 시작 ➔"}
-                        </button>
-                        {item.sandboxType && (
-                        <button
-                          type="button"
-                          onClick={() => { if (item.sandboxType) setSelectedGroupType(item.sandboxType); }}
-                          className={`rounded-lg border px-2.5 py-2 text-xs font-semibold transition cursor-pointer ${
-                            isSelectedSandbox
-                              ? "border-blue-600 bg-white text-blue-700"
-                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                          }`}
-                        >
-                          {isSelectedSandbox ? "✓ 아래에 표시됨" : "실습 도구 보기"}
-                        </button>
-                        )}
-                      </div>
-                    </article>
+                    <tr key={item.previewId} className={isSelectedSandbox ? "bg-blue-50/40" : "bg-white"}>
+                      <th scope="row" className="whitespace-nowrap px-4 py-4 align-top text-sm font-bold text-slate-900">
+                        <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="text-lg">{item.sandboxType ? PROBLEM_ICONS[item.sandboxType] : "🍬"}</span>{item.sandboxType ? PROBLEM_SHORT_NAMES[item.sandboxType] : "사탕 나누기"}</span>
+                      </th>
+                      <td className="min-w-[240px] px-4 py-4 align-top">
+                        <p className="text-xs leading-6 text-slate-600">{item.desc}</p>
+                        <p className="mt-1 text-[11px] font-medium text-indigo-700">{item.badge}</p>
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        <button type="button" disabled={previewStartingId !== null} onClick={() => void handleStartStudentPreview(item.previewId)} className="whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50 cursor-pointer">{isStarting ? "준비 중…" : "체험 시작 →"}</button>
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        {item.sandboxType ? <button type="button" onClick={() => { if (item.sandboxType) setSelectedGroupType(item.sandboxType); }} className={`whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-semibold transition cursor-pointer ${isSelectedSandbox ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{isSelectedSandbox ? "아래에 표시 중" : "도구 보기"}</button> : <span className="whitespace-nowrap text-xs text-slate-500">문제·작성형</span>}
+                      </td>
+                    </tr>
                   );
                 })}
+                  </tbody>
+                </table>
               </div>
+              <p className="text-[11px] text-slate-500 sm:hidden">표를 좌우로 밀어 체험 버튼을 확인하세요.</p>
             </div>
 
             {/* 2. Classroom Projector & Interactive Sandbox Explorer */}

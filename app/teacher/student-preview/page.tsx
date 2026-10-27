@@ -186,70 +186,29 @@ export default function StudentPreviewPage() {
               </span>
             </div>
 
-            {/* 3 Equal-Height Choice Cards */}
-            <div
-              role="radiogroup"
-              aria-label="체험할 활동"
-              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-            >
-              {PREVIEW_ACTIVITIES.map((act) => {
-                const selected = problemId === act.id;
-                const icon = act.sandboxType ? PROBLEM_ICONS[act.sandboxType] : "🍬";
-                const radioId = `preview-activity-${act.id}`;
-                return (
-                  <label
-                    key={act.id}
-                    htmlFor={radioId}
-                    aria-label={act.shortTitle}
-                    className={`relative flex flex-col justify-between rounded-xl border-2 p-4 transition cursor-pointer select-none ${
-                      selected
-                        ? "border-blue-600 bg-blue-50/40 shadow-2xs"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60"
-                    }`}
-                  >
-                    <input
-                      id={radioId}
-                      type="radio"
-                      name="problemId"
-                      value={act.id}
-                      checked={selected}
-                      onChange={() => setProblemId(act.id)}
-                      className="sr-only"
-                    />
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-base">
-                            {icon}
-                          </span>
-                          <span>{act.shortTitle}</span>
-                        </span>
-                        <span
-                          className={`flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-bold ${
-                            selected
-                              ? "border-blue-600 bg-blue-600 text-white"
-                              : "border-slate-300 bg-white text-transparent"
-                          }`}
-                          aria-hidden="true"
-                        >
-                          ✓
-                        </span>
-                      </div>
-                      <p className="text-xs leading-relaxed text-slate-600">{act.subtitle}</p>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-2.5">
-                      <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
-                        {act.jevBadge}
-                      </span>
-                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        {act.peerBadge}
-                      </span>
-                    </div>
-                  </label>
-                );
-              })}
+            <div role="radiogroup" aria-label="체험할 활동" className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[640px] text-left">
+                <caption className="sr-only">체험 활동 선택</caption>
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><tr><th scope="col" className="px-4 py-3 font-semibold">활동 선택</th><th scope="col" className="px-4 py-3 font-semibold">문제</th><th scope="col" className="px-4 py-3 font-semibold">지원 범위</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {PREVIEW_ACTIVITIES.map((act) => {
+                    const selected = problemId === act.id;
+                    const radioId = `preview-activity-${act.id}`;
+                    return <tr key={act.id} className={selected ? "bg-blue-50/50" : "bg-white hover:bg-slate-50"}>
+                      <th scope="row" className="whitespace-nowrap px-4 py-4 align-top">
+                        <label htmlFor={radioId} className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-900">
+                          <input id={radioId} type="radio" name="problemId" value={act.id} checked={selected} onChange={() => setProblemId(act.id)} className="h-4 w-4 accent-blue-600" />
+                          <span aria-hidden="true" className="text-lg">{act.sandboxType ? PROBLEM_ICONS[act.sandboxType] : "🍬"}</span>{act.shortTitle}
+                        </label>
+                      </th>
+                      <td className="min-w-[230px] px-4 py-4 align-top text-xs leading-6 text-slate-600">{act.subtitle}</td>
+                      <td className="min-w-[180px] px-4 py-4 align-top text-[11px] leading-6"><p className="font-medium text-indigo-700">{act.jevBadge}</p><p className="text-slate-500">{act.peerBadge}</p></td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
             </div>
+            <p className="text-[11px] text-slate-500 sm:hidden">표를 좌우로 밀어 전체 내용을 확인하세요.</p>
 
             {/* Selected Activity Details Preview */}
             {selectedProblem && (
