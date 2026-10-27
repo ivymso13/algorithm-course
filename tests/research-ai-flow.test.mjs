@@ -132,7 +132,7 @@ test('coin change grades four per-coin counts from natural sentences and withhol
   const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'coin-change'}},200);
   const cookie=started.response.headers.get('set-cookie').split(';')[0];
   const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
-  assert.equal(round.problemType,null);assert.match(round.prompt,/10원 단위/);assert.match(round.prompt,/0원 이상 10,000원 이하/);
+  assert.equal(round.problemType,null);assert.match(round.prompt,/(?:10원 단위|10의 배수)/);assert.match(round.prompt,/(?:0원 이상 10,000원 이하|0 ≤ M ≤ 10,000)/);
   const original='1. 받을 돈 x를 500으로 나눈 몫은 a, 나머지는 x로 한다.\n2. x를 100으로 나눈 몫은 b, 나머지는 x로 한다.\n3. x를 50으로 나눈 몫은 c, 나머지는 x로 한다.\n4. x를 10으로 나눈 몫을 d라고 한다.\n5. a, b, c, d를 출력한다.';
   await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:original}},200);
   const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;

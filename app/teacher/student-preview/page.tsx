@@ -1,5 +1,6 @@
 "use client";
 
+import { ProblemStatement } from "@/components/write/ProblemStatement";
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { PROBLEM_ALLOWED_ACTIONS, PROBLEM_ICONS, type ProblemType } from "@/lib/problemMeta";
@@ -229,10 +230,9 @@ export default function StudentPreviewPage() {
                   </span>
                 </div>
 
-                <p className="rounded-lg border border-slate-200/80 bg-white p-3 text-xs leading-relaxed text-slate-700">
-                  {selectedProblem.prompt}
-                </p>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6"><ProblemStatement prompt={selectedProblem.prompt} fallbackClassName="text-xs leading-relaxed" /></div>
 
+                {selectedProblem.id !== 'coin-change' && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                   <span className="font-bold text-slate-700 mr-1">{allowedActions.length ? "허용된 행동:" : "조작 도구 없이 자연어로 계산 방법을 작성합니다. 반복형과 공식형을 지원하며, 해석이 불명확하면 검사를 보류합니다."}</span>
                   {allowedActions.map((act) => (
@@ -244,6 +244,7 @@ export default function StudentPreviewPage() {
                     </span>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </section>

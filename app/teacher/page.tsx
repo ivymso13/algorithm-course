@@ -1,5 +1,6 @@
 "use client";
 
+import { ProblemStatement } from "@/components/write/ProblemStatement";
 import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { JevRoundJob } from "@/components/jev/JevRoundJob";
 import { TeacherResearchRound } from "@/components/write/TeacherResearchRound";
@@ -1006,7 +1007,7 @@ export default function TeacherPage() {
                     {warmupProblems.map((problem) => (
                       <tr key={problem.id} className="hover:bg-slate-50/60">
                         <th scope="row" className="whitespace-nowrap px-4 py-4 align-top text-sm font-bold text-slate-900">{problem.title}</th>
-                        <td className="w-full min-w-[220px] px-4 py-4 align-top text-xs text-slate-600"><details><summary className="cursor-pointer font-medium text-slate-600">문제 설명 보기</summary><p className="mt-2 max-w-xl whitespace-normal leading-6">{problem.prompt}</p></details></td>
+                        <td className="w-full min-w-[220px] px-4 py-4 align-top text-xs text-slate-600"><details><summary className="cursor-pointer font-medium text-slate-600">문제 설명 보기</summary><div className="mt-3 max-w-2xl"><ProblemStatement prompt={problem.prompt} fallbackClassName="text-xs leading-6" /></div></details></td>
                         <td className="px-4 py-4 align-top"><button type="button" onClick={() => handleCreateRound(problem.id)} disabled={warmupBusy} className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer">라운드로 추가</button></td>
                       </tr>
                     ))}
@@ -1042,7 +1043,7 @@ export default function TeacherPage() {
                       {rounds.map((round) => (
                         <Fragment key={round.id}>
                           <tr className={round.status === "open" ? "bg-emerald-50/20" : ""}>
-                            <th scope="row" className="px-4 py-4 align-top"><p className="whitespace-nowrap text-sm font-bold text-slate-900">{round.title}</p><p className="mt-1 text-[11px] font-normal text-slate-400">라운드 #{round.id}</p><details className="mt-2 text-xs font-normal text-slate-600"><summary className="cursor-pointer">문제 설명</summary><p className="mt-2 max-w-sm whitespace-normal leading-6">{round.prompt}</p></details></th>
+                            <th scope="row" className="px-4 py-4 align-top"><p className="whitespace-nowrap text-sm font-bold text-slate-900">{round.title}</p><p className="mt-1 text-[11px] font-normal text-slate-400">라운드 #{round.id}</p><details className="mt-2 text-xs font-normal text-slate-600"><summary className="cursor-pointer">문제 설명</summary><div className="mt-3 max-w-2xl"><ProblemStatement prompt={round.prompt} fallbackClassName="text-xs leading-6" /></div></details></th>
                             <td className="whitespace-nowrap px-4 py-4 align-top">                          <span
                             className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                               round.status === "open"

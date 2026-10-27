@@ -5,6 +5,7 @@
  * after a next/link soft navigation, the destination page's client
  * components did not reliably hydrate, leaving buttons unresponsive. */
 
+import { ProblemStatement } from "@/components/write/ProblemStatement";
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { StudentLoginCard } from "@/components/StudentLoginCard";
@@ -182,9 +183,7 @@ export default function WriteProblemPage() {
                 </span>
               </div>
               <h1 className="text-base sm:text-lg font-bold text-slate-900">{round.title}</h1>
-              <p className="text-xs sm:text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                {round.prompt}
-              </p>
+              <ProblemStatement prompt={round.prompt} />
             </section>
 
             {mySubmission && <ResearchPanel roundId={round.id} />}
