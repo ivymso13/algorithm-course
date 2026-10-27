@@ -1,3 +1,4 @@
+import { interpretCandy, runCandy, CANDY_CASES, CANDY_ACTIONS } from "./candyActivity";
 import { getD1 } from "@/db";
 import { resolveWarmupSandboxProblemType } from "./warmupProblems";
 import { PROBLEM_ALLOWED_ACTIONS } from "./problemMeta";
@@ -34,7 +35,10 @@ export async function runResearchAI(courseId:number,studentKey:string,versionId:
     const key=process.env.TYPESAFE_API_KEY?.trim();if(!key)throw new Error("configuration");
     const steps=parseAlgorithmSteps(owned.algorithm_text);const type=resolveWarmupSandboxProblemType({problemId:owned.problem_id,title:owned.title,prompt:owned.prompt});
     let result:unknown;
-    if(owned.problem_id==='even-count') {
+    if(owned.problem_id==='candy-sharing') {
+      const {plan,interpretations}=await interpretCandy(steps,key,guardedFetch);
+      result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:CANDY_ACTIONS[p.action as keyof typeof CANDY_ACTIONS]??p.action})),trials:plan.length?CANDY_CASES.map(n=>runCandy(plan,n)):[],caseSetVersion:'candy-fixed-10-v1',promptVersion:'candy-program-v1',model:'jev-latest',notice:'사탕 수 N에 대한 최대 친구 수를 검사합니다. 실제 배분 과정은 요구하지 않습니다. 해석을 확정하지 못한 풀이의 검사는 보류합니다.'};
+    } else if(owned.problem_id==='even-count') {
       const {plan,interpretations}=await interpretEven(steps,key,guardedFetch);
       result={kind:'execution',interpretations:interpretations.map(p=>({...p,actionId:p.action,action:EVEN_ACTIONS[p.action as keyof typeof EVEN_ACTIONS]??p.action})),trials:plan.length?RESEARCH_EVEN_CASES.map(n=>runEven(plan,n)):[],caseSetVersion:RESEARCH_CASE_VERSION,promptVersion:'even-actions-v2',model:'jev-latest'};
     } else if(owned.problem_id==='truck-loading') {

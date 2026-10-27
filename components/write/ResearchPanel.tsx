@@ -56,6 +56,7 @@ type AI = {
   }[];
   trials: {
     numbers: number[];
+    inputLabel?: string;
     expected: number;
     output: number | null;
     correct: boolean;
@@ -63,6 +64,9 @@ type AI = {
     failure?: string;
     trace?: {
       step: number;
+      sum?: number | null;
+      next?: number | null;
+      remaining?: number | null;
       index: number;
       value: number | null;
       memo: number | null;
@@ -136,6 +140,7 @@ function SavedAIRecord({ version }: { version: Version }) {
           examples={result.trials.map((t, i) => ({
             trialIndex: i,
             numbers: t.numbers,
+            inputLabel: t.inputLabel,
             correct: t.executable ? t.correct : null,
             executable: t.executable,
             failedStep: null,
@@ -387,6 +392,7 @@ export function ResearchPanel({
                 examples={ai.trials.map((t, i) => ({
                   trialIndex: i,
                   numbers: t.numbers,
+            inputLabel: t.inputLabel,
                   correct: t.executable ? t.correct : null,
                   executable: t.executable,
                   failedStep: null,

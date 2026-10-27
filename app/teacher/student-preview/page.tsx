@@ -8,7 +8,7 @@ import { getWarmupProblem } from "@/lib/warmupProblems";
 
 type PreviewActivityMeta = {
   id: StudentPreviewProblemId;
-  sandboxType: ProblemType;
+  sandboxType: ProblemType | null;
   shortTitle: string;
   subtitle: string;
   jevBadge: string;
@@ -16,6 +16,7 @@ type PreviewActivityMeta = {
 };
 
 const PREVIEW_ACTIVITIES: readonly PreviewActivityMeta[] = [
+  { id: "candy-sharing", sandboxType: null, shortTitle: "사탕 나누기", subtitle: "문제를 읽고 최대 친구 수를 구하는 자연어 알고리즘 작성", jevBadge: "JEV 반복형·공식형 · 고정 10사례", peerBadge: "단계 체크 · 동료 피드백" },
   {
     id: "card-flip",
     sandboxType: "cardflip",
@@ -43,7 +44,7 @@ const PREVIEW_ACTIVITIES: readonly PreviewActivityMeta[] = [
 ];
 
 const FLOW_STEPS = [
-  { step: "1", title: "문제 실습", desc: "실습 도구를 조작하며 문제 규칙과 행동 단위를 확인합니다." },
+  { step: "1", title: "문제 이해", desc: "문제를 읽고 해결 방법을 생각합니다. 실습 도구가 있는 활동은 함께 사용합니다." },
   { step: "2", title: "알고리즘 제출", desc: "단계별 자연어 알고리즘을 작성해 1차 원문을 제출합니다." },
   { step: "3", title: "JEV 결과 확인", desc: "문장별 명령 해석과 고정 테스트(10개) 실행 결과를 점검합니다." },
   { step: "4", title: "동료평가 체험", desc: "상단 배너에서 ‘예시 동료평가 받기’를 누르고 동료 알고리즘도 평가합니다." },
@@ -101,7 +102,7 @@ export default function StudentPreviewPage() {
 
   const selectedMeta = PREVIEW_ACTIVITIES.find((a) => a.id === problemId) ?? PREVIEW_ACTIVITIES[0];
   const selectedProblem = getWarmupProblem(selectedMeta.id);
-  const allowedActions = PROBLEM_ALLOWED_ACTIONS[selectedMeta.sandboxType] ?? [];
+  const allowedActions = selectedMeta.sandboxType ? PROBLEM_ALLOWED_ACTIONS[selectedMeta.sandboxType] : [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -134,7 +135,7 @@ export default function StudentPreviewPage() {
             <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed">
               선택한 활동으로 격리된 임시 학급을 만들고, 학생 화면에서{" "}
               <strong className="font-semibold text-slate-800">
-                문제 실습 → 자연어 알고리즘 작성 → JEV 해석·채점 확인 → 예시 동료평가 → 이유를 적고 수정
+                문제 이해 → 자연어 알고리즘 작성 → JEV 해석·채점 확인 → 예시 동료평가 → 이유를 적고 수정
               </strong>
               까지 전체 흐름을 점검합니다.
             </p>
@@ -193,7 +194,7 @@ export default function StudentPreviewPage() {
             >
               {PREVIEW_ACTIVITIES.map((act) => {
                 const selected = problemId === act.id;
-                const icon = PROBLEM_ICONS[act.sandboxType];
+                const icon = act.sandboxType ? PROBLEM_ICONS[act.sandboxType] : "🍬";
                 const radioId = `preview-activity-${act.id}`;
                 return (
                   <label
@@ -256,7 +257,7 @@ export default function StudentPreviewPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-base" aria-hidden="true">
-                      {PROBLEM_ICONS[selectedMeta.sandboxType]}
+                      {selectedMeta.sandboxType ? PROBLEM_ICONS[selectedMeta.sandboxType] : "🍬"}
                     </span>
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900">
                       {selectedProblem.title}
@@ -272,7 +273,7 @@ export default function StudentPreviewPage() {
                 </p>
 
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="font-bold text-slate-700 mr-1">허용된 행동:</span>
+                  <span className="font-bold text-slate-700 mr-1">{allowedActions.length ? "허용된 행동:" : "조작 도구 없이 자연어로 계산 방법을 작성합니다. 반복형과 공식형을 지원하며, 해석이 불명확하면 검사를 보류합니다."}</span>
                   {allowedActions.map((act) => (
                     <span
                       key={act}

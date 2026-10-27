@@ -292,8 +292,8 @@ export default function AlgorithmWritePage() {
               )}
             </section>
 
-            <div className="grid items-start gap-5 lg:grid-cols-2">
-              <div className="min-w-0 lg:sticky lg:top-5">{round.problemType && <ProblemSandboxContainer problemType={round.problemType} defaultOpen />}</div>
+            <div className={`grid items-start gap-5 ${round.problemType ? "lg:grid-cols-2" : ""}`}>
+              {round.problemType && <div className="min-w-0 lg:sticky lg:top-5"><ProblemSandboxContainer problemType={round.problemType} defaultOpen /></div>}
             {/* Main: Step-by-Step Algorithm Editor */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
