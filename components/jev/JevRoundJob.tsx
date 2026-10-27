@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { JevJobResults } from "./JevJobResults";
 import { JevJobPanel } from "./JevJobPanel";
 import type { JevJobSummary } from "@/lib/jevJobTypes";
 
@@ -82,6 +83,7 @@ export function JevRoundJob({ roundId, password }: { roundId: number; password: 
       )}
       {activeId && <p className="text-xs text-slate-500">이 화면을 열어두면 실행이 이어집니다. 화면을 닫아도 저장된 진행 상황은 유지되며, 다시 열면 이어서 실행합니다.</p>}
       {job && <p className="text-xs text-slate-500">학생당 {job.trialsPerStudent}회 실행</p>}
+      {job && <JevJobResults key={job.id} job={job} password={password} />}
     </div>
   );
 }
