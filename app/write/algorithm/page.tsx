@@ -6,6 +6,7 @@
  * navigation, the destination page's client components did not reliably
  * hydrate, leaving buttons unresponsive. */
 
+import { ProblemStatement } from "@/components/write/ProblemStatement";
 import { useEffect, useRef, useState } from "react";
 import { ProblemSandboxContainer } from "@/components/write/sandbox/ProblemSandboxContainer";
 import { Navbar } from "@/components/Navbar";
@@ -264,9 +265,7 @@ export default function AlgorithmWritePage() {
 
               {showFullPrompt ? (
                 <div className="space-y-2 pt-1 border-t border-blue-100">
-                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                    {round.prompt}
-                  </p>
+                  <ProblemStatement prompt={round.prompt} fallbackClassName="text-xs leading-relaxed" />
                   <button
                     type="button"
                     onClick={() => setShowFullPrompt(false)}
