@@ -2,7 +2,7 @@ import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/teacherAuth";
 import { getOrCreateDefaultCourse } from "@/lib/store";
 import { getWarmupRound } from "@/lib/warmupStore";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
-import { advanceJevJob, cancelJevJob, createJevJob, getJevJob, listJevJobs, resumeJevJob } from "@/lib/jevJobs";
+import { advanceJevJob, cancelJevJob, createJevJob, getJevJob, getJevJobResults, listJevJobs, resumeJevJob } from "@/lib/jevJobs";
 import { advanceAutoRuns, autoRoundSummary, cancelAutoRuns, resumeAutoRuns } from "@/lib/jevAuto";
 import { JevRequestError, jevErrorResponse, positiveId, readJevBody, validateTrials } from "@/lib/jevRequest";
 
@@ -11,6 +11,12 @@ export async function GET(request: Request) {
   if (!isAuthorizedRequest(request)) return unauthorizedResponse();
   try {
     const course = await getOrCreateDefaultCourse();
+    const params=new URL(request.url).searchParams;
+    if(params.has("jobId")) {
+      const jobId=positiveId(Number(params.get("jobId")));
+      const itemId=params.has("itemId")?positiveId(Number(params.get("itemId"))):undefined;
+      return Response.json(await getJevJobResults(course.id,jobId,itemId),{headers});
+    }
     return Response.json({ jobs: await listJevJobs(course.id) }, { headers });
   } catch (error) { return jevErrorResponse(error); }
 }

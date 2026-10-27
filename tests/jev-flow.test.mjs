@@ -463,3 +463,55 @@ test("race: cancel while a trial is in flight keeps the job cancelled when the s
     assert.equal((await d1All(app, "SELECT count(*) AS n FROM jev_batch_evaluations"))[0].n, 0);
   });
 });
+
+test('teacher can read job snapshots and trial outcomes without rerunning the AI',async()=>{
+ await withApp({},async(app)=>{
+  const {roundId,students}=await closedMaxBoxRound(app,[CORRECT_ALGORITHM,NO_COMPARE_ALGORITHM]);
+  const jobId=(await startJob(app,roundId,2)).data.job.id;
+  const url=`${JOBS}?jobId=${jobId}`;
+  await expectStatus(app,url,{},401);
+  await expectStatus(app,url,{cookie:students[0].cookie},401);
+  for(const invalid of ['0','abc','1.5',''])await expectStatus(app,`${JOBS}?jobId=${invalid}`,{teacher:true},400);
+  await expectStatus(app,`${JOBS}?jobId=999999`,{teacher:true},404);
+  const pending=(await expectStatus(app,url,{teacher:true},200)).data;
+  assert.equal(pending.items.length,2);assert.ok(pending.items.every(i=>i.completedTrials===0));
+  assert.ok(pending.items.every(i=>!('trials'in i)&&!('submissionText'in i)&&!('studentKey'in i)));
+  await advanceUntilSettled(app,jobId);
+  const calls=app.fake.calls;
+  const response=await expectStatus(app,url,{teacher:true},200);
+  assert.equal(response.response.headers.get('cache-control'),'no-store');
+  const items=response.data.items;assert.equal(items.length,2);
+  for(const item of items){
+   assert.equal(item.status,'completed');assert.equal(item.completedTrials,2);assert.equal(item.correctCount+item.incorrectCount+item.errorCount,2);
+   const detail=(await expectStatus(app,`${url}&itemId=${item.id}`,{teacher:true},200)).data.item;
+   assert.equal(detail.trials.length,2);assert.equal(detail.submissionVersion,1);
+   assert.equal(detail.submissionText,item.studentId===STUDENTS[0].studentId?CORRECT_ALGORITHM:NO_COMPARE_ALGORITHM);
+   assert.ok(!('studentKey'in detail)&&!('token'in detail));
+  }
+  assert.equal(items.find(i=>i.studentId===STUDENTS[0].studentId).correctCount,2);
+  const db=await app.getD1Database('DB');
+  await db.prepare('UPDATE warmup_submissions SET algorithm_text=?,revision=revision+1 WHERE id=?').bind('newer text',students[0].submissionId).run();
+  const original=(await expectStatus(app,`${url}&itemId=${items[0].id}`,{teacher:true},200)).data.item;
+  assert.equal(original.submissionText,CORRECT_ALGORITHM);assert.equal(original.submissionVersion,1);
+  const newer=(await startJob(app,roundId,1)).data.job.id;
+  await expectStatus(app,`${JOBS}?jobId=${newer}&itemId=${items[0].id}`,{teacher:true},404);
+  const [owner]=await d1All(app,'SELECT course_id AS courseId FROM jev_jobs WHERE id=?',newer);
+  await db.prepare('UPDATE jev_jobs SET course_id=? WHERE id=?').bind(owner.courseId+100,newer).run();
+  await expectStatus(app,`${JOBS}?jobId=${newer}`,{teacher:true},404);
+  assert.equal(app.fake.calls,calls,'reading results and snapshots never invokes the AI');
+ });
+});
+
+test('teacher results include saved partial trials while service failure remains separate',async()=>{
+ await withApp({},async(app)=>{
+  const {roundId}=await closedMaxBoxRound(app,[CORRECT_ALGORITHM]);
+  const jobId=(await startJob(app,roundId,7)).data.job.id;
+  app.fake.failNextCalls=1;
+  const failed=(await jobAction(app,'advance',jobId)).data.job;assert.equal(failed.status,'failed');assert.equal(failed.completedTrials,4);
+  const calls=app.fake.calls;
+  const list=(await expectStatus(app,`${JOBS}?jobId=${jobId}`,{teacher:true},200)).data;
+  const item=list.items[0];assert.equal(item.status,'failed');assert.equal(item.completedTrials,4);assert.equal(item.correctCount,4);assert.equal(item.errorCount,0);assert.ok(item.lastError);
+  const detail=(await expectStatus(app,`${JOBS}?jobId=${jobId}&itemId=${item.id}`,{teacher:true},200)).data.item;
+  assert.equal(detail.trials.length,4);assert.equal(app.fake.calls,calls);
+ });
+});

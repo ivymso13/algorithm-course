@@ -12,3 +12,20 @@ export interface JevJobSummary {
   trialsPerStudent: number;
   completedTrials: number;
 }
+
+export interface JevJobItemSummary {
+  id: number;
+  studentId: string;
+  studentName: string;
+  submissionVersion: number;
+  status: string;
+  completedTrials: number;
+  correctCount: number;
+  incorrectCount: number;
+  errorCount: number;
+  lastError: string | null;
+}
+export interface JevJobItemResult extends JevJobItemSummary {
+  submissionText: string;
+  trials: import('./jev/batchEvaluate').BatchTrialResult[];
+}

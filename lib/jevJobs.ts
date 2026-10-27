@@ -190,3 +190,28 @@ async function advanceJobItem(courseId:number,job:JevJobSummary,item:JobItem,tok
   if(status==="failed") statements.push(db.prepare("UPDATE jev_jobs SET status='failed',last_error=? WHERE id=? AND lease_token=? AND status='running'").bind(lastError,id,token));
   await db.batch(statements);
 }
+
+/** Teacher-only snapshots from this exact job, including saved partial trials.
+ * Never dispatches an AI request or substitutes the student's newer revision.
+ */
+export async function getJevJobResults(courseId:number,jobId:number,itemId?:number) {
+  const job=await getJevJob(courseId,jobId);
+  const db=await getD1();
+  const rows=(await db.prepare(`SELECT i.id,i.student_id AS studentId,i.student_name AS studentName,
+    i.submission_version AS submissionVersion,i.status,i.last_error AS lastError,i.algorithm_text AS submissionText,i.trials
+    FROM jev_job_items i JOIN jev_jobs j ON j.id=i.job_id
+    WHERE j.course_id=? AND j.id=? ${itemId===undefined?'':'AND i.id=?'} ORDER BY i.student_id,i.id`)
+    .bind(...(itemId===undefined?[courseId,jobId]:[courseId,jobId,itemId])).all<{
+      id:number;studentId:string;studentName:string;submissionVersion:number;status:string;lastError:string|null;submissionText:string;trials:string;
+    }>()).results;
+  if(itemId!==undefined&&!rows.length)throw new JevRequestError('실행 결과를 찾을 수 없습니다.',404);
+  const parsed=rows.map(row=>{
+    const trials=JSON.parse(row.trials) as BatchTrialResult[];
+    const submissionText=row.submissionText;
+    const result={id:row.id,studentId:row.studentId,studentName:row.studentName,submissionVersion:row.submissionVersion,status:row.status,lastError:row.lastError,
+      completedTrials:trials.length,correctCount:trials.filter(t=>t.executable&&t.correct===true).length,
+      incorrectCount:trials.filter(t=>t.executable&&t.correct===false).length,errorCount:trials.filter(t=>!t.executable).length};
+    return itemId===undefined?result:{...result,submissionText,trials};
+  });
+  return itemId===undefined?{job,items:parsed}:{job,item:parsed[0]};
+}
