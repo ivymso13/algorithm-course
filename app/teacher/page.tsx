@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { JevRoundJob } from "@/components/jev/JevRoundJob";
 import { TeacherResearchRound } from "@/components/write/TeacherResearchRound";
 import { resolveWarmupSandboxProblemType } from "@/lib/warmupProblems";
@@ -998,22 +998,22 @@ export default function TeacherPage() {
                 <h2 className="text-sm font-bold text-slate-900">문제 목록 ({warmupProblems.length})</h2>
                 <p className="mt-1 text-xs text-slate-500">수업에 사용할 문제를 확인하고 라운드로 추가하세요.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {warmupProblems.map((problem) => (
-                  <article key={problem.id} className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <h3 className="text-sm font-bold text-slate-900">{problem.title}</h3>
-                    <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-600">{problem.prompt}</p>
-                    <button
-                      type="button"
-                      onClick={() => handleCreateRound(problem.id)}
-                      disabled={warmupBusy}
-                      className="mt-4 self-end rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer"
-                    >
-                      라운드로 추가
-                    </button>
-                  </article>
-                ))}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[720px] text-left">
+                  <caption className="sr-only">수업 문제 목록</caption>
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><tr><th scope="col" className="px-4 py-3 font-semibold">문제</th><th scope="col" className="px-4 py-3 font-semibold">설명</th><th scope="col" className="px-4 py-3 font-semibold">라운드 추가</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {warmupProblems.map((problem) => (
+                      <tr key={problem.id} className="hover:bg-slate-50/60">
+                        <th scope="row" className="whitespace-nowrap px-4 py-4 align-top text-sm font-bold text-slate-900">{problem.title}</th>
+                        <td className="w-full min-w-[220px] px-4 py-4 align-top text-xs text-slate-600"><details><summary className="cursor-pointer font-medium text-slate-600">문제 설명 보기</summary><p className="mt-2 max-w-xl whitespace-normal leading-6">{problem.prompt}</p></details></td>
+                        <td className="px-4 py-4 align-top"><button type="button" onClick={() => handleCreateRound(problem.id)} disabled={warmupBusy} className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer">라운드로 추가</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              <p className="text-[11px] text-slate-500 sm:hidden">표를 좌우로 밀어 전체 내용을 확인하세요.</p>
             </div>
 
             {/* 2. Round List & Live Status */}
@@ -1034,12 +1034,16 @@ export default function TeacherPage() {
                   아직 만든 라운드가 없습니다. 위 문제 목록에서 수업에 사용할 문제를 추가하세요.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {rounds.map((round) => (
-                    <div key={round.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-2.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full min-w-[1000px] text-left">
+                    <caption className="sr-only">라운드 목록 및 진행 현황</caption>
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><tr>{["라운드", "상태", "제출", "동료평가", "활동 기록", "관리"].map(label=><th key={label} scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rounds.map((round) => (
+                        <Fragment key={round.id}>
+                          <tr className={round.status === "open" ? "bg-emerald-50/20" : ""}>
+                            <th scope="row" className="px-4 py-4 align-top"><p className="whitespace-nowrap text-sm font-bold text-slate-900">{round.title}</p><p className="mt-1 text-[11px] font-normal text-slate-400">라운드 #{round.id}</p><details className="mt-2 text-xs font-normal text-slate-600"><summary className="cursor-pointer">문제 설명</summary><p className="mt-2 max-w-sm whitespace-normal leading-6">{round.prompt}</p></details></th>
+                            <td className="whitespace-nowrap px-4 py-4 align-top">                          <span
                             className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                               round.status === "open"
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
@@ -1049,11 +1053,11 @@ export default function TeacherPage() {
                             }`}
                           >
                             {WARMUP_ROUND_STATUS_LABELS[round.status]}
-                          </span>
-                          <span className="text-sm font-bold text-slate-900">{round.title}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
+                          </span></td>
+                            <td className="whitespace-nowrap px-4 py-4 align-top text-sm font-semibold tabular-nums text-slate-800">{round.submissionCount}명</td>
+                            <td className="whitespace-nowrap px-4 py-4 align-top text-xs text-slate-600">{round.reviewOpenedAt ? <><p className="font-semibold text-indigo-700">{round.status === "open" ? "평가 진행 중" : "평가 기록"}</p><p className="mt-1 tabular-nums">{round.evaluatedCount} / {round.submissionCount}명</p></> : "평가 시작 전"}</td>
+                            <td className="whitespace-nowrap px-4 py-4 align-top text-xs leading-6 tabular-nums text-slate-500">투표 {round.voteCount}건<br/>체험 {round.experienceCount}건</td>
+                            <td className="min-w-[300px] px-4 py-4 align-top"><div className="flex flex-wrap items-center gap-2">
                           {round.status === "draft" && (
                             <button
                               type="button"
@@ -1074,11 +1078,7 @@ export default function TeacherPage() {
                               📝 평가 단계 시작
                             </button>
                           )}
-                          {round.status === "open" && round.reviewOpenedAt && (
-                            <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
-                              🔎 평가 진행 중 {round.evaluatedCount}/{round.submissionCount}명
-                            </span>
-                          )}
+
                           {round.status === "open" && (
                             <button
                               type="button"
@@ -1111,24 +1111,13 @@ export default function TeacherPage() {
                             className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
                             {roundDetailId === round.id ? "현황 닫기 ▲" : `현황 보기 (${round.submissionCount}명) ▼`}
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-600 line-clamp-2">{round.prompt}</p>
+                          </button></div></td>
+                          </tr>
+                          {roundDetailId === round.id && <tr><td colSpan={6} className="border-t border-slate-100 bg-slate-50/40 p-4"><div className="space-y-3">
                       <TeacherResearchRound roundId={round.id} password={password} />
                       {round.status === "closed" && resolveWarmupSandboxProblemType(round) === "maxbox" && (
                         <JevRoundJob key={`${round.id}:${password}`} roundId={round.id} password={password} />
                       )}
-
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
-                        <span className="font-semibold text-slate-700">제출 {round.submissionCount}건</span>
-                        <span>·</span>
-                        <span>투표 {round.voteCount}건</span>
-                        <span>·</span>
-                        <span>체험 {round.experienceCount}건</span>
-                      </div>
-
                       {roundDetailId === round.id && roundDetail && (
                         <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                           <h3 className="text-xs font-bold text-slate-800">
@@ -1189,8 +1178,11 @@ export default function TeacherPage() {
                           )}
                         </div>
                       )}
-                    </div>
-                  ))}
+                          </div></td></tr>}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
