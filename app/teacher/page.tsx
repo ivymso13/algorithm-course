@@ -1870,6 +1870,7 @@ export default function TeacherPage() {
                 </a>
               </div>
 
+              <a href="/teacher/student-preview?problemId=candy-sharing" className="block rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm font-bold text-indigo-900">🍬 사탕 나누기 체험 → <span className="text-xs font-normal">문제를 읽고 알고리즘 작성 · JEV 고정 10사례 채점</span></a>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {(
                   [

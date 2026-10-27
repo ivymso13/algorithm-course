@@ -3,6 +3,7 @@ import { useId } from "react";
 export interface JevExampleTrial {
   trialIndex: number;
   numbers: number[];
+  inputLabel?: string;
   correct: boolean | null;
   executable: boolean;
   failedStep: number | null;
@@ -10,6 +11,9 @@ export interface JevExampleTrial {
   correctAnswer: number;
   failureReason?: string;
   trace?: {
+    sum?: number | null;
+    next?: number | null;
+    remaining?: number | null;
     step: number;
     index: number;
     value?: number | null;
@@ -124,7 +128,7 @@ export function JevResultCard({
                     </span>
                     <span>사례 {ex.trialIndex + 1}</span>
                     <span className="font-mono text-slate-600">
-                      [{ex.numbers.join(", ")}]
+                      {ex.inputLabel ? `${ex.inputLabel} = ${ex.numbers[0]}` : `[${ex.numbers.join(", ")}]`}
                     </span>
                   </span>
                   <span className="text-[11px] font-normal text-slate-500">
@@ -166,8 +170,7 @@ export function JevResultCard({
                       <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 font-mono text-[11px] text-slate-600">
                         {ex.trace.map((step, i) => (
                           <p key={i} className="py-1.5">
-                            {step.step}단계 · 위치 {step.index + 1} · 확인 {step.value ?? "미확인"} · 메모{" "}
-                            {step.memo ?? "없음"}
+                            {ex.inputLabel ? `${step.step}단계 · 친구 수 ${step.memo ?? "미설정"} · 누적 합 ${step.sum ?? "미설정"} · 다음 수 ${step.next ?? "미설정"} · 남은 사탕 ${step.remaining ?? "미설정"}` : `${step.step}단계 · 위치 ${step.index + 1} · 확인 ${step.value ?? "미확인"} · 메모 ${step.memo ?? "없음"}`}
                             {step.output != null ? ` · 출력 ${step.output}` : ""}
                           </p>
                         ))}

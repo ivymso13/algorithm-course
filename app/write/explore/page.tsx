@@ -531,8 +531,8 @@ export default function WriteExplorePage() {
                     <ProblemSandboxContainer problemType={round.problemType} defaultOpen={true} />
                   ) : (
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-xs flex flex-col items-center justify-center space-y-1">
-                      <p className="text-xs font-bold text-slate-700">이 문제는 별도 실습 도구가 준비되어 있지 않습니다</p>
-                      <p className="text-[11px] text-slate-500">위 알고리즘을 읽고 추천 여부를 판단해보세요.</p>
+                      <p className="text-xs font-bold text-slate-700">이 문제는 조작 도구 없이 계산 방법을 생각합니다</p>
+                      <p className="text-[11px] text-slate-500">문제를 다시 읽고 작성한 알고리즘이 다른 입력에서도 실행되는지 확인해 보세요.</p>
                     </div>
                   )}
                 </section>

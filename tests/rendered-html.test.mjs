@@ -89,6 +89,7 @@ test("server-renders the teacher student-preview page", async () => {
   assert.match(html, /학생 입장에서 체험하기/);
   assert.match(html, /카드 뒤집기/);
   assert.match(html, /택배 트럭/);
+  assert.match(html, /사탕 나누기/);
 });
 
 for (const problem of ["woodcut", "constellation", "maxbox"]) {

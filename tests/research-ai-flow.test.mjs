@@ -49,7 +49,7 @@ test("every registered activity uses the same durable first submission and JEV f
  const app=await createTestApp({fake});
  try{
   const problems=(await expectStatus(app,'/api/teacher/warmup/rounds',{teacher:true},200)).data.problems;
-  assert.equal(problems.length,10);
+  assert.equal(problems.length,11);
   const login=await expectStatus(app,'/api/student/login',{method:'POST',body:{...STUDENTS[0],consent:true}},200),cookie=login.response.headers.get('set-cookie').split(';')[0];
   for(const problem of problems){
     const created=await expectStatus(app,'/api/teacher/warmup/rounds',{method:'POST',teacher:true,body:{problemId:problem.id}},200),roundId=created.data.round.id;
@@ -59,9 +59,38 @@ test("every registered activity uses the same durable first submission and JEV f
     await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:before.versions[0].id}},200);
     const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
     assert.equal(after.versions[0].ai_status,'completed',problem.id);
-    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count','truck-loading'].includes(problem.id)?'execution':'interpretation');
+    const result=JSON.parse(after.versions[0].ai_result);assert.equal(result.kind,['max-box','even-count','truck-loading','candy-sharing'].includes(problem.id)?'execution':'interpretation');
     assert.equal(after.canRevise,false);
     await expectStatus(app,'/api/teacher/warmup/close',{method:'POST',teacher:true,body:{roundId}},200);
   }
+ }finally{await app.dispose();}
+});
+
+test('candy preview has no simulator and grades the immutable formula with isolated results',async()=>{
+ const fake=createFakeJev();
+ fake.answer=async(request)=>{const body=await request.json();const text=JSON.parse(body.state.match(/분류할 문장: (.+)$/)[1]);return MfResponse.json({answers:{action:{choice:text.includes('출력')?'OUTPUT_COUNT':text.includes('제곱근')?'FORMULA_FLOOR':'NONE',confidence:0.95}}});};
+ const app=await createTestApp({fake});
+ try{
+  const started=await expectStatus(app,'/api/teacher/student-preview',{method:'POST',teacher:true,body:{problemId:'candy-sharing'}},200);
+  const cookie=started.response.headers.get('set-cookie').split(';')[0];
+  const round=(await expectStatus(app,'/api/warmup/round',{cookie},200)).data.round;
+  assert.equal((await expectStatus(app,'/api/warmup/student-preview',{cookie},200)).data.problemId,'candy-sharing');assert.equal(round.problemType,null);
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 8N+1의 제곱근에서 1을 빼고 2로 나눈 값의 정수 부분을 k로 정한다.\n2. k를 출력한다.'}},200);
+  const view=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:view.versions[0].id}},200);
+  const result=JSON.parse((await expectStatus(app,'/api/warmup/research',{cookie},200)).data.versions[0].ai_result);
+  assert.equal(result.kind,'execution');
+  assert.equal(result.trials.length,10);assert.ok(result.trials.every(t=>t.correct));
+  assert.equal(result.caseSetVersion,'candy-fixed-10-v1');assert.equal(fake.calls,2);
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:view.versions[0].id}},200);assert.equal(fake.calls,2);
+  await expectStatus(app,'/api/warmup/student-preview',{method:'POST',cookie},200);
+  const received=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;assert.equal(received.canRevise,true);
+  await expectStatus(app,'/api/warmup/submit',{method:'POST',cookie,body:{algorithmText:'1. 삼각수 공식을 사용한다.',reason:'초기 풀이의 설명을 바꾸고 검증 보류 여부 확인'}},200);
+  const revised=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  const latest=revised.versions.at(-1);
+  await expectStatus(app,'/api/warmup/research-ai',{method:'POST',cookie,body:{versionId:latest.id}},200);
+  const after=(await expectStatus(app,'/api/warmup/research',{cookie},200)).data;
+  const withheld=JSON.parse(after.versions.at(-1).ai_result);assert.equal(withheld.trials.length,0);assert.equal(withheld.interpretations[0].accepted,false);
+  assert.equal(JSON.parse(after.versions[0].ai_result).trials.length,10);
  }finally{await app.dispose();}
 });
